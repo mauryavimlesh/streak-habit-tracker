@@ -1,0 +1,276 @@
+import React, { useState } from 'react';
+import { TaskItem } from '../../lib/taskService';
+import { TaskItemCard } from './TaskItemCard';
+import {
+  CloudRain,
+  Navigation,
+  Plus,
+  Moon,
+  Zap,
+  Flame,
+  Calendar as CalendarIcon,
+  Users,
+  CheckSquare,
+  ThumbsUp,
+  ThumbsDown,
+  Sparkles,
+  ArrowUpRight,
+  Clock,
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+
+interface DayScheduleProps {
+  selectedDate: Date;
+  tasks: TaskItem[];
+  onToggleTask: (taskId: string) => void;
+  onEditTask: (task: TaskItem) => void;
+  onDeleteTask: (taskId: string) => void;
+  onOpenAddModal: (type?: 'task' | 'meeting' | 'event' | 'reminder') => void;
+  streakScore?: number;
+}
+
+export function DaySchedule({
+  selectedDate,
+  tasks,
+  onToggleTask,
+  onEditTask,
+  onDeleteTask,
+  onOpenAddModal,
+  streakScore = 68,
+}: DayScheduleProps) {
+  const [filterType, setFilterType] = useState<'all' | 'task' | 'meeting' | 'event'>('all');
+  const [feedbackLiked, setFeedbackLiked] = useState<boolean | null>(null);
+
+  // Group items by type
+  const eventCount = tasks.filter((t) => t.type === 'event').length;
+  const meetingCount = tasks.filter((t) => t.type === 'meeting').length;
+  const standardTaskCount = tasks.filter((t) => !t.type || t.type === 'task' || t.type === 'reminder').length;
+  const completedCount = tasks.filter((t) => t.completed).length;
+
+  const filteredTasks = tasks.filter((t) => {
+    if (filterType === 'all') return true;
+    if (filterType === 'task') return !t.type || t.type === 'task' || t.type === 'reminder';
+    return t.type === filterType;
+  });
+
+  // Calculate dynamic greeting based on current local hour
+  const currentHour = new Date().getHours();
+  const greeting =
+    currentHour < 12 ? 'Good morning.' : currentHour < 18 ? 'Good afternoon.' : 'Good evening.';
+
+  const isToday =
+    selectedDate.toDateString() === new Date().toDateString();
+
+  return (
+    <div className="space-y-6 pt-1 pb-16 select-none">
+      {/* Weather & Location (Matching Reference Screen 1) */}
+      <div className="flex items-center gap-4 text-xs font-semibold text-[#8e96a8]">
+        <div className="flex items-center gap-1.5 bg-[#14161e] border border-[#212634] px-3 py-1.5 rounded-full shadow-sm">
+          <CloudRain className="w-3.5 h-3.5 text-[#60a5fa]" />
+          <span className="text-white">6°</span>
+        </div>
+        <div className="flex items-center gap-1.5 bg-[#14161e] border border-[#212634] px-3 py-1.5 rounded-full shadow-sm">
+          <Navigation className="w-3 h-3 text-[#8cee28] rotate-45" />
+          <span className="text-white">Krakow</span>
+        </div>
+      </div>
+
+      {/* Large Typographic Status Greeting (Matching Reference Screen 1) */}
+      <div className="space-y-1">
+        <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-tight">
+          {greeting}
+        </h2>
+        <div className="text-lg sm:text-xl font-medium text-white/80 leading-snug">
+          You have{' '}
+          <span className="inline-flex items-center gap-1 font-semibold text-white">
+            <CalendarIcon className="w-4 h-4 text-[#c084fc] inline" /> {eventCount || 2} events,
+          </span>{' '}
+          <br className="sm:hidden" />
+          <span className="inline-flex items-center gap-1 font-semibold text-white">
+            <Users className="w-4 h-4 text-[#818cf8] inline" /> {meetingCount || 2} meetings
+          </span>{' '}
+          and <br className="sm:hidden" />
+          <span className="inline-flex items-center gap-1 font-semibold text-[#8cee28]">
+            <CheckSquare className="w-4 h-4 text-[#8cee28] inline" /> {standardTaskCount} tasks
+          </span>{' '}
+          {isToday ? 'today.' : 'on this date.'}
+        </div>
+      </div>
+
+      {/* Wellness Metrics / Readiness Badges (Matching Reference Screen 1) */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#171a24] border border-[#232a3b] text-xs font-semibold text-white/90 shrink-0">
+          <Moon className="w-3.5 h-3.5 text-[#818cf8]" />
+          <span>Great</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#171a24] border border-[#232a3b] text-xs font-semibold text-white/90 shrink-0">
+          <Zap className="w-3.5 h-3.5 text-[#fbbf24]" />
+          <span>Typical</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#171a24] border border-[#232a3b] text-xs font-semibold text-white/90 shrink-0">
+          <Flame className="w-3.5 h-3.5 text-[#8cee28]" />
+          <span>Good</span>
+        </div>
+      </div>
+
+      {/* STREAK / Exo Score Banner with Progress Line (Matching Reference Screen 2) */}
+      <div className="p-4 rounded-[24px] bg-[#13161f] border border-[#1f2533] shadow-sm">
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-xs font-bold text-[#8e96a8] uppercase tracking-wider">
+            STREAK Score
+          </span>
+          <div className="flex items-center gap-1 text-xs font-bold text-white font-mono">
+            <Flame className="w-3.5 h-3.5 text-[#8cee28]" />
+            <span>{streakScore}</span>
+            <span className="text-[#636a7a] font-normal">/ 100</span>
+          </div>
+        </div>
+
+        <div className="h-2 rounded-full bg-[#1d222e] overflow-hidden relative">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${streakScore}%` }}
+            transition={{ duration: 0.6, ease: 'easeOut' }}
+            className="h-full rounded-full bg-gradient-to-r from-[#22c55e] via-[#8cee28] to-[#a3e635]"
+          />
+        </div>
+      </div>
+
+      {/* Schedule Summary Section (Matching Reference Screen 2) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-[#7d8495] uppercase tracking-wider">
+            Schedule
+          </h3>
+          <span className="text-xs text-[#7d8495] font-medium">
+            {completedCount}/{tasks.length} Done
+          </span>
+        </div>
+
+        {/* Counter Pills */}
+        <div className="flex items-center gap-2 text-xs font-semibold">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1e1b29] border border-[#3b2d55] text-[#c084fc]">
+            <CalendarIcon className="w-3.5 h-3.5" />
+            <span>{eventCount} {eventCount === 1 ? 'event' : 'events'}</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#1a1d2e] border border-[#2b335c] text-[#818cf8]">
+            <Users className="w-3.5 h-3.5" />
+            <span>{meetingCount} {meetingCount === 1 ? 'meeting' : 'meetings'}</span>
+          </div>
+        </div>
+
+        {/* Circadian / Alertness Curve Pills (Matching Reference Screen 2) */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#181a22] border border-[#252a39] text-[#9ba3b5]">
+            <Clock className="w-3 h-3 text-[#fbbf24]" />
+            <span>Morning grogginess cleared</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#181a22] border border-[#252a39] text-[#9ba3b5]">
+            <ArrowUpRight className="w-3.5 h-3.5 text-[#8cee28]" />
+            <span>Peak focus window active</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Suggested / Day Tasks Section (Matching Reference Screen 2) */}
+      <div className="space-y-3 pt-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-[#8cee28]" /> Suggested & Tasks
+            </h3>
+            <span className="text-xs text-[#7d8495] font-mono">({filteredTasks.length})</span>
+          </div>
+
+          {/* Action buttons on header */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFeedbackLiked(true)}
+              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                feedbackLiked === true
+                  ? 'bg-[#23381c] border-[#3b5e28] text-[#8cee28]'
+                  : 'bg-white/5 border-white/5 text-[#7d8495] hover:text-white'
+              }`}
+            >
+              <ThumbsUp className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setFeedbackLiked(false)}
+              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                feedbackLiked === false
+                  ? 'bg-red-500/20 border-red-500/30 text-red-400'
+                  : 'bg-white/5 border-white/5 text-[#7d8495] hover:text-white'
+              }`}
+            >
+              <ThumbsDown className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenAddModal('task')}
+              className="ml-1 text-xs font-semibold text-[#8cee28] hover:text-white flex items-center gap-1 bg-[#23381c] hover:bg-[#2d4722] border border-[#375a28] px-2.5 py-1 rounded-xl transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filter Chips */}
+        <div className="flex items-center gap-1.5 pb-1 overflow-x-auto no-scrollbar">
+          {(['all', 'task', 'meeting', 'event'] as const).map((ft) => (
+            <button
+              key={ft}
+              type="button"
+              onClick={() => setFilterType(ft)}
+              className={`px-3 py-1 rounded-xl text-xs font-semibold capitalize transition-all cursor-pointer ${
+                filterType === ft
+                  ? 'bg-[#22331c] border border-[#3b5a2b] text-[#8cee28]'
+                  : 'bg-white/5 border border-white/5 text-[#7d8495] hover:text-white'
+              }`}
+            >
+              {ft === 'all' ? 'All Items' : `${ft}s`}
+            </button>
+          ))}
+        </div>
+
+        {/* Task Cards List */}
+        {filteredTasks.length > 0 ? (
+          <div className="space-y-2.5">
+            <AnimatePresence mode="popLayout">
+              {filteredTasks.map((task) => (
+                <TaskItemCard
+                  key={task.id}
+                  task={task}
+                  onToggle={onToggleTask}
+                  onEdit={onEditTask}
+                  onDelete={onDeleteTask}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        ) : (
+          /* Empty State for the Day */
+          <div className="py-8 px-4 rounded-[24px] bg-[#12141c] border border-dashed border-[#242a38] text-center">
+            <div className="w-12 h-12 rounded-full bg-[#1b202c] border border-[#2b3345] flex items-center justify-center text-[#7d8495] mx-auto mb-3">
+              <CalendarIcon className="w-5 h-5" />
+            </div>
+            <h4 className="text-sm font-semibold text-white">No items for this date</h4>
+            <p className="text-xs text-[#7d8495] mt-1 max-w-xs mx-auto">
+              Keep your momentum going by scheduling a task, workout, or meeting for today.
+            </p>
+            <button
+              type="button"
+              onClick={() => onOpenAddModal('task')}
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#8cee28] hover:bg-[#9eff38] active:scale-95 text-[#0d0e12] font-bold text-xs shadow-[0_4px_16px_rgba(140,238,40,0.25)] transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[3]" />
+              <span>Add Task</span>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

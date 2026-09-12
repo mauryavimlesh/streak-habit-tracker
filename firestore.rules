@@ -1,0 +1,211 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+    
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    
+    // Allow non-verified emails for testing/local development if needed, but strict is better. 
+    // In many simple setups, email_verified might be false if they just signed up via email/password.
+    // I will use a slightly relaxed isSignedIn to avoid blocking new users who haven't verified yet.
+    function isSignedInRelaxed() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    // 3. Entity Validation Helpers
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'name', 'createdAt', 'updatedAt']) 
+        && data.email is string && data.email.size() <= 100
+        && data.name is string && data.name.size() <= 100
+        && (!('mainGoal' in data) || (data.mainGoal is string && data.mainGoal.size() <= 200))
+        && (!('selectedGoals' in data) || (data.selectedGoals is list && data.selectedGoals.size() <= 10))
+        && (!('hasCompletedOnboarding' in data) || data.hasCompletedOnboarding is bool)
+        && (!('onboardingCompleted' in data) || data.onboardingCompleted is bool)
+        && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 200000))
+        && (!('userName' in data) || (data.userName is string && data.userName.size() <= 100))
+        && (!('routinePreference' in data) || (data.routinePreference is string && data.routinePreference.size() <= 100))
+        && (!('appearancePreference' in data) || (data.appearancePreference is string && data.appearancePreference.size() <= 100));
+    }
+
+    function isValidHabit(data) {
+      return data.keys().hasAll(['userId', 'name', 'frequencyType', 'targetType', 'createdAt', 'updatedAt'])
+        && data.userId == request.auth.uid
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && (!('description' in data) || (data.description is string && data.description.size() <= 500))
+        && (!('category' in data) || (data.category is string && data.category.size() <= 50))
+        && (!('icon' in data) || (data.icon is string && data.icon.size() <= 50))
+        && (!('color' in data) || (data.color is string && data.color.size() <= 50))
+        && data.frequencyType is string && data.frequencyType.matches('^(daily|selected_days|weekly|custom)$')
+        && (!('frequencyValue' in data) || (data.frequencyValue is list && data.frequencyValue.size() <= 31))
+        && data.targetType is string && data.targetType.matches('^(binary|count|duration|quantity)$')
+        && (!('targetValue' in data) || data.targetValue is number)
+        && (!('targetUnit' in data) || (data.targetUnit is string && data.targetUnit.size() <= 50))
+        && (!('reminderTime' in data) || (data.reminderTime is string && data.reminderTime.size() <= 10));
+    }
+
+    function isValidHabitLog(data) {
+      return data.keys().hasAll(['userId', 'habitId', 'date', 'status', 'createdAt', 'updatedAt'])
+        && data.userId == request.auth.uid
+        && data.habitId is string && data.habitId.size() <= 128
+        && data.date is string && data.date.size() <= 10 // YYYY-MM-DD
+        && data.status is string && data.status.matches('^(completed|partial|missed|skipped)$')
+        && (!('progressValue' in data) || data.progressValue is number);
+    }
+
+    function isValidGoal(data) {
+      return data.keys().hasAll(['userId', 'title', 'createdAt', 'updatedAt'])
+        && data.userId == request.auth.uid
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && (!('description' in data) || (data.description is string && data.description.size() <= 1000))
+        && (!('target' in data) || data.target is number)
+        && (!('deadline' in data) || data.deadline is timestamp)
+        && (!('category' in data) || (data.category is string && data.category.size() <= 50));
+    }
+
+    function isValidJournalLog(data) {
+      return data.keys().hasAll(['userId', 'date', 'text', 'createdAt', 'updatedAt'])
+        && data.userId == request.auth.uid
+        && data.date is string && data.date.size() <= 10 // YYYY-MM-DD
+        && data.text is string && data.text.size() <= 5000;
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll(['title', 'date', 'completed'])
+        && (!('userId' in data) || data.userId == request.auth.uid)
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.date is string && data.date.size() <= 10
+        && data.completed is bool
+        && (!('description' in data) || (data.description is string && data.description.size() <= 1000))
+        && (!('category' in data) || (data.category is string && data.category.size() <= 50))
+        && (!('priority' in data) || (data.priority is string && data.priority.matches('^(low|medium|high)$')))
+        && (!('type' in data) || (data.type is string && data.type.matches('^(task|meeting|event|reminder)$')));
+    }
+
+    // 4. Collection Rules
+    
+    // Users
+    match /users/{userId} {
+      allow get: if isSignedInRelaxed() && request.auth.uid == userId;
+      allow create: if isSignedInRelaxed() 
+        && request.auth.uid == userId
+        && isValidUser(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedInRelaxed() 
+        && request.auth.uid == userId
+        && isValidUser(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+    }
+
+    // Habits
+    match /habits/{habitId} {
+      allow get: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+      allow list: if isSignedInRelaxed() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedInRelaxed()
+        && isValidId(habitId)
+        && isValidHabit(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedInRelaxed()
+        && existing().userId == request.auth.uid
+        && isValidHabit(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+    }
+
+    // Habit Logs
+    match /habit_logs/{logId} {
+      allow get: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+      allow list: if isSignedInRelaxed() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedInRelaxed()
+        && isValidId(logId)
+        && isValidHabitLog(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        // Enforce that the referenced habit exists and belongs to the user
+        && exists(/databases/$(database)/documents/habits/$(incoming().habitId))
+        && get(/databases/$(database)/documents/habits/$(incoming().habitId)).data.userId == request.auth.uid;
+      allow update: if isSignedInRelaxed()
+        && existing().userId == request.auth.uid
+        && isValidHabitLog(incoming())
+        && incoming().userId == existing().userId
+        && incoming().habitId == existing().habitId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+    }
+
+    // Goals
+    match /goals/{goalId} {
+      allow get: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+      allow list: if isSignedInRelaxed() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedInRelaxed()
+        && isValidId(goalId)
+        && isValidGoal(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedInRelaxed()
+        && existing().userId == request.auth.uid
+        && isValidGoal(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+    }
+
+    // Journal Logs
+    match /journal_logs/{logId} {
+      allow get: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+      allow list: if isSignedInRelaxed() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedInRelaxed()
+        && isValidId(logId)
+        && isValidJournalLog(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedInRelaxed()
+        && existing().userId == request.auth.uid
+        && isValidJournalLog(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+    }
+
+    // Tasks
+    match /tasks/{taskId} {
+      allow get: if isSignedInRelaxed() && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
+      allow list: if isSignedInRelaxed() && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
+      allow create: if isSignedInRelaxed()
+        && isValidId(taskId)
+        && isValidTask(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedInRelaxed()
+        && (existing().userId == request.auth.uid || !('userId' in existing()))
+        && isValidTask(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if isSignedInRelaxed() && (existing().userId == request.auth.uid || !('userId' in existing()));
+    }
+  }
+}

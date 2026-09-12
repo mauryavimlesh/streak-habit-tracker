@@ -1,0 +1,75 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Plus Jakarta Sans", system-ui, sans-serif;
+  
+  --color-background: #0d0e12;
+  --color-surface-primary: #13151b;
+  --color-surface-secondary: #1a1d25;
+  --color-surface-card: #13151b;
+  --color-surface-border: #1f232c;
+  
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #7d8495;
+  --color-text-muted: #5c6272;
+  
+  --color-accent-primary: #8cee28; /* Vibrant Apple Fitness Lime */
+  --color-accent-lime: #8cee28;
+  --color-accent-cyan: #22d3ee;
+  --color-accent-violet: #a78bfa;
+  --color-accent-pink: #f472b6;
+  --color-accent-orange: #fb923c;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0d0e12] text-text-primary antialiased selection:bg-accent-primary/30 selection:text-white min-h-screen;
+    background-color: #0d0e12;
+    -webkit-tap-highlight-color: transparent;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer components {
+  .apple-card {
+    @apply bg-[#13151b] border border-[#1f232c] rounded-[28px] transition-all duration-200;
+  }
+  
+  .apple-pill {
+    @apply h-[72px] rounded-full bg-[#13151b] border border-[#1f232c] transition-all duration-200;
+  }
+
+  .glass-effect {
+    background: rgba(19, 21, 27, 0.72);
+    backdrop-filter: blur(20px) saturate(190%);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.16),
+      inset 0 0 16px 0 rgba(255, 255, 255, 0.02),
+      0 8px 32px 0 rgba(0, 0, 0, 0.42);
+  }
+
+  .glass-effect-interactive {
+    background: rgba(19, 21, 27, 0.72);
+    backdrop-filter: blur(20px) saturate(190%);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 
+      inset 0 1px 1px 0 rgba(255, 255, 255, 0.16),
+      inset 0 0 16px 0 rgba(255, 255, 255, 0.02),
+      0 8px 32px 0 rgba(0, 0, 0, 0.42);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-effect-interactive:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(24, 27, 35, 0.78);
+  }
+
+  .glass-effect-interactive:active {
+    transform: scale(0.985);
+  }
+}
+

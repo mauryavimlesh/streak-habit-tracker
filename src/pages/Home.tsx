@@ -1,0 +1,665 @@
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '../lib/AuthContext';
+import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Clock, CheckCircle2, Calendar as CalendarIcon } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog } from '../lib/habitService';
+import { TaskItem, subscribeToTasks, toggleTaskComplete } from '../lib/taskService';
+import { DailyReflection } from '../components/ui/DailyReflection';
+import { cn } from '../lib/utils';
+import UserAvatar from '../components/profile/UserAvatar';
+
+// Reference authentic default habits matching the design reference
+const DEFAULT_HABITS: Habit[] = [
+  {
+    id: 'default-1',
+    userId: 'default',
+    name: 'Morning Workout',
+    category: 'fitness',
+    icon: 'dumbbell',
+    color: 'lime',
+    frequencyType: 'daily',
+    frequencyValue: [],
+    targetType: 'count',
+    targetValue: 30,
+    targetUnit: 'min',
+    reminderTime: '08:00',
+  },
+  {
+    id: 'default-2',
+    userId: 'default',
+    name: 'Drink Water',
+    category: 'health',
+    icon: 'droplets',
+    color: 'cyan',
+    frequencyType: 'daily',
+    frequencyValue: [],
+    targetType: 'count',
+    targetValue: 8,
+    targetUnit: 'glasses',
+    reminderTime: '10:00',
+  },
+  {
+    id: 'default-3',
+    userId: 'default',
+    name: 'Sleep 8 Hours',
+    category: 'health',
+    icon: 'moon',
+    color: 'violet',
+    frequencyType: 'daily',
+    frequencyValue: [],
+    targetType: 'count',
+    targetValue: 8,
+    targetUnit: 'hours',
+    reminderTime: '22:30',
+  },
+];
+
+export default function Home() {
+  const { profile, user } = useAuth();
+  const navigate = useNavigate();
+
+  // Prefer user's real name, falling back to Vimlesh (from user's email / screenshot)
+  const userName = profile?.name?.split(' ')[0] || profile?.userName?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Vimlesh';
+  const userInitial = userName.charAt(0).toUpperCase();
+
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [logs, setLogs] = useState<HabitLog[]>([]);
+  const [todayTasks, setTodayTasks] = useState<TaskItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Local progress values for instant responsive Apple OS feedback
+  const [localProgress, setLocalProgress] = useState<Record<string, number>>({
+    'default-1': 0,
+    'default-2': 1, // Matches 1 / 8 glasses from screenshot
+    'default-3': 0,
+  });
+
+  const todayStr = new Date().toLocaleDateString('en-CA');
+
+  // Real-time task synchronization
+  useEffect(() => {
+    const unsubscribe = subscribeToTasks(user?.uid, (allTasks) => {
+      const filtered = allTasks.filter((t) => t.date === todayStr);
+      setTodayTasks(filtered);
+    });
+    return () => unsubscribe();
+  }, [user, todayStr]);
+
+  useEffect(() => {
+    async function loadData() {
+      if (!user) {
+        setHabits(DEFAULT_HABITS);
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const today = new Date();
+        const startDay = new Date(today);
+        startDay.setDate(today.getDate() - 6);
+
+        const todayString = today.toLocaleDateString('en-CA');
+        const startDayString = startDay.toLocaleDateString('en-CA');
+
+        const [fetchedHabits, fetchedLogs] = await Promise.all([
+          getUserHabits(user.uid),
+          getHabitLogs(user.uid, startDayString, todayString),
+        ]);
+
+        if (fetchedHabits.length > 0) {
+          setHabits(fetchedHabits);
+          // Initialize local progress from existing logs
+          const progressMap: Record<string, number> = {};
+          fetchedLogs.forEach((l) => {
+            if (l.date === todayString) {
+              progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
+            }
+          });
+          setLocalProgress((prev) => ({ ...prev, ...progressMap }));
+        } else {
+          // If user is signed in but has no habits in DB yet, seed starter habits to Firestore
+          const seeded = await seedDefaultHabits(user.uid);
+          if (seeded.length > 0) {
+            setHabits(seeded);
+          } else {
+            setHabits(DEFAULT_HABITS);
+          }
+        }
+        setLogs(fetchedLogs);
+      } catch (err) {
+        console.error(err);
+        setHabits(DEFAULT_HABITS);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadData();
+  }, [user]);
+
+  const displayedHabits = habits.length > 0 ? habits : DEFAULT_HABITS;
+
+  // Determine step size for incrementing
+  const getStep = (habit: Habit) => {
+    if (habit.targetUnit === 'min') return 5;
+    return 1;
+  };
+
+  // Check how many habits are completed today
+  const isHabitCompleted = (habit: Habit) => {
+    const currentVal = localProgress[habit.id!] ?? 0;
+    const target = habit.targetValue || 1;
+    return currentVal >= target;
+  };
+
+  const completedHabitsCount = displayedHabits.filter(isHabitCompleted).length;
+  const totalCount = displayedHabits.length || 3;
+  const progressPercentage = totalCount === 0 ? 0 : Math.round((completedHabitsCount / totalCount) * 100);
+  const leftCount = Math.max(0, totalCount - completedHabitsCount);
+
+  // Quick action / stepper click handler
+  const handleIncrement = async (e: React.MouseEvent, habit: Habit) => {
+    e.stopPropagation();
+    const habitId = habit.id!;
+    const target = habit.targetValue || 1;
+    const step = getStep(habit);
+    const current = localProgress[habitId] ?? 0;
+
+    const nextVal = current >= target ? 0 : Math.min(target, current + step);
+
+    // Optimistic UI state
+    setLocalProgress((prev) => ({ ...prev, [habitId]: nextVal }));
+
+    const isDone = nextVal >= target;
+    const wasCompleted = current >= target;
+
+    // Physical feedback via navigator.vibrate() when marking habits as done for a tactile OS feel
+    if (isDone && !wasCompleted) {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          // Premium Apple OS double-pulse confirmation haptic
+          navigator.vibrate([40, 50, 35]);
+        } catch {
+          // Ignore if unsupported or restricted
+        }
+      }
+    } else if (nextVal > current) {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          // Subtle micro-tap for incremental step
+          navigator.vibrate(18);
+        } catch {
+          // Ignore
+        }
+      }
+    } else if (nextVal === 0 && wasCompleted) {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          // Subtle release tap
+          navigator.vibrate(12);
+        } catch {
+          // Ignore
+        }
+      }
+    }
+
+    let newStatus: 'completed' | 'partial' | 'in_progress' | 'missed';
+    if (isDone) {
+      newStatus = 'completed';
+    } else if (nextVal > 0) {
+      newStatus = 'partial';
+    } else {
+      newStatus = 'missed';
+    }
+
+    if (user) {
+      try {
+        await logHabit({
+          userId: user.uid,
+          habitId: habitId,
+          date: todayStr,
+          status: newStatus,
+          progressValue: nextVal,
+        });
+      } catch (err) {
+        console.error('Failed to log habit:', err);
+      }
+    }
+  };
+
+  // Direct toggle habit completion (e.g. tapping the card or checkmark)
+  const handleToggleHabitComplete = async (habit: Habit) => {
+    const habitId = habit.id!;
+    const target = habit.targetValue || 1;
+    const current = localProgress[habitId] ?? 0;
+    const isCurrentlyDone = current >= target;
+
+    const nextVal = isCurrentlyDone ? 0 : target;
+    setLocalProgress((prev) => ({ ...prev, [habitId]: nextVal }));
+
+    // Tactile 'premium OS' feedback via navigator.vibrate()
+    if (!isCurrentlyDone) {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          // Double-pulse confirmation vibration when marking a habit as done
+          navigator.vibrate([40, 60, 40]);
+        } catch {
+          // Ignore
+        }
+      }
+    } else {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          navigator.vibrate(15);
+        } catch {
+          // Ignore
+        }
+      }
+    }
+
+    if (user) {
+      try {
+        await logHabit({
+          userId: user.uid,
+          habitId: habitId,
+          date: todayStr,
+          status: nextVal >= target ? 'completed' : 'missed',
+          progressValue: nextVal,
+        });
+      } catch (err) {
+        console.error('Failed to log habit:', err);
+      }
+    }
+  };
+
+  // Direct toggle task completion on the dashboard with tactile OS feedback
+  const handleToggleTask = async (e: React.MouseEvent, taskId: string) => {
+    e.stopPropagation();
+    
+    // Find task and determine target state for instant UI update
+    const currentTask = todayTasks.find((t) => t.id === taskId);
+    const willBeCompleted = currentTask ? !currentTask.completed : true;
+
+    // Tactile 'premium OS' feedback using navigator.vibrate() when a user marks a task as done
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        if (willBeCompleted) {
+          // Apple OS double-pulse confirmation vibration
+          navigator.vibrate([40, 60, 40]);
+        } else {
+          // Subtle micro-pulse on un-checking
+          navigator.vibrate(15);
+        }
+      } catch {
+        // Ignore if blocked or unsupported
+      }
+    }
+
+    // Optimistic UI state
+    setTodayTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, completed: willBeCompleted } : t))
+    );
+
+    try {
+      await toggleTaskComplete(taskId, user?.uid);
+    } catch (err) {
+      console.error('Failed to toggle task:', err);
+    }
+  };
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  // Icon and color mapping to replicate exact Apple OS aesthetic
+  const getHabitVisuals = (habit: Habit) => {
+    const nameLower = habit.name.toLowerCase();
+    if (nameLower.includes('workout') || nameLower.includes('exercise') || habit.icon === 'dumbbell') {
+      return {
+        icon: <Dumbbell className="w-6 h-6 rotate-[-15deg]" strokeWidth={2.2} />,
+        bg: 'bg-[#22361b]',
+        text: 'text-[#8cee28]',
+        ringColor: '#8cee28',
+      };
+    }
+    if (nameLower.includes('water') || habit.icon === 'droplets') {
+      return {
+        icon: <Droplets className="w-6 h-6" strokeWidth={2.2} />,
+        bg: 'bg-[#132935]',
+        text: 'text-[#22d3ee]',
+        ringColor: '#22d3ee',
+      };
+    }
+    if (nameLower.includes('sleep') || habit.icon === 'moon') {
+      return {
+        icon: <Moon className="w-6 h-6" strokeWidth={2.2} />,
+        bg: 'bg-[#281e39]',
+        text: 'text-[#a78bfa]',
+        ringColor: '#a78bfa',
+      };
+    }
+    return {
+      icon: <Activity className="w-6 h-6" strokeWidth={2.2} />,
+      bg: 'bg-[#242936]',
+      text: 'text-white/80',
+      ringColor: '#8cee28',
+    };
+  };
+
+  // Date formatted as "Saturday, September 12"
+  const formattedDate = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  return (
+    <div className="p-5 max-w-md mx-auto space-y-6 select-none">
+      {/* Header */}
+      <header className="flex items-start justify-between pt-3">
+        <div>
+          <p className="text-[14px] font-medium text-[#7d8495] tracking-tight mb-1">
+            {formattedDate}
+          </p>
+          <h1 className="text-[34px] leading-[1.12] font-bold text-white tracking-tight">
+            {getGreeting()},<br />{userName}
+          </h1>
+        </div>
+
+        {/* Right Avatar Button */}
+        <UserAvatar
+          avatarUrl={profile?.avatarUrl}
+          name={userName}
+          size="md"
+          onClick={() => navigate('/more')}
+          className="cursor-pointer active:scale-95 transition-transform"
+        />
+      </header>
+
+      {/* Today's Progress Card */}
+      <div className="glass-effect rounded-[28px] p-6 flex items-center gap-5">
+        {/* Left circular progress widget */}
+        <div className="w-[114px] h-[114px] rounded-full bg-[#161922] border border-[#212633] flex items-center justify-center relative p-1 shrink-0">
+          <svg className="w-[96px] h-[96px] transform -rotate-90" viewBox="0 0 96 96">
+            {/* Dark background track */}
+            <circle
+              cx="48"
+              cy="48"
+              r="38"
+              stroke="#1c222b"
+              strokeWidth="9"
+              fill="none"
+            />
+            {/* Progress arc */}
+            {progressPercentage > 0 && (
+              <circle
+                cx="48"
+                cy="48"
+                r="38"
+                stroke="#8cee28"
+                strokeWidth="9"
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 38}`}
+                strokeDashoffset={`${2 * Math.PI * 38 * (1 - progressPercentage / 100)}`}
+                className="transition-all duration-700 ease-out"
+              />
+            )}
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-[26px] font-bold text-white tracking-tight leading-none">
+              {progressPercentage}%
+            </span>
+            <span className="text-[12px] font-medium text-[#7a8192] mt-0.5 tracking-tight">
+              today
+            </span>
+          </div>
+        </div>
+
+        {/* Right side info */}
+        <div className="flex-1">
+          <p className="text-[13.5px] font-medium text-[#7d8495] mb-0.5">Today's progress</p>
+          <div className="flex items-baseline gap-1.5 mb-3">
+            <span className="text-4xl font-extrabold text-white tracking-tight">
+              {completedHabitsCount}
+            </span>
+            <span className="text-2xl font-semibold text-[#7d8495]">
+              / {totalCount}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Streak badge */}
+            <div className="bg-[#1e3419] border border-[#2d5025] text-[#8cee28] px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold">
+              <Flame className="w-3.5 h-3.5 fill-[#8cee28]/25 stroke-[#8cee28]" />
+              <span>0 days</span>
+            </div>
+
+            {/* Score badge */}
+            <div className="bg-[#1a1d25] border border-[#262b36] text-[#9ca2b2] px-3.5 py-1.5 rounded-full text-xs font-semibold">
+              Score 0
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* AI Coach Banner */}
+      <div className="glass-effect rounded-[28px] p-5 flex items-start gap-4">
+        <div className="w-10 h-10 rounded-full bg-[#271f38] border border-[#3b2e55] flex items-center justify-center shrink-0">
+          <Lightbulb className="w-5 h-5 text-[#a78bfa]" strokeWidth={2.2} />
+        </div>
+        <div>
+          <p className="text-[14.5px] text-[#dbe0ea] leading-relaxed font-normal">
+            Your strongest completion window is 9–12 AM. Try scheduling your hardest habit then.
+          </p>
+          <button
+            onClick={() => navigate('/ai-coach')}
+            className="text-[#8cee28] hover:text-[#a5ff36] font-semibold text-[13.5px] mt-2.5 inline-flex items-center gap-1 transition-colors cursor-pointer"
+          >
+            Ask the AI Coach
+          </button>
+        </div>
+      </div>
+
+      {/* Habits List Section */}
+      <div>
+        <div className="flex items-center justify-between px-1 mb-3">
+          <h3 className="text-[14px] font-semibold text-[#828899] tracking-tight">
+            Up next · {leftCount} left
+          </h3>
+          <button
+            onClick={() => navigate('/habits/new')}
+            className="text-[#8cee28] hover:text-[#a5ff36] text-[14px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" /> Add
+          </button>
+        </div>
+
+        {isLoading ? (
+          <div className="text-center text-sm text-[#7d8495] py-12">Loading habits...</div>
+        ) : (
+          <div className="space-y-3">
+            {displayedHabits.map((habit) => {
+              const visuals = getHabitVisuals(habit);
+              const currentVal = localProgress[habit.id!] ?? 0;
+              const target = habit.targetValue || 1;
+              const isCompleted = currentVal >= target;
+              const step = getStep(habit);
+              const progressRatio = Math.min(1, currentVal / target);
+
+              // Build subtitle
+              let subtitle = '';
+              if (habit.reminderTime && habit.name.toLowerCase().includes('sleep')) {
+                subtitle = habit.reminderTime;
+              } else {
+                subtitle = `${currentVal} / ${target} ${habit.targetUnit || 'times'}`;
+              }
+
+              return (
+                <div
+                  key={habit.id}
+                  onClick={() => handleToggleHabitComplete(habit)}
+                  className="h-[72px] rounded-full glass-effect-interactive px-3.5 flex items-center justify-between group cursor-pointer transition-all active:scale-[0.99]"
+                >
+                  {/* Left Icon + Text */}
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div
+                      className={`w-[48px] h-[48px] rounded-full ${visuals.bg} ${visuals.text} flex items-center justify-center shrink-0`}
+                    >
+                      {visuals.icon}
+                    </div>
+
+                    <div className="flex flex-col truncate">
+                      <span
+                        className={cn(
+                          'text-[15.5px] font-semibold tracking-tight truncate transition-all',
+                          isCompleted ? 'text-white/50 line-through' : 'text-white'
+                        )}
+                      >
+                        {habit.name}
+                      </span>
+                      <span className="text-[13px] font-medium text-[#7d8495] mt-0.5">
+                        {subtitle}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Right Action Stepper / Completion Button */}
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (target > 1 && !isCompleted) {
+                        handleIncrement(e, habit);
+                      } else {
+                        handleToggleHabitComplete(habit);
+                      }
+                    }}
+                    className="w-[42px] h-[42px] rounded-full relative flex items-center justify-center shrink-0 bg-[#1a1d25] border border-[#262b36] overflow-hidden hover:border-[#8cee28]/50 transition-colors"
+                  >
+                    {isCompleted ? (
+                      <div className="w-full h-full bg-[#22361b] border border-[#2d5025] text-[#8cee28] flex items-center justify-center rounded-full animate-in zoom-in-75 duration-200">
+                        <Check className="w-5 h-5 stroke-[3]" />
+                      </div>
+                    ) : (
+                      <>
+                        {/* Progress ring track around stepper button */}
+                        {progressRatio > 0 && (
+                          <svg
+                            className="absolute inset-0 w-full h-full transform -rotate-90"
+                            viewBox="0 0 42 42"
+                          >
+                            <circle
+                              cx="21"
+                              cy="21"
+                              r="18"
+                              stroke={visuals.ringColor}
+                              strokeWidth="2.5"
+                              fill="none"
+                              strokeLinecap="round"
+                              strokeDasharray={`${2 * Math.PI * 18}`}
+                              strokeDashoffset={`${2 * Math.PI * 18 * (1 - progressRatio)}`}
+                            />
+                          </svg>
+                        )}
+                        <span
+                          className={cn(
+                            'text-xs font-bold relative z-10',
+                            progressRatio > 0 ? 'text-white' : 'text-[#7d8495] group-hover:text-white'
+                          )}
+                        >
+                          +{step}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Today's Tasks Section with tactile vibration feedback */}
+      {todayTasks.length > 0 && (
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-[14px] font-semibold text-[#828899] tracking-tight">
+              Today's Tasks · {todayTasks.filter((t) => !t.completed).length} left
+            </h3>
+            <button
+              onClick={() => navigate('/calendar')}
+              className="text-[#8cee28] hover:text-[#a5ff36] text-[13px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <CalendarIcon className="w-3.5 h-3.5" /> View Calendar
+            </button>
+          </div>
+
+          <div className="space-y-2.5">
+            {todayTasks.map((task) => (
+              <div
+                key={task.id}
+                onClick={(e) => handleToggleTask(e, task.id)}
+                className="glass-effect-interactive rounded-[22px] px-4 py-3.5 flex items-center justify-between group cursor-pointer transition-all active:scale-[0.985]"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div
+                    className={cn(
+                      'w-6 h-6 rounded-full border flex items-center justify-center transition-all shrink-0',
+                      task.completed
+                        ? 'bg-[#22361b] border-[#2d5025] text-[#8cee28]'
+                        : 'border-[#374151] group-hover:border-[#8cee28]/60 bg-[#161922]'
+                    )}
+                  >
+                    {task.completed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                  </div>
+                  <div className="flex flex-col truncate">
+                    <span
+                      className={cn(
+                        'text-[14.5px] font-semibold tracking-tight truncate transition-all',
+                        task.completed ? 'text-white/50 line-through' : 'text-white'
+                      )}
+                    >
+                      {task.title}
+                    </span>
+                    {task.time && (
+                      <span className="text-[12px] font-medium text-[#7d8495] flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3 text-[#7d8495]" />
+                        {task.time} {task.category ? `· ${task.category}` : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <span
+                  className={cn(
+                    'text-[11px] font-medium px-2.5 py-1 rounded-full shrink-0',
+                    task.completed
+                      ? 'bg-white/5 text-white/40'
+                      : task.priority === 'high'
+                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      : 'bg-[#1a1d25] text-[#9ca2b2] border border-[#262b36]'
+                  )}
+                >
+                  {task.completed ? 'Done' : task.type || 'Task'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Daily Reflection */}
+      {user && (
+        <div className="pt-2">
+          <DailyReflection userId={user.uid} date={todayStr} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+

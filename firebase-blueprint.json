@@ -1,0 +1,138 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile data",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "userName": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "mainGoal": { "type": "string" },
+        "selectedGoals": { "type": "array", "items": { "type": "string" } },
+        "routinePreference": { "type": "string" },
+        "appearancePreference": { "type": "string" },
+        "hasCompletedOnboarding": { "type": "boolean" },
+        "onboardingCompleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "name", "createdAt", "updatedAt"]
+    },
+    "Habit": {
+      "title": "Habit",
+      "description": "A habit to track",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
+        "frequencyType": { "type": "string", "enum": ["daily", "selected_days", "weekly", "custom"] },
+        "frequencyValue": { "type": "array", "items": { "type": "string" } },
+        "targetType": { "type": "string", "enum": ["binary", "count", "duration", "quantity"] },
+        "targetValue": { "type": "number" },
+        "targetUnit": { "type": "string" },
+        "reminderTime": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "frequencyType", "targetType", "createdAt", "updatedAt"]
+    },
+    "HabitLog": {
+      "title": "Habit Log",
+      "description": "A daily record of a habit",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "habitId": { "type": "string" },
+        "date": { "type": "string", "description": "YYYY-MM-DD" },
+        "status": { "type": "string", "enum": ["completed", "partial", "in_progress", "missed", "skipped"] },
+        "progressValue": { "type": "number" },
+        "reflection": { "type": "string", "description": "Optional one-line reflection for the day" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "habitId", "date", "status", "createdAt", "updatedAt"]
+    },
+    "Goal": {
+      "title": "Goal",
+      "description": "Long term goals",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "target": { "type": "number" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "createdAt", "updatedAt"]
+    },
+    "JournalLog": {
+      "title": "Journal Log",
+      "description": "Daily reflection logs",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "date": { "type": "string", "description": "YYYY-MM-DD" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "date", "text", "createdAt", "updatedAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "User scheduled tasks, events, and meetings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "description": "YYYY-MM-DD" },
+        "time": { "type": "string" },
+        "timeEnd": { "type": "string" },
+        "category": { "type": "string" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "type": { "type": "string", "enum": ["task", "meeting", "event", "reminder"] },
+        "completed": { "type": "boolean" },
+        "repeat": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "date", "completed"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "habits/{habitId}": {
+      "schema": { "$ref": "#/entities/Habit" },
+      "description": "User habits"
+    },
+    "habit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/HabitLog" },
+      "description": "Logs of habit completion"
+    },
+    "goals/{goalId}": {
+      "schema": { "$ref": "#/entities/Goal" },
+      "description": "User goals"
+    },
+    "journal_logs/{logId}": {
+      "schema": { "$ref": "#/entities/JournalLog" },
+      "description": "Daily reflection logs"
+    },
+    "tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "User scheduled tasks and calendar items"
+    }
+  }
+}
