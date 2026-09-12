@@ -1,0 +1,3 @@
+# Keep GitHub language statistics from dominating the repository page
+*.ts linguist-vendored=true
+*.tsx linguist-vendored=true
