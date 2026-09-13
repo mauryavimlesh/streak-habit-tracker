@@ -1,14 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 1. Global Safety Net
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // 2. Global Helpers
+    
+    // 1. Core Validation Helpers
     function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
     
     function incoming() {
@@ -19,16 +15,16 @@ service cloud.firestore {
       return resource.data;
     }
     
-    function isSignedIn() {
-      return request.auth != null && request.auth.token.email_verified == true;
+    // 2. Authentication Validation
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
     }
-    
 
     // 3. Entity Validation Helpers
     function isValidUser(data) {
-      return data.keys().hasAll(['email', 'name', 'createdAt', 'updatedAt']) 
-        && data.email is string && data.email.size() <= 100
+      return data.keys().hasAll(['name', 'updatedAt']) 
         && data.name is string && data.name.size() <= 100
+        && (!('email' in data) || (data.email is string && data.email.size() <= 100))
         && (!('mainGoal' in data) || (data.mainGoal is string && data.mainGoal.size() <= 200))
         && (!('selectedGoals' in data) || (data.selectedGoals is list && data.selectedGoals.size() <= 10))
         && (!('hasCompletedOnboarding' in data) || data.hasCompletedOnboarding is bool)
@@ -36,15 +32,14 @@ service cloud.firestore {
         && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 200000))
         && (!('userName' in data) || (data.userName is string && data.userName.size() <= 100))
         && (!('routinePreference' in data) || (data.routinePreference is string && data.routinePreference.size() <= 100))
-        && (!('appearancePreference' in data) || (data.appearancePreference is string && data.appearancePreference.size() <= 100));
+        && (!('appearancePreference' in data) || (data.appearancePreference is string && data.appearancePreference.size() <= 500));
     }
 
     function isValidHabit(data) {
-      return data.keys().hasAll(['userId', 'name', 'frequencyType', 'targetType', 'createdAt', 'updatedAt'])
-        && data.userId == request.auth.uid
+      return data.keys().hasAll(['userId', 'name', 'category', 'frequencyType', 'targetType'])
+        && isOwner(data.userId)
         && data.name is string && data.name.size() > 0 && data.name.size() <= 100
-        && (!('description' in data) || (data.description is string && data.description.size() <= 500))
-        && (!('category' in data) || (data.category is string && data.category.size() <= 50))
+        && data.category is string && data.category.size() <= 50
         && (!('icon' in data) || (data.icon is string && data.icon.size() <= 50))
         && (!('color' in data) || (data.color is string && data.color.size() <= 50))
         && data.frequencyType is string && data.frequencyType.matches('^(daily|selected_days|weekly|custom)$')
@@ -57,16 +52,17 @@ service cloud.firestore {
 
     function isValidHabitLog(data) {
       return data.keys().hasAll(['userId', 'habitId', 'date', 'status'])
-        && data.userId == request.auth.uid
+        && isOwner(data.userId)
         && data.habitId is string && data.habitId.size() <= 128
-        && data.date is string && data.date.size() <= 10 // YYYY-MM-DD
+        && data.date is string && data.date.size() <= 10
         && data.status is string && data.status.matches('^(completed|partial|missed|skipped)$')
-        && (!('progressValue' in data) || data.progressValue is number);
+        && (!('progressValue' in data) || data.progressValue is number)
+        && (!('reflection' in data) || (data.reflection is string && data.reflection.size() <= 5000));
     }
 
     function isValidGoal(data) {
       return data.keys().hasAll(['userId', 'title'])
-        && data.userId == request.auth.uid
+        && isOwner(data.userId)
         && data.title is string && data.title.size() > 0 && data.title.size() <= 200
         && (!('description' in data) || (data.description is string && data.description.size() <= 1000))
         && (!('target' in data) || data.target is number)
@@ -76,14 +72,14 @@ service cloud.firestore {
 
     function isValidJournalLog(data) {
       return data.keys().hasAll(['userId', 'date', 'text'])
-        && data.userId == request.auth.uid
-        && data.date is string && data.date.size() <= 10 // YYYY-MM-DD
+        && isOwner(data.userId)
+        && data.date is string && data.date.size() <= 10
         && data.text is string && data.text.size() <= 5000;
     }
 
     function isValidTask(data) {
-      return data.keys().hasAll(['title', 'date', 'completed'])
-        && (!('userId' in data) || data.userId == request.auth.uid)
+      return data.keys().hasAll(['userId', 'title', 'date', 'completed'])
+        && isOwner(data.userId)
         && data.title is string && data.title.size() > 0 && data.title.size() <= 200
         && data.date is string && data.date.size() <= 10
         && data.completed is bool
@@ -93,103 +89,9 @@ service cloud.firestore {
         && (!('type' in data) || (data.type is string && data.type.matches('^(task|meeting|event|reminder)$')));
     }
 
-    // 4. Collection Rules
-    
-    // Users
-    match /users/{userId} {
-      allow get: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null 
-        && request.auth.uid == userId
-        && isValidUser(incoming())
-        && (!('createdAt' in incoming()) || incoming().createdAt == request.time)
-        && incoming().updatedAt == request.time;
-      allow update: if request.auth != null 
-        && request.auth.uid == userId
-        && isValidUser(incoming())
-        && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
-        && incoming().updatedAt == request.time;
-    }
-
-    // Habits
-    match /habits/{habitId} {
-      allow get: if request.auth != null && existing().userId == request.auth.uid;
-      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null
-        && isValidId(habitId)
-        && isValidHabit(incoming())
-        
-        && incoming().updatedAt == request.time;
-      allow update: if request.auth != null
-        && existing().userId == request.auth.uid
-        && isValidHabit(incoming())
-        && incoming().userId == existing().userId
-        
-        && incoming().updatedAt == request.time;
-      allow delete: if request.auth != null && existing().userId == request.auth.uid;
-    }
-
-    // Habit Logs
-    match /habit_logs/{logId} {
-      allow get: if request.auth != null && existing().userId == request.auth.uid;
-      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null
-        && isValidId(logId)
-        && isValidHabitLog(incoming())
-        
-        && incoming().updatedAt == request.time
-        // Enforce that the referenced habit exists and belongs to the user
-        && exists(/databases/$(database)/documents/habits/$(incoming().habitId))
-        && get(/databases/$(database)/documents/habits/$(incoming().habitId)).data.userId == request.auth.uid;
-      allow update: if request.auth != null
-        && existing().userId == request.auth.uid
-        && isValidHabitLog(incoming())
-        && incoming().userId == existing().userId
-        && incoming().habitId == existing().habitId
-        
-        && incoming().updatedAt == request.time;
-      allow delete: if request.auth != null && existing().userId == request.auth.uid;
-    }
-
-    // Goals
-    match /goals/{goalId} {
-      allow get: if request.auth != null && existing().userId == request.auth.uid;
-      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null
-        && isValidId(goalId)
-        && isValidGoal(incoming())
-        
-        && incoming().updatedAt == request.time;
-      allow update: if request.auth != null
-        && existing().userId == request.auth.uid
-        && isValidGoal(incoming())
-        && incoming().userId == existing().userId
-        
-        && incoming().updatedAt == request.time;
-      allow delete: if request.auth != null && existing().userId == request.auth.uid;
-    }
-
-    // Journal Logs
-    match /journal_logs/{logId} {
-      allow get: if request.auth != null && existing().userId == request.auth.uid;
-      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null
-        && isValidId(logId)
-        && isValidJournalLog(incoming())
-        
-        && incoming().updatedAt == request.time;
-      allow update: if request.auth != null
-        && existing().userId == request.auth.uid
-        && isValidJournalLog(incoming())
-        && incoming().userId == existing().userId
-        
-        && incoming().updatedAt == request.time;
-      allow delete: if request.auth != null && existing().userId == request.auth.uid;
-    }
-
-
     function isValidReminder(data) {
       return data.keys().hasAll(['userId', 'title', 'time', 'repeat', 'enabled', 'notificationEnabled', 'category'])
-        && data.userId == request.auth.uid
+        && isOwner(data.userId)
         && data.title is string && data.title.size() > 0 && data.title.size() <= 200
         && data.time is string
         && data.repeat is string
@@ -198,35 +100,113 @@ service cloud.firestore {
         && data.category is string;
     }
 
+    // 4. Collection Rules
+    
+    // Users
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && isValidUser(incoming())
+        && (!('createdAt' in incoming()) || incoming().createdAt == request.time)
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(userId)
+        && isValidUser(incoming())
+        && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
+        && incoming().updatedAt == request.time;
+    }
+
+    // Habits
+    match /habits/{habitId} {
+      allow get, list: if isOwner(resource.data.userId);
+      allow create: if isOwner(incoming().userId)
+        && isValidId(habitId)
+        && isValidHabit(incoming())
+        && (!('createdAt' in incoming()) || incoming().createdAt == request.time)
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(existing().userId)
+        && isOwner(incoming().userId)
+        && isValidHabit(incoming())
+        && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
+        && incoming().updatedAt == request.time;
+      allow delete: if isOwner(existing().userId);
+    }
+
+    // Habit Logs
+    match /habit_logs/{logId} {
+      allow get, list: if isOwner(resource.data.userId);
+      allow create: if isOwner(incoming().userId)
+        && isValidId(logId)
+        && isValidHabitLog(incoming())
+        && (!('createdAt' in incoming()) || incoming().createdAt == request.time)
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(existing().userId)
+        && isOwner(incoming().userId)
+        && isValidHabitLog(incoming())
+        && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
+        && incoming().updatedAt == request.time;
+      allow delete: if isOwner(existing().userId);
+    }
+
+    // Goals
+    match /goals/{goalId} {
+      allow get, list: if isOwner(resource.data.userId);
+      allow create: if isOwner(incoming().userId)
+        && isValidId(goalId)
+        && isValidGoal(incoming())
+        && (!('createdAt' in incoming()) || incoming().createdAt == request.time)
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(existing().userId)
+        && isOwner(incoming().userId)
+        && isValidGoal(incoming())
+        && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
+        && incoming().updatedAt == request.time;
+      allow delete: if isOwner(existing().userId);
+    }
+
+    // Journal Logs
+    match /journal_logs/{logId} {
+      allow get, list: if isOwner(resource.data.userId);
+      allow create: if isOwner(incoming().userId)
+        && isValidId(logId)
+        && isValidJournalLog(incoming())
+        && (!('createdAt' in incoming()) || incoming().createdAt == request.time)
+        && incoming().updatedAt == request.time;
+      allow update: if isOwner(existing().userId)
+        && isOwner(incoming().userId)
+        && isValidJournalLog(incoming())
+        && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
+        && incoming().updatedAt == request.time;
+      allow delete: if isOwner(existing().userId);
+    }
+
     // Reminders
     match /reminders/{reminderId} {
-      allow get: if request.auth != null && existing().userId == request.auth.uid;
-      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow create: if request.auth != null
+      allow get, list: if isOwner(resource.data.userId);
+      allow create: if isOwner(incoming().userId)
         && isValidId(reminderId)
         && isValidReminder(incoming())
-        ;
-      allow update: if request.auth != null
-        && existing().userId == request.auth.uid
+        && (!('createdAt' in incoming()) || incoming().createdAt == request.time);
+      allow update: if isOwner(existing().userId)
+        && isOwner(incoming().userId)
         && isValidReminder(incoming())
-        && incoming().userId == existing().userId;
-      allow delete: if request.auth != null && existing().userId == request.auth.uid;
+        && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt);
+      allow delete: if isOwner(existing().userId);
     }
 
     // Tasks
     match /tasks/{taskId} {
-      allow get: if request.auth != null && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
-      allow list: if request.auth != null && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
-      allow create: if request.auth != null
+      allow get, list: if isOwner(resource.data.userId);
+      allow create: if isOwner(incoming().userId)
         && isValidId(taskId)
         && isValidTask(incoming())
-        
+        && (!('createdAt' in incoming()) || incoming().createdAt == request.time)
         && incoming().updatedAt == request.time;
-      allow update: if request.auth != null
-        && (existing().userId == request.auth.uid || !('userId' in existing()))
+      allow update: if isOwner(existing().userId)
+        && isOwner(incoming().userId)
         && isValidTask(incoming())
+        && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
         && incoming().updatedAt == request.time;
-      allow delete: if request.auth != null && (existing().userId == request.auth.uid || !('userId' in existing()));
+      allow delete: if isOwner(existing().userId);
     }
   }
 }
