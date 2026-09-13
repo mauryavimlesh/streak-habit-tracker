@@ -57,8 +57,8 @@ export default function CreateHabit() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white">
-      <header className="flex items-center justify-between p-6 pb-4 sticky top-0 bg-[#0d0e12]/90 backdrop-blur-xl z-10 border-b border-[#1f232c]">
+    <div className="flex flex-col min-h-screen bg-background text-white">
+      <header className="flex items-center justify-between p-6 pb-4 sticky top-0 bg-background/90 backdrop-blur-xl z-10 border-b border-[#1f232c]">
         <button 
           onClick={() => navigate(-1)}
           className="text-[#7d8495] hover:text-white transition-colors cursor-pointer text-sm font-medium"
@@ -69,7 +69,7 @@ export default function CreateHabit() {
         <button 
           onClick={handleSave}
           disabled={!name.trim() || loading}
-          className="text-[#8cee28] font-bold text-sm disabled:opacity-40 transition-opacity cursor-pointer"
+          className="text-accent-primary font-bold text-sm disabled:opacity-40 transition-opacity cursor-pointer"
         >
           {loading ? 'Saving...' : 'Save'}
         </button>
@@ -85,7 +85,7 @@ export default function CreateHabit() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Morning Workout"
-              className="w-full bg-[#13151b] border border-[#1f232c] rounded-2xl px-5 py-3.5 outline-none focus:border-[#8cee28]/50 transition-colors text-base text-white placeholder-[#7d8495]"
+              className="w-full bg-surface-card border border-[#1f232c] rounded-2xl px-5 py-3.5 outline-none focus:border-accent-primary/50 transition-colors text-base text-white placeholder-[#7d8495]"
               autoFocus
             />
           </div>
@@ -96,13 +96,13 @@ export default function CreateHabit() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Why is this habit important to you?"
-              className="w-full bg-[#13151b] border border-[#1f232c] rounded-2xl px-5 py-3.5 outline-none focus:border-[#8cee28]/50 transition-colors text-sm text-white placeholder-[#7d8495]"
+              className="w-full bg-surface-card border border-[#1f232c] rounded-2xl px-5 py-3.5 outline-none focus:border-accent-primary/50 transition-colors text-sm text-white placeholder-[#7d8495]"
             />
           </div>
         </div>
 
         {/* Visuals */}
-        <div className="bg-[#13151b] border border-[#1f232c] rounded-[24px] p-5 space-y-6 shadow-sm">
+        <div className="bg-surface-card border border-[#1f232c] rounded-[24px] p-5 space-y-6 shadow-sm">
           <div>
             <label className="block text-xs font-semibold text-[#7d8495] uppercase tracking-wider mb-3">Icon</label>
             <div className="grid grid-cols-4 gap-3">
@@ -112,8 +112,8 @@ export default function CreateHabit() {
                   onClick={() => setSelectedIcon(id)}
                   className={`aspect-square rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
                     selectedIcon === id 
-                      ? 'bg-[#23381c] border-2 border-[#8cee28] text-[#8cee28]' 
-                      : 'bg-[#0d0e12] border border-[#1f232c] text-[#7d8495] hover:text-white'
+                      ? 'bg-[#23381c] border-2 border-accent-primary text-accent-primary' 
+                      : 'bg-background border border-[#1f232c] text-[#7d8495] hover:text-white'
                   }`}
                 >
                   <Icon className="w-6 h-6" />
@@ -143,7 +143,7 @@ export default function CreateHabit() {
         {/* Configuration */}
         <div className="space-y-3">
           <label className="block text-xs font-semibold text-[#7d8495] uppercase tracking-wider ml-1">Target</label>
-          <div className="bg-[#13151b] border border-[#1f232c] rounded-[24px] p-2">
+          <div className="bg-surface-card border border-[#1f232c] rounded-[24px] p-2">
             <div className="grid grid-cols-2 gap-2">
               {[
                 { id: 'binary', label: 'Yes / No' },
@@ -154,7 +154,7 @@ export default function CreateHabit() {
                   onClick={() => setTargetType(type.id as TargetType)}
                   className={`py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
                     targetType === type.id 
-                      ? 'bg-[#23381c] text-[#8cee28] border border-[#345228]' 
+                      ? 'bg-[#23381c] text-accent-primary border border-[#345228]' 
                       : 'text-[#7d8495] hover:text-white'
                   }`}
                 >
@@ -170,14 +170,14 @@ export default function CreateHabit() {
                   min="1"
                   value={targetValue}
                   onChange={(e) => setTargetValue(Number(e.target.value))}
-                  className="w-20 bg-[#0d0e12] border border-[#1f232c] rounded-xl px-3 py-2 text-center text-white outline-none"
+                  className="w-20 bg-background border border-[#1f232c] rounded-xl px-3 py-2 text-center text-white outline-none"
                 />
                 <input
                   type="text"
                   value={targetUnit}
                   onChange={(e) => setTargetUnit(e.target.value)}
                   placeholder="e.g. glasses, mins, pages"
-                  className="flex-1 bg-[#0d0e12] border border-[#1f232c] rounded-xl px-3 py-2 text-white outline-none placeholder-[#7d8495]"
+                  className="flex-1 bg-background border border-[#1f232c] rounded-xl px-3 py-2 text-white outline-none placeholder-[#7d8495]"
                 />
               </div>
             )}
@@ -186,7 +186,7 @@ export default function CreateHabit() {
         
         <div className="space-y-3">
           <label className="block text-xs font-semibold text-[#7d8495] uppercase tracking-wider ml-1">Frequency</label>
-          <div className="bg-[#13151b] border border-[#1f232c] rounded-[24px] p-2">
+          <div className="bg-surface-card border border-[#1f232c] rounded-[24px] p-2">
             <div className="grid grid-cols-3 gap-2">
               {[
                 { id: 'daily', label: 'Daily' },
@@ -198,7 +198,7 @@ export default function CreateHabit() {
                   onClick={() => setFrequencyType(type.id as HabitFrequency)}
                   className={`py-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     frequencyType === type.id 
-                      ? 'bg-[#23381c] text-[#8cee28] border border-[#345228]' 
+                      ? 'bg-[#23381c] text-accent-primary border border-[#345228]' 
                       : 'text-[#7d8495] hover:text-white'
                   }`}
                 >
@@ -211,13 +211,13 @@ export default function CreateHabit() {
 
         <div className="space-y-3">
           <label className="block text-xs font-semibold text-[#7d8495] uppercase tracking-wider ml-1">Reminder</label>
-          <div className="bg-[#13151b] border border-[#1f232c] rounded-[24px] p-4 flex items-center justify-between shadow-sm">
+          <div className="bg-surface-card border border-[#1f232c] rounded-[24px] p-4 flex items-center justify-between shadow-sm">
             <span className="text-white text-sm font-medium">Notification Time</span>
             <input 
               type="time" 
               value={reminderTime}
               onChange={(e) => setReminderTime(e.target.value)}
-              className="bg-[#0d0e12] border border-[#1f232c] rounded-xl px-3 py-2 outline-none text-sm font-semibold text-white"
+              className="bg-background border border-[#1f232c] rounded-xl px-3 py-2 outline-none text-sm font-semibold text-white"
             />
           </div>
         </div>

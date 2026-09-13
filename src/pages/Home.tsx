@@ -301,7 +301,7 @@ export default function Home() {
             particleCount: 120,
             spread: 70,
             origin: { y: 0.6 },
-            colors: ['#8cee28', '#ffffff', '#22361b']
+            colors: ['var(--app-accent)', '#ffffff', '#22361b']
           });
         }
       }
@@ -435,16 +435,16 @@ export default function Home() {
       return {
         icon: <Dumbbell className="w-6 h-6 rotate-[-15deg]" strokeWidth={2.2} />,
         bg: 'bg-[#22361b]',
-        text: 'text-[#8cee28]',
-        ringColor: '#8cee28',
+        text: 'text-accent-primary',
+        ringColor: 'var(--app-accent)',
       };
     }
     if (nameLower.includes('water') || habit.icon === 'droplets') {
       return {
         icon: <Droplets className="w-6 h-6" strokeWidth={2.2} />,
         bg: 'bg-[#132935]',
-        text: 'text-[#22d3ee]',
-        ringColor: '#22d3ee',
+        text: 'text-accent-primary',
+        ringColor: 'var(--app-accent)',
       };
     }
     if (nameLower.includes('sleep') || habit.icon === 'moon') {
@@ -459,7 +459,7 @@ export default function Home() {
       icon: <Activity className="w-6 h-6" strokeWidth={2.2} />,
       bg: 'bg-[#242936]',
       text: 'text-white/80',
-      ringColor: '#8cee28',
+      ringColor: 'var(--app-accent)',
     };
   };
 
@@ -513,7 +513,7 @@ export default function Home() {
                 cx="48"
                 cy="48"
                 r="38"
-                stroke="#8cee28"
+                stroke="var(--app-accent)"
                 strokeWidth="9"
                 fill="none"
                 strokeLinecap="round"
@@ -547,8 +547,8 @@ export default function Home() {
 
           <div className="flex items-center gap-2">
             {/* Streak badge */}
-            <div className="bg-[#1e3419] border border-[#2d5025] text-[#8cee28] px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold">
-              <Flame className="w-3.5 h-3.5 fill-[#8cee28]/25 stroke-[#8cee28]" />
+            <div className="bg-[#1e3419] border border-[#2d5025] text-accent-primary px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold">
+              <Flame className="w-3.5 h-3.5 fill-accent-primary/25 stroke-accent-primary" />
               <span>{globalStreak} {globalStreak === 1 ? 'day' : 'days'}</span>
             </div>
 
@@ -571,7 +571,7 @@ export default function Home() {
           </p>
           <button
             onClick={() => navigate('/ai-coach')}
-            className="text-[#8cee28] hover:text-[#a5ff36] font-semibold text-[13.5px] mt-2.5 inline-flex items-center gap-1 transition-colors cursor-pointer"
+            className="text-accent-primary hover:text-[#a5ff36] font-semibold text-[13.5px] mt-2.5 inline-flex items-center gap-1 transition-colors cursor-pointer"
           >
             Ask the AI Coach
           </button>
@@ -586,7 +586,7 @@ export default function Home() {
           </h3>
           <button
             onClick={() => navigate('/habits/new')}
-            className="text-[#8cee28] hover:text-[#a5ff36] text-[14px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+            className="text-accent-primary hover:text-[#a5ff36] text-[14px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
           >
             <Plus className="w-4 h-4 stroke-[3]" /> Add
           </button>
@@ -651,10 +651,10 @@ export default function Home() {
                         handleToggleHabitComplete(habit);
                       }
                     }}
-                    className="w-[42px] h-[42px] rounded-full relative flex items-center justify-center shrink-0 bg-[#1a1d25] border border-[#262b36] overflow-hidden hover:border-[#8cee28]/50 transition-colors"
+                    className="w-[42px] h-[42px] rounded-full relative flex items-center justify-center shrink-0 bg-[#1a1d25] border border-[#262b36] overflow-hidden hover:border-accent-primary/50 transition-colors"
                   >
                     {isCompleted ? (
-                      <div className="w-full h-full bg-[#22361b] border border-[#2d5025] text-[#8cee28] flex items-center justify-center rounded-full animate-in zoom-in-75 duration-200">
+                      <div className="w-full h-full bg-[#22361b] border border-[#2d5025] text-accent-primary flex items-center justify-center rounded-full animate-in zoom-in-75 duration-200">
                         <Check className="w-5 h-5 stroke-[3]" />
                       </div>
                     ) : (
@@ -698,7 +698,7 @@ export default function Home() {
                       value={habitNotes[habit.id!] || ''}
                       onChange={(e) => setHabitNotes(prev => ({...prev, [habit.id!]: e.target.value}))}
                       onBlur={() => saveNote(habit, habitNotes[habit.id!] || '')}
-                      className="w-full bg-transparent border-b border-[#262b36] text-[13px] text-white focus:outline-none focus:border-[#8cee28] pb-1.5 placeholder:text-[#7d8495] transition-colors"
+                      className="w-full bg-transparent border-b border-[#262b36] text-[13px] text-white focus:outline-none focus:border-accent-primary pb-1.5 placeholder:text-[#7d8495] transition-colors"
                     />
                   </div>
                 )}
@@ -721,7 +721,7 @@ export default function Home() {
             </h3>
             <button
               onClick={() => navigate('/calendar')}
-              className="text-[#8cee28] hover:text-[#a5ff36] text-[13px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+              className="text-accent-primary hover:text-[#a5ff36] text-[13px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
             >
               <CalendarIcon className="w-3.5 h-3.5" /> View Calendar
             </button>
@@ -739,8 +739,8 @@ export default function Home() {
                     className={cn(
                       'w-6 h-6 rounded-full border flex items-center justify-center transition-all shrink-0',
                       task.completed
-                        ? 'bg-[#22361b] border-[#2d5025] text-[#8cee28]'
-                        : 'border-[#374151] group-hover:border-[#8cee28]/60 bg-[#161922]'
+                        ? 'bg-[#22361b] border-[#2d5025] text-accent-primary'
+                        : 'border-[#374151] group-hover:border-accent-primary/60 bg-[#161922]'
                     )}
                   >
                     {task.completed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
@@ -796,7 +796,7 @@ export default function Home() {
             navigate('/sync');
           }}
         >
-          <div className="bg-[#8cee28] text-[#1a1d25] px-5 py-3 rounded-full shadow-lg font-semibold text-sm flex items-center gap-2 whitespace-nowrap">
+          <div className="bg-accent-primary text-[#1a1d25] px-5 py-3 rounded-full shadow-lg font-semibold text-sm flex items-center gap-2 whitespace-nowrap">
             <RefreshCw className="w-4 h-4" />
             {syncToastMessage}
           </div>

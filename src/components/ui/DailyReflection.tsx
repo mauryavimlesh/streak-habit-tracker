@@ -124,7 +124,7 @@ export function DailyReflection({ userId, date, className }: DailyReflectionProp
               </button>
             )}
             {hasSaved && (
-              <span className="text-[11px] font-semibold text-[#8cee28] flex items-center gap-1 bg-[#22361b] px-2 py-0.5 rounded-full border border-[#2d5025]">
+              <span className="text-[11px] font-semibold text-accent-primary flex items-center gap-1 bg-[#22361b] px-2 py-0.5 rounded-full border border-[#2d5025]">
                 <Check className="w-3 h-3 stroke-[3]" /> Saved
               </span>
             )}
@@ -182,7 +182,7 @@ export function DailyReflection({ userId, date, className }: DailyReflectionProp
                       initial={{ scale: 0.6, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       exit={{ scale: 0.6, opacity: 0 }}
-                      className="p-2 text-[#8cee28]"
+                      className="p-2 text-accent-primary"
                     >
                       <Check className="w-4 h-4 stroke-[3]" />
                     </motion.div>

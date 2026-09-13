@@ -8,9 +8,9 @@ export default function Feedback() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
@@ -20,7 +20,7 @@ export default function Feedback() {
           </button>
           <div>
             <h1 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-[#8cee28]" />
+              <MessageSquare className="w-4 h-4 text-accent-primary" />
               <span>Feedback & Bug Reports</span>
             </h1>
             <p className="text-xs text-[#7d8495]">Help make STREAK better</p>

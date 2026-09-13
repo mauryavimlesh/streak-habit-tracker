@@ -34,7 +34,7 @@ import { cn } from '../../lib/utils';
 
 const MOODS: { id: JournalMood; label: string; icon: any; color: string }[] = [
   { id: 'great', label: 'Energized', icon: Flame, color: 'text-orange-400 bg-orange-500/15 border-orange-500/30' },
-  { id: 'good', label: 'Positive', icon: Smile, color: 'text-[#8cee28] bg-[#8cee28]/15 border-[#8cee28]/30' },
+  { id: 'good', label: 'Positive', icon: Smile, color: 'text-accent-primary bg-accent-primary/15 border-accent-primary/30' },
   { id: 'neutral', label: 'Balanced', icon: Meh, color: 'text-blue-400 bg-blue-500/15 border-blue-500/30' },
   { id: 'tired', label: 'Low Energy', icon: BatteryCharging, color: 'text-yellow-400 bg-yellow-500/15 border-yellow-500/30' },
   { id: 'stressed', label: 'Overwhelmed', icon: CloudSun, color: 'text-purple-400 bg-purple-500/15 border-purple-500/30' },
@@ -155,9 +155,9 @@ export default function Journal() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/more')}
@@ -173,7 +173,7 @@ export default function Journal() {
 
         <button
           onClick={() => setIsNewOpen(true)}
-          className="px-3.5 py-1.5 rounded-full bg-[#8cee28] text-black font-semibold text-xs flex items-center gap-1.5 shadow-[0_2px_12px_rgba(140,238,40,0.3)] hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
+          className="px-3.5 py-1.5 rounded-full bg-accent-primary text-black font-semibold text-xs flex items-center gap-1.5 shadow-[0_2px_12px_rgba(140,238,40,0.3)] hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5 stroke-[3]" />
           <span>Reflect</span>
@@ -190,7 +190,7 @@ export default function Journal() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search entries or tags..."
-            className="w-full pl-9 pr-4 py-2.5 rounded-2xl bg-black/40 border border-white/5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#8cee28]"
+            className="w-full pl-9 pr-4 py-2.5 rounded-2xl bg-black/40 border border-white/5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-accent-primary"
           />
         </div>
 
@@ -205,7 +205,7 @@ export default function Journal() {
                 className={cn(
                   'px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all cursor-pointer',
                   selectedTag === tag
-                    ? 'bg-[#8cee28]/20 border border-[#8cee28]/50 text-[#8cee28]'
+                    ? 'bg-accent-primary/20 border border-accent-primary/50 text-accent-primary'
                     : 'bg-white/5 text-[#7d8495] hover:text-white'
                 )}
               >
@@ -219,7 +219,7 @@ export default function Journal() {
         {filteredEntries.length === 0 ? (
           <div className="py-16 text-center space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-[#7d8495]">
-              <BookOpen className="w-6 h-6 text-[#8cee28]" />
+              <BookOpen className="w-6 h-6 text-accent-primary" />
             </div>
             <h3 className="text-base font-semibold text-white">No reflections yet</h3>
             <p className="text-xs text-[#7d8495] max-w-xs mx-auto">
@@ -227,7 +227,7 @@ export default function Journal() {
             </p>
             <button
               onClick={() => setIsNewOpen(true)}
-              className="mt-2 px-5 py-2.5 rounded-xl bg-[#8cee28] text-black font-semibold text-xs inline-flex items-center gap-2 hover:bg-[#9eff38] cursor-pointer"
+              className="mt-2 px-5 py-2.5 rounded-xl bg-accent-primary text-black font-semibold text-xs inline-flex items-center gap-2 hover:bg-[#9eff38] cursor-pointer"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Write First Reflection</span>
@@ -243,7 +243,7 @@ export default function Journal() {
                 <motion.div
                   key={entry.id}
                   layout
-                  className="p-4 rounded-3xl bg-[#13151b] border border-white/5 hover:border-white/10 transition-all space-y-2.5"
+                  className="p-4 rounded-3xl bg-surface-card border border-white/5 hover:border-white/10 transition-all space-y-2.5"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -278,7 +278,7 @@ export default function Journal() {
                   </div>
 
                   {entry.prompt && (
-                    <span className="text-[11px] text-[#8cee28]/80 font-medium block italic">
+                    <span className="text-[11px] text-accent-primary/80 font-medium block italic">
                       "{entry.prompt}"
                     </span>
                   )}
@@ -295,7 +295,7 @@ export default function Journal() {
                           key={imgIdx}
                           type="button"
                           onClick={() => setViewingGallery({ images: entry.images!, index: imgIdx })}
-                          className="relative group rounded-2xl overflow-hidden border border-white/10 bg-[#0e1015] aspect-square w-16 h-16 shrink-0 cursor-pointer hover:border-[#8cee28]/50 transition-colors shadow-sm"
+                          className="relative group rounded-2xl overflow-hidden border border-white/10 bg-[#0e1015] aspect-square w-16 h-16 shrink-0 cursor-pointer hover:border-accent-primary/50 transition-colors shadow-sm"
                         >
                           <img
                             src={img}
@@ -347,7 +347,7 @@ export default function Journal() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md bg-[#13151b] border border-white/10 rounded-3xl p-5 z-10 space-y-4 max-h-[90vh] overflow-y-auto"
+              className="relative w-full max-w-md bg-surface-card border border-white/10 rounded-3xl p-5 z-10 space-y-4 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between pb-2 border-b border-white/10">
                 <h3 className="text-base font-bold text-white">Daily Reflection</h3>
@@ -402,7 +402,7 @@ export default function Journal() {
                       className={cn(
                         'px-2.5 py-1 rounded-full text-[11px] whitespace-nowrap border transition-all cursor-pointer',
                         activePrompt === p
-                          ? 'bg-[#8cee28]/15 border-[#8cee28]/40 text-[#8cee28]'
+                          ? 'bg-accent-primary/15 border-accent-primary/40 text-accent-primary'
                           : 'bg-black/30 border-white/5 text-[#7d8495] hover:text-white'
                       )}
                     >
@@ -419,7 +419,7 @@ export default function Journal() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Title (Optional)"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                 />
 
                 <textarea
@@ -428,7 +428,7 @@ export default function Journal() {
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   placeholder="Reflect on your habits, breakthroughs, or lessons today..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28] leading-relaxed"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary leading-relaxed"
                 />
 
                 <div className="flex items-center justify-between">
@@ -437,14 +437,14 @@ export default function Journal() {
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
                     placeholder="Tags: Health, Discipline"
-                    className="flex-1 mr-2 px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                    className="flex-1 mr-2 px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                   />
 
                   <button
                     type="button"
                     onClick={handleAskAiReflection}
                     disabled={!text.trim() || isAiLoading}
-                    className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-[#8cee28] border border-[#8cee28]/30 text-xs font-medium flex items-center gap-1.5 disabled:opacity-40 transition-all cursor-pointer"
+                    className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-accent-primary border border-accent-primary/30 text-xs font-medium flex items-center gap-1.5 disabled:opacity-40 transition-all cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>{isAiLoading ? 'Analyzing...' : 'AI Perspective'}</span>
@@ -456,7 +456,7 @@ export default function Journal() {
                   <motion.div
                     initial={{ opacity: 0, y: 5 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-3 rounded-xl bg-[#8cee28]/10 border border-[#8cee28]/25 text-xs text-[#8cee28] leading-relaxed space-y-1"
+                    className="p-3 rounded-xl bg-accent-primary/10 border border-accent-primary/25 text-xs text-accent-primary leading-relaxed space-y-1"
                   >
                     <span className="font-bold flex items-center gap-1">
                       <Sparkles className="w-3 h-3" /> Coach Insight:
@@ -483,7 +483,7 @@ export default function Journal() {
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-2xl bg-[#8cee28] text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] transition-colors cursor-pointer mt-2"
+                  className="w-full py-3 rounded-2xl bg-accent-primary text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] transition-colors cursor-pointer mt-2"
                 >
                   Save Entry
                 </button>
@@ -563,7 +563,7 @@ export default function Journal() {
                         }
                         className={cn(
                           'w-2.5 h-2.5 rounded-full transition-all cursor-pointer',
-                          viewingGallery.index === idx ? 'bg-[#8cee28] w-5' : 'bg-white/30'
+                          viewingGallery.index === idx ? 'bg-accent-primary w-5' : 'bg-white/30'
                         )}
                       />
                     ))}

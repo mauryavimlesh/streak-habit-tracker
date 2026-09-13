@@ -70,7 +70,7 @@ export function DaySchedule({
           <span className="text-white">6°</span>
         </div>
         <div className="flex items-center gap-1.5 bg-[#14161e] border border-[#212634] px-3 py-1.5 rounded-full shadow-sm">
-          <Navigation className="w-3 h-3 text-[#8cee28] rotate-45" />
+          <Navigation className="w-3 h-3 text-accent-primary rotate-45" />
           <span className="text-white">Krakow</span>
         </div>
       </div>
@@ -90,8 +90,8 @@ export function DaySchedule({
             <Users className="w-4 h-4 text-[#818cf8] inline" /> {meetingCount || 2} meetings
           </span>{' '}
           and <br className="sm:hidden" />
-          <span className="inline-flex items-center gap-1 font-semibold text-[#8cee28]">
-            <CheckSquare className="w-4 h-4 text-[#8cee28] inline" /> {standardTaskCount} tasks
+          <span className="inline-flex items-center gap-1 font-semibold text-accent-primary">
+            <CheckSquare className="w-4 h-4 text-accent-primary inline" /> {standardTaskCount} tasks
           </span>{' '}
           {isToday ? 'today.' : 'on this date.'}
         </div>
@@ -108,7 +108,7 @@ export function DaySchedule({
           <span>Typical</span>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#171a24] border border-[#232a3b] text-xs font-semibold text-white/90 shrink-0">
-          <Flame className="w-3.5 h-3.5 text-[#8cee28]" />
+          <Flame className="w-3.5 h-3.5 text-accent-primary" />
           <span>Good</span>
         </div>
       </div>
@@ -120,7 +120,7 @@ export function DaySchedule({
             STREAK Score
           </span>
           <div className="flex items-center gap-1 text-xs font-bold text-white font-mono">
-            <Flame className="w-3.5 h-3.5 text-[#8cee28]" />
+            <Flame className="w-3.5 h-3.5 text-accent-primary" />
             <span>{streakScore}</span>
             <span className="text-[#636a7a] font-normal">/ 100</span>
           </div>
@@ -131,7 +131,7 @@ export function DaySchedule({
             initial={{ width: 0 }}
             animate={{ width: `${streakScore}%` }}
             transition={{ duration: 0.6, ease: 'easeOut' }}
-            className="h-full rounded-full bg-gradient-to-r from-[#22c55e] via-[#8cee28] to-[#a3e635]"
+            className="h-full rounded-full bg-gradient-to-r from-[#22c55e] via-accent-primary to-[#a3e635]"
           />
         </div>
       </div>
@@ -166,7 +166,7 @@ export function DaySchedule({
             <span>Morning grogginess cleared</span>
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#181a22] border border-[#252a39] text-[#9ba3b5]">
-            <ArrowUpRight className="w-3.5 h-3.5 text-[#8cee28]" />
+            <ArrowUpRight className="w-3.5 h-3.5 text-accent-primary" />
             <span>Peak focus window active</span>
           </div>
         </div>
@@ -177,7 +177,7 @@ export function DaySchedule({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-[#8cee28]" /> Suggested & Tasks
+              <Sparkles className="w-4 h-4 text-accent-primary" /> Suggested & Tasks
             </h3>
             <span className="text-xs text-[#7d8495] font-mono">({filteredTasks.length})</span>
           </div>
@@ -189,7 +189,7 @@ export function DaySchedule({
               onClick={() => setFeedbackLiked(true)}
               className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
                 feedbackLiked === true
-                  ? 'bg-[#23381c] border-[#3b5e28] text-[#8cee28]'
+                  ? 'bg-[#23381c] border-[#3b5e28] text-accent-primary'
                   : 'bg-white/5 border-white/5 text-[#7d8495] hover:text-white'
               }`}
             >
@@ -209,7 +209,7 @@ export function DaySchedule({
             <button
               type="button"
               onClick={() => onOpenAddModal('task')}
-              className="ml-1 text-xs font-semibold text-[#8cee28] hover:text-white flex items-center gap-1 bg-[#23381c] hover:bg-[#2d4722] border border-[#375a28] px-2.5 py-1 rounded-xl transition-all cursor-pointer"
+              className="ml-1 text-xs font-semibold text-accent-primary hover:text-white flex items-center gap-1 bg-[#23381c] hover:bg-[#2d4722] border border-[#375a28] px-2.5 py-1 rounded-xl transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add</span>
@@ -226,7 +226,7 @@ export function DaySchedule({
               onClick={() => setFilterType(ft)}
               className={`px-3 py-1 rounded-xl text-xs font-semibold capitalize transition-all cursor-pointer ${
                 filterType === ft
-                  ? 'bg-[#22331c] border border-[#3b5a2b] text-[#8cee28]'
+                  ? 'bg-[#22331c] border border-[#3b5a2b] text-accent-primary'
                   : 'bg-white/5 border border-white/5 text-[#7d8495] hover:text-white'
               }`}
             >
@@ -263,7 +263,7 @@ export function DaySchedule({
             <button
               type="button"
               onClick={() => onOpenAddModal('task')}
-              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#8cee28] hover:bg-[#9eff38] active:scale-95 text-[#0d0e12] font-bold text-xs shadow-[0_4px_16px_rgba(140,238,40,0.25)] transition-all cursor-pointer"
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-accent-primary hover:bg-[#9eff38] active:scale-95 text-background font-bold text-xs shadow-[0_4px_16px_rgba(140,238,40,0.25)] transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 stroke-[3]" />
               <span>Add Task</span>

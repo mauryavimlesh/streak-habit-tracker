@@ -54,7 +54,7 @@ export function WeeklyProgressChart({ logs, habits }: Props) {
             />
             <Bar dataKey="percent" radius={[4, 4, 4, 4]} barSize={24}>
               {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.isToday ? '#8cee28' : '#262b36'} />
+                <Cell key={`cell-${index}`} fill={entry.isToday ? 'var(--app-accent)' : '#262b36'} />
               ))}
             </Bar>
           </BarChart>

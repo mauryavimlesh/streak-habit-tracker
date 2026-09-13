@@ -176,11 +176,11 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="h-[100dvh] max-h-[100dvh] w-full bg-[#0d0e12] text-white flex flex-col justify-between overflow-hidden relative select-none">
+    <div className="h-[100dvh] max-h-[100dvh] w-full bg-background text-white flex flex-col justify-between overflow-hidden relative select-none">
       {/* Background ambient lighting */}
       <div 
         className="absolute top-0 left-1/2 -translate-x-1/2 w-[340px] h-[340px] rounded-full blur-[110px] opacity-15 pointer-events-none"
-        style={{ background: 'radial-gradient(circle, #8cee28 0%, #22d3ee 60%, transparent 80%)' }}
+        style={{ background: 'radial-gradient(circle, var(--app-accent) 0%, var(--app-accent) 60%, transparent 80%)' }}
       />
 
       {/* Main Scrollable Viewport Content */}
@@ -206,17 +206,17 @@ export default function Onboarding() {
                     className="absolute inset-0 rounded-full blur-[26px] opacity-40 pointer-events-none"
                     style={{
                       background:
-                        'conic-gradient(from 180deg at 50% 50%, #8cee28 0deg, #22d3ee 115deg, #38bdf8 190deg, #6366f1 280deg, #8cee28 360deg)',
+                        'conic-gradient(from 180deg at 50% 50%, var(--app-accent) 0deg, var(--app-accent) 115deg, #38bdf8 190deg, #6366f1 280deg, var(--app-accent) 360deg)',
                     }}
                   />
                   <div
                     className="relative w-full h-full rounded-full p-[18px] shadow-[0_0_32px_rgba(140,238,40,0.25)]"
                     style={{
                       background:
-                        'conic-gradient(from 180deg at 50% 50%, #8cee28 0deg, #22d3ee 115deg, #38bdf8 190deg, #6366f1 280deg, #8cee28 360deg)',
+                        'conic-gradient(from 180deg at 50% 50%, var(--app-accent) 0deg, var(--app-accent) 115deg, #38bdf8 190deg, #6366f1 280deg, var(--app-accent) 360deg)',
                     }}
                   >
-                    <div className="w-full h-full rounded-full bg-[#0d0e12]" />
+                    <div className="w-full h-full rounded-full bg-background" />
                   </div>
                 </div>
 
@@ -235,7 +235,7 @@ export default function Onboarding() {
                 <div className="mt-7 space-y-3">
                   <div className="glass-effect rounded-[22px] p-4 flex items-center gap-3.5">
                     <div className="w-11 h-11 rounded-full bg-[#181d27]/90 border border-[#273040] flex items-center justify-center shrink-0">
-                      <Sparkles className="w-5 h-5 text-[#8cee28]" strokeWidth={2.2} />
+                      <Sparkles className="w-5 h-5 text-accent-primary" strokeWidth={2.2} />
                     </div>
                     <div>
                       <h3 className="text-[15.5px] font-semibold text-white tracking-tight">
@@ -249,7 +249,7 @@ export default function Onboarding() {
 
                   <div className="glass-effect rounded-[22px] p-4 flex items-center gap-3.5">
                     <div className="w-11 h-11 rounded-full bg-[#181d27]/90 border border-[#273040] flex items-center justify-center shrink-0">
-                      <TrendingUp className="w-5 h-5 text-[#8cee28]" strokeWidth={2.2} />
+                      <TrendingUp className="w-5 h-5 text-accent-primary" strokeWidth={2.2} />
                     </div>
                     <div>
                       <h3 className="text-[15.5px] font-semibold text-white tracking-tight">
@@ -263,7 +263,7 @@ export default function Onboarding() {
 
                   <div className="glass-effect rounded-[22px] p-4 flex items-center gap-3.5">
                     <div className="w-11 h-11 rounded-full bg-[#181d27]/90 border border-[#273040] flex items-center justify-center shrink-0">
-                      <ShieldCheck className="w-5 h-5 text-[#8cee28]" strokeWidth={2.2} />
+                      <ShieldCheck className="w-5 h-5 text-accent-primary" strokeWidth={2.2} />
                     </div>
                     <div>
                       <h3 className="text-[15.5px] font-semibold text-white tracking-tight">
@@ -305,7 +305,7 @@ export default function Onboarding() {
                   </button>
 
                   <div className="flex items-center gap-2 flex-1 ml-4">
-                    <div className="h-[3.5px] flex-1 rounded-full bg-[#8cee28] transition-colors duration-300" />
+                    <div className="h-[3.5px] flex-1 rounded-full bg-accent-primary transition-colors duration-300" />
                     <div className="h-[3.5px] flex-1 rounded-full bg-[#1c212c] transition-colors duration-300" />
                     <div className="h-[3.5px] flex-1 rounded-full bg-[#1c212c] transition-colors duration-300" />
                   </div>
@@ -325,7 +325,7 @@ export default function Onboarding() {
                     htmlFor={nameInputId} 
                     className="text-[12px] font-bold text-[#7d8495] tracking-wider uppercase mb-2.5 flex items-center gap-1.5"
                   >
-                    <UserIcon className="w-3.5 h-3.5 text-[#8cee28]" />
+                    <UserIcon className="w-3.5 h-3.5 text-accent-primary" />
                     YOUR NAME
                   </label>
 
@@ -335,7 +335,7 @@ export default function Onboarding() {
                     className={cn(
                       "glass-effect relative rounded-[22px] transition-all duration-200",
                       name.trim().length > 0 
-                        ? "border-[#8cee28]/80 shadow-[0_0_24px_rgba(140,238,40,0.18)]" 
+                        ? "border-accent-primary/80 shadow-[0_0_24px_rgba(140,238,40,0.18)]" 
                         : "border-white/10"
                     )}
                   >
@@ -415,12 +415,12 @@ export default function Onboarding() {
                   </button>
 
                   <div className="flex items-center gap-2 flex-1 ml-4">
-                    <div className="h-[3.5px] flex-1 rounded-full bg-[#8cee28] transition-colors duration-300" />
-                    <div className="h-[3.5px] flex-1 rounded-full bg-[#8cee28] transition-colors duration-300" />
+                    <div className="h-[3.5px] flex-1 rounded-full bg-accent-primary transition-colors duration-300" />
+                    <div className="h-[3.5px] flex-1 rounded-full bg-accent-primary transition-colors duration-300" />
                     <div
                       className={cn(
                         "h-[3.5px] flex-1 rounded-full transition-colors duration-300",
-                        isSubmitting ? "bg-[#8cee28]" : "bg-[#8cee28]/40"
+                        isSubmitting ? "bg-accent-primary" : "bg-accent-primary/40"
                       )}
                     />
                   </div>
@@ -447,7 +447,7 @@ export default function Onboarding() {
                         className={cn(
                           "glass-effect rounded-[22px] p-4 flex items-center justify-between cursor-pointer transition-all active:scale-[0.99]",
                           isSelected
-                            ? "border-2 border-[#8cee28] shadow-[0_0_22px_rgba(140,238,40,0.18)] bg-[#142316]/80"
+                            ? "border-2 border-accent-primary shadow-[0_0_22px_rgba(140,238,40,0.18)] bg-[#142316]/80"
                             : "hover:border-white/20"
                         )}
                       >
@@ -456,7 +456,7 @@ export default function Onboarding() {
                             className={cn(
                               "w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-colors",
                               isSelected
-                                ? "bg-[#21361c] text-[#8cee28]"
+                                ? "bg-[#21361c] text-accent-primary"
                                 : "bg-[#181d27]/80 border border-[#273040] text-[#858d9e]"
                             )}
                           >
@@ -477,7 +477,7 @@ export default function Onboarding() {
                           className={cn(
                             "w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-all ml-3",
                             isSelected
-                              ? "bg-[#8cee28] text-[#0a0c10]"
+                              ? "bg-accent-primary text-[#0a0c10]"
                               : "border border-[#2d3444] bg-transparent"
                           )}
                         >
@@ -498,14 +498,14 @@ export default function Onboarding() {
       {/* ========================================================================= */}
       <div 
         id="onboarding-bottom-dock"
-        className="shrink-0 w-full max-w-md mx-auto px-6 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] bg-gradient-to-t from-[#0d0e12] via-[#0d0e12]/95 to-transparent border-t border-white/[0.05] z-30"
+        className="shrink-0 w-full max-w-md mx-auto px-6 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] bg-gradient-to-t from-background via-background/95 to-transparent border-t border-white/[0.05] z-30"
       >
         {step === 0 && (
           <div>
             <button
               id="btn-intro-continue"
               onClick={() => goToStep(1)}
-              className="w-full h-[56px] rounded-full bg-[#8cee28] hover:bg-[#9cf33e] active:scale-[0.985] text-[#0a0c10] font-bold text-[16.5px] flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.35)] transition-all cursor-pointer"
+              className="w-full h-[56px] rounded-full bg-accent-primary hover:bg-[#9cf33e] active:scale-[0.985] text-[#0a0c10] font-bold text-[16.5px] flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.35)] transition-all cursor-pointer"
             >
               Get Started <ArrowRight className="w-4 h-4 stroke-[2.5]" />
             </button>
@@ -525,7 +525,7 @@ export default function Onboarding() {
             <button
               id="btn-name-continue"
               onClick={handleNameContinue}
-              className="w-full h-[56px] rounded-full bg-[#8cee28] hover:bg-[#9cf33e] active:scale-[0.985] text-[#0a0c10] font-bold text-[16.5px] flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.35)] transition-all cursor-pointer"
+              className="w-full h-[56px] rounded-full bg-accent-primary hover:bg-[#9cf33e] active:scale-[0.985] text-[#0a0c10] font-bold text-[16.5px] flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.35)] transition-all cursor-pointer"
             >
               Continue <ArrowRight className="w-4 h-4 stroke-[2.5]" />
             </button>
@@ -546,7 +546,7 @@ export default function Onboarding() {
               id="btn-goals-continue"
               onClick={handleFinalComplete}
               disabled={isSubmitting}
-              className="w-full h-[56px] rounded-full bg-[#8cee28] hover:bg-[#9cf33e] active:scale-[0.985] text-[#0a0c10] font-bold text-[16.5px] flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.35)] transition-all cursor-pointer disabled:opacity-50"
+              className="w-full h-[56px] rounded-full bg-accent-primary hover:bg-[#9cf33e] active:scale-[0.985] text-[#0a0c10] font-bold text-[16.5px] flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.35)] transition-all cursor-pointer disabled:opacity-50"
             >
               {isSubmitting ? (
                 <span className="flex items-center gap-2">

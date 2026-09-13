@@ -91,7 +91,7 @@ export function MonthCalendar({
           <button
             type="button"
             onClick={onJumpToday}
-            className="text-[11px] font-semibold text-[#8cee28] px-2 py-0.5 rounded-lg bg-[#23381c] border border-[#375a28] hover:bg-[#2e4a23] transition-colors cursor-pointer"
+            className="text-[11px] font-semibold text-accent-primary px-2 py-0.5 rounded-lg bg-[#23381c] border border-[#375a28] hover:bg-[#2e4a23] transition-colors cursor-pointer"
           >
             Today
           </button>
@@ -173,7 +173,7 @@ export function MonthCalendar({
                   isSelected
                     ? 'text-white font-bold'
                     : isToday
-                    ? 'text-[#8cee28] font-bold'
+                    ? 'text-accent-primary font-bold'
                     : 'text-white/80'
                 )}
               >
@@ -188,9 +188,9 @@ export function MonthCalendar({
                     isSelected
                       ? taskInfo.hasHighPriority
                         ? 'bg-[#f87171]'
-                        : 'bg-[#8cee28]'
+                        : 'bg-accent-primary'
                       : allCompleted
-                      ? 'bg-[#8cee28]'
+                      ? 'bg-accent-primary'
                       : taskInfo.hasHighPriority
                       ? 'bg-[#f87171]'
                       : 'bg-[#60a5fa]'
@@ -200,7 +200,7 @@ export function MonthCalendar({
 
               {/* Today indicator if not selected */}
               {isToday && !isSelected && !hasTasks && (
-                <span className="w-1 h-1 rounded-full bg-[#8cee28] mt-0.5" />
+                <span className="w-1 h-1 rounded-full bg-accent-primary mt-0.5" />
               )}
             </button>
           );
@@ -232,8 +232,8 @@ export function MonthCalendar({
         aria-label="Collapse to week view"
         className="flex flex-col items-center justify-center pt-2 pb-1 cursor-pointer group text-[#7d8495] hover:text-white transition-colors select-none"
       >
-        <div className="w-10 h-1 rounded-full bg-white/20 group-hover:bg-[#8cee28] group-hover:w-12 transition-all duration-200 mb-1.5" />
-        <div className="flex items-center gap-1 text-[11px] font-medium bg-white/5 group-hover:bg-[#8cee28]/10 group-hover:text-[#8cee28] px-3.5 py-1 rounded-full border border-white/5 group-hover:border-[#8cee28]/30 transition-all">
+        <div className="w-10 h-1 rounded-full bg-white/20 group-hover:bg-accent-primary group-hover:w-12 transition-all duration-200 mb-1.5" />
+        <div className="flex items-center gap-1 text-[11px] font-medium bg-white/5 group-hover:bg-accent-primary/10 group-hover:text-accent-primary px-3.5 py-1 rounded-full border border-white/5 group-hover:border-accent-primary/30 transition-all">
           <ChevronUp className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" />
           <span>Swipe up or tap to collapse</span>
         </div>

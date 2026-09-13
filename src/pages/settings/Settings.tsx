@@ -65,9 +65,9 @@ export default function Settings() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/more')}
@@ -85,7 +85,7 @@ export default function Settings() {
       {/* Main Content */}
       <main className="flex-1 max-w-md mx-auto w-full px-5 pt-4 space-y-4">
         {/* Profile Card */}
-        <div className="p-5 rounded-3xl bg-[#13151b] border border-white/5 space-y-3">
+        <div className="p-5 rounded-3xl bg-surface-card border border-white/5 space-y-3">
           <span className="text-[11px] font-semibold text-[#7d8495] uppercase tracking-wider block">
             Profile & Account
           </span>
@@ -107,13 +107,13 @@ export default function Settings() {
                       type="text"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      className="px-2 py-1 bg-black/40 border border-white/20 rounded-lg text-sm text-white focus:outline-none focus:border-[#8cee28]"
+                      className="px-2 py-1 bg-black/40 border border-white/20 rounded-lg text-sm text-white focus:outline-none focus:border-accent-primary"
                       autoFocus
                     />
                     <button
                       type="button"
                       onClick={handleSaveName}
-                      className="p-1 text-[#8cee28] hover:text-white"
+                      className="p-1 text-accent-primary hover:text-white"
                     >
                       <Check className="w-4 h-4" />
                     </button>
@@ -124,7 +124,7 @@ export default function Settings() {
                     <button
                       type="button"
                       onClick={() => setIsEditProfileOpen(true)}
-                      className="text-[10px] text-[#8cee28] hover:underline cursor-pointer"
+                      className="text-[10px] text-accent-primary hover:underline cursor-pointer"
                     >
                       Edit Profile
                     </button>
@@ -149,7 +149,7 @@ export default function Settings() {
               <button
                 type="button"
                 onClick={() => navigate('/login')}
-                className="px-3 py-1.5 rounded-xl bg-[#8cee28]/15 hover:bg-[#8cee28]/25 text-xs font-semibold text-[#8cee28] border border-[#8cee28]/30 transition-colors cursor-pointer flex items-center gap-1"
+                className="px-3 py-1.5 rounded-xl bg-accent-primary/15 hover:bg-accent-primary/25 text-xs font-semibold text-accent-primary border border-accent-primary/30 transition-colors cursor-pointer flex items-center gap-1"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span>Sign In</span>
@@ -159,7 +159,7 @@ export default function Settings() {
         </div>
 
         {/* General Preferences */}
-        <div className="p-5 rounded-3xl bg-[#13151b] border border-white/5 space-y-4">
+        <div className="p-5 rounded-3xl bg-surface-card border border-white/5 space-y-4">
           <span className="text-[11px] font-semibold text-[#7d8495] uppercase tracking-wider block">
             General Preferences
           </span>
@@ -167,7 +167,7 @@ export default function Settings() {
           {/* Week Start */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <Calendar className="w-4 h-4 text-[#8cee28]" />
+              <Calendar className="w-4 h-4 text-accent-primary" />
               <div>
                 <h4 className="text-xs font-bold text-white">First Day of Week</h4>
                 <p className="text-[10px] text-[#7d8495]">Calendar & streak alignment</p>
@@ -200,7 +200,7 @@ export default function Settings() {
           {/* Time Format */}
           <div className="flex items-center justify-between border-t border-white/5 pt-3">
             <div className="flex items-center gap-2.5">
-              <Clock className="w-4 h-4 text-[#8cee28]" />
+              <Clock className="w-4 h-4 text-accent-primary" />
               <div>
                 <h4 className="text-xs font-bold text-white">Clock Format</h4>
                 <p className="text-[10px] text-[#7d8495]">12-hour or 24-hour display</p>
@@ -233,7 +233,7 @@ export default function Settings() {
           {/* AI Coach Context Sharing */}
           <div className="flex items-center justify-between border-t border-white/5 pt-3">
             <div className="flex items-center gap-2.5">
-              <Sparkles className="w-4 h-4 text-[#8cee28]" />
+              <Sparkles className="w-4 h-4 text-accent-primary" />
               <div>
                 <h4 className="text-xs font-bold text-white">AI Coach Context</h4>
                 <p className="text-[10px] text-[#7d8495]">Allow coach to read recent streaks</p>
@@ -244,7 +244,7 @@ export default function Settings() {
               onClick={() => handleUpdateSetting({ aiContextSharing: !settings.aiContextSharing })}
               className={cn(
                 'w-11 h-6 rounded-full transition-colors relative cursor-pointer',
-                settings.aiContextSharing ? 'bg-[#8cee28]' : 'bg-white/10'
+                settings.aiContextSharing ? 'bg-accent-primary' : 'bg-white/10'
               )}
             >
               <div
@@ -258,7 +258,7 @@ export default function Settings() {
         </div>
 
         {/* Maintenance & Reset */}
-        <div className="p-5 rounded-3xl bg-[#13151b] border border-white/5 space-y-3">
+        <div className="p-5 rounded-3xl bg-surface-card border border-white/5 space-y-3">
           <span className="text-[11px] font-semibold text-[#7d8495] uppercase tracking-wider block">
             System & Data Reset
           </span>
@@ -313,7 +313,7 @@ export default function Settings() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-sm bg-[#13151b] border border-red-500/30 rounded-3xl p-5 z-10 space-y-4 text-center"
+              className="relative w-full max-w-sm bg-surface-card border border-red-500/30 rounded-3xl p-5 z-10 space-y-4 text-center"
             >
               <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mx-auto">
                 <AlertTriangle className="w-6 h-6" />

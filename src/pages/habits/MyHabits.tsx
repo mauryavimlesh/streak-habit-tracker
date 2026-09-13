@@ -125,9 +125,9 @@ export default function MyHabits() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
       {/* Top Header */}
-      <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/more')}
@@ -145,7 +145,7 @@ export default function MyHabits() {
 
         <button
           onClick={() => navigate('/habits/new')}
-          className="px-3.5 py-1.5 rounded-full bg-[#8cee28] text-black font-semibold text-xs flex items-center gap-1.5 shadow-[0_2px_12px_rgba(140,238,40,0.3)] hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
+          className="px-3.5 py-1.5 rounded-full bg-accent-primary text-black font-semibold text-xs flex items-center gap-1.5 shadow-[0_2px_12px_rgba(140,238,40,0.3)] hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5 stroke-[3]" />
           <span>New Habit</span>
@@ -193,7 +193,7 @@ export default function MyHabits() {
                 className={cn(
                   'px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all cursor-pointer',
                   selectedCategory === cat
-                    ? 'bg-[#8cee28]/20 border border-[#8cee28]/50 text-[#8cee28]'
+                    ? 'bg-accent-primary/20 border border-accent-primary/50 text-accent-primary'
                     : 'bg-white/5 text-[#7d8495] hover:text-white border border-transparent'
                 )}
               >
@@ -207,7 +207,7 @@ export default function MyHabits() {
         {displayedHabits.length === 0 ? (
           <div className="py-16 text-center space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-[#7d8495]">
-              <Sparkles className="w-6 h-6 text-[#8cee28]" />
+              <Sparkles className="w-6 h-6 text-accent-primary" />
             </div>
             <h3 className="text-base font-semibold text-white">
               {activeTab === 'active' ? 'No active habits found' : 'No archived habits'}
@@ -220,7 +220,7 @@ export default function MyHabits() {
             {activeTab === 'active' && (
               <button
                 onClick={() => navigate('/habits/new')}
-                className="mt-2 px-5 py-2.5 rounded-xl bg-[#8cee28] text-black font-semibold text-xs inline-flex items-center gap-2 hover:bg-[#9eff38] cursor-pointer"
+                className="mt-2 px-5 py-2.5 rounded-xl bg-accent-primary text-black font-semibold text-xs inline-flex items-center gap-2 hover:bg-[#9eff38] cursor-pointer"
               >
                 <Plus className="w-4 h-4 stroke-[3]" />
                 <span>Create Habit</span>
@@ -238,7 +238,7 @@ export default function MyHabits() {
                 <motion.div
                   key={habit.id}
                   layout
-                  className="p-4 rounded-2xl bg-[#13151b] border border-white/5 hover:border-white/10 transition-all flex items-center justify-between gap-3 group"
+                  className="p-4 rounded-2xl bg-surface-card border border-white/5 hover:border-white/10 transition-all flex items-center justify-between gap-3 group"
                 >
                   <div className="flex items-center gap-3.5 flex-1 min-w-0">
                     {/* Completion Toggle button */}
@@ -248,7 +248,7 @@ export default function MyHabits() {
                       className={cn(
                         'w-10 h-10 rounded-2xl flex items-center justify-center transition-all cursor-pointer shrink-0',
                         isCompletedToday
-                          ? 'bg-[#8cee28] text-black shadow-[0_2px_12px_rgba(140,238,40,0.4)]'
+                          ? 'bg-accent-primary text-black shadow-[0_2px_12px_rgba(140,238,40,0.4)]'
                           : 'bg-black/40 border border-white/10 text-[#7d8495] hover:text-white hover:border-white/30'
                       )}
                     >
@@ -333,7 +333,7 @@ export default function MyHabits() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-sm bg-[#13151b] border border-white/10 rounded-3xl p-5 z-10 space-y-4"
+              className="relative w-full max-w-sm bg-surface-card border border-white/10 rounded-3xl p-5 z-10 space-y-4"
             >
               <div className="flex items-center justify-between pb-2 border-b border-white/10">
                 <h3 className="text-base font-bold text-white">Edit Habit</h3>
@@ -355,7 +355,7 @@ export default function MyHabits() {
                     onChange={(e) =>
                       setEditingHabit({ ...editingHabit, name: e.target.value })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:outline-none focus:border-[#8cee28]"
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:outline-none focus:border-accent-primary"
                   />
                 </div>
 
@@ -368,7 +368,7 @@ export default function MyHabits() {
                       setEditingHabit({ ...editingHabit, category: e.target.value })
                     }
                     placeholder="e.g. Health, Work, Fitness"
-                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:outline-none focus:border-[#8cee28]"
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:outline-none focus:border-accent-primary"
                   />
                 </div>
 
@@ -385,7 +385,7 @@ export default function MyHabits() {
                           targetValue: Number(e.target.value),
                         })
                       }
-                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:outline-none focus:border-[#8cee28]"
+                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:outline-none focus:border-accent-primary"
                     />
                   </div>
                   <div>
@@ -397,7 +397,7 @@ export default function MyHabits() {
                         setEditingHabit({ ...editingHabit, targetUnit: e.target.value })
                       }
                       placeholder="glasses, mins"
-                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:outline-none focus:border-[#8cee28]"
+                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:outline-none focus:border-accent-primary"
                     />
                   </div>
                 </div>
@@ -415,7 +415,7 @@ export default function MyHabits() {
                 <button
                   type="button"
                   onClick={handleSaveEdit}
-                  className="flex-1 py-2.5 rounded-xl bg-[#8cee28] text-black font-bold text-xs hover:bg-[#9eff38] transition-colors cursor-pointer"
+                  className="flex-1 py-2.5 rounded-xl bg-accent-primary text-black font-bold text-xs hover:bg-[#9eff38] transition-colors cursor-pointer"
                 >
                   Save Changes
                 </button>

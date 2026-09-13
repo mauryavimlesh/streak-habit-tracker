@@ -85,7 +85,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   return (
     <div
       className={cn(
-        'p-5 rounded-3xl bg-[#13151b] border border-white/10 space-y-4 shadow-sm',
+        'p-5 rounded-3xl bg-surface-card border border-white/10 space-y-4 shadow-sm',
         className
       )}
     >
@@ -93,7 +93,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         <div className="flex items-start justify-between">
           <div>
             <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-[#8cee28]" />
+              <Sparkles className="w-4 h-4 text-accent-primary" />
               <span>Help us improve STREAK</span>
             </h3>
             <p className="text-xs text-[#7d8495] mt-0.5">
@@ -107,12 +107,12 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="p-6 rounded-2xl bg-[#8cee28]/15 border border-[#8cee28]/30 text-center space-y-2.5"
+          className="p-6 rounded-2xl bg-accent-primary/15 border border-accent-primary/30 text-center space-y-2.5"
         >
-          <div className="w-12 h-12 rounded-full bg-[#8cee28]/20 text-[#8cee28] flex items-center justify-center mx-auto">
+          <div className="w-12 h-12 rounded-full bg-accent-primary/20 text-accent-primary flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-6 h-6" />
           </div>
-          <h4 className="text-sm font-bold text-[#8cee28]">
+          <h4 className="text-sm font-bold text-accent-primary">
             Thanks for helping improve STREAK.
           </h4>
           <p className="text-xs text-white/75 max-w-xs mx-auto leading-relaxed">
@@ -121,7 +121,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
           <button
             type="button"
             onClick={() => setSubmitted(false)}
-            className="mt-2 text-xs text-[#8cee28] hover:underline font-semibold cursor-pointer"
+            className="mt-2 text-xs text-accent-primary hover:underline font-semibold cursor-pointer"
           >
             Submit another response
           </button>
@@ -173,7 +173,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Brief summary of your feedback"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs placeholder-[#5c6272] focus:outline-none focus:border-[#8cee28]"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs placeholder-[#5c6272] focus:outline-none focus:border-accent-primary"
             />
           </div>
 
@@ -188,7 +188,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Describe what's working well or what needs improvement. Steps to reproduce if reporting a bug."
-              className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs placeholder-[#5c6272] focus:outline-none focus:border-[#8cee28] leading-relaxed"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs placeholder-[#5c6272] focus:outline-none focus:border-accent-primary leading-relaxed"
             />
           </div>
 
@@ -218,7 +218,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@example.com (for follow-up)"
-              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs placeholder-[#5c6272] focus:outline-none focus:border-[#8cee28]"
+              className="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs placeholder-[#5c6272] focus:outline-none focus:border-accent-primary"
             />
           </div>
 
@@ -226,7 +226,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
           <button
             type="submit"
             disabled={isSubmitting || !message.trim()}
-            className="w-full py-3 rounded-2xl bg-[#8cee28] text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] disabled:opacity-40 transition-colors cursor-pointer shadow-[0_2px_12px_rgba(140,238,40,0.25)] flex items-center justify-center gap-2 mt-1"
+            className="w-full py-3 rounded-2xl bg-accent-primary text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] disabled:opacity-40 transition-colors cursor-pointer shadow-[0_2px_12px_rgba(140,238,40,0.25)] flex items-center justify-center gap-2 mt-1"
           >
             <Send className="w-3.5 h-3.5" />
             <span>{isSubmitting ? 'Submitting...' : 'Submit Feedback'}</span>

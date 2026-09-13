@@ -69,7 +69,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
           sizeClasses[size],
           hasPhoto
             ? 'bg-[#181c24] border-white/10 ring-1 ring-white/5'
-            : 'bg-[#23381c] border-[#345228]/40 text-[#8cee28] shadow-[inset_0_0_12px_rgba(140,238,40,0.15)]',
+            : 'bg-[#23381c] border-[#345228]/40 text-accent-primary shadow-[inset_0_0_12px_rgba(140,238,40,0.15)]',
           onClick && 'cursor-pointer active:scale-95 hover:opacity-95'
         )}
       >
@@ -97,7 +97,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
           aria-label="Change photo"
           className={cn(
             'absolute -bottom-0.5 -right-0.5 rounded-full',
-            'bg-[#8cee28] text-black border-2 border-[#0d0e12]',
+            'bg-accent-primary text-black border-2 border-background',
             'flex items-center justify-center shadow-md',
             'hover:scale-105 active:scale-90 transition-transform cursor-pointer',
             badgeSizeClasses[size],

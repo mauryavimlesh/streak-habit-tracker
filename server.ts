@@ -18,6 +18,9 @@ app.post('/api/ai/coach', async (req, res) => {
   try {
     const { message, context } = req.body;
     
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'AI is not configured. Missing GEMINI_API_KEY environment variable.' });
+    }
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
     }
@@ -32,7 +35,7 @@ app.post('/api/ai/coach', async (req, res) => {
     `;
 
     let responseText = '';
-    const candidateModels = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-latest'];
+    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
     let lastError: any = null;
 
     for (const model of candidateModels) {

@@ -293,8 +293,8 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
               className={cn(
                 'rounded-2xl border border-dashed transition-all flex flex-col items-center justify-center cursor-pointer select-none',
                 isDragging
-                  ? 'border-[#8cee28] bg-[#8cee28]/15 scale-102'
-                  : 'border-white/20 hover:border-[#8cee28]/50 bg-white/5 hover:bg-white/10',
+                  ? 'border-accent-primary bg-accent-primary/15 scale-102'
+                  : 'border-white/20 hover:border-accent-primary/50 bg-white/5 hover:bg-white/10',
                 compact || images.length > 0
                   ? 'w-20 h-20 shrink-0 gap-1'
                   : 'w-full py-4 px-4 gap-1.5'
@@ -302,12 +302,12 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
             >
               {isProcessing ? (
                 <>
-                  <Loader2 className="w-5 h-5 text-[#8cee28] animate-spin" />
-                  <span className="text-[10px] text-[#8cee28] font-medium">Compressing...</span>
+                  <Loader2 className="w-5 h-5 text-accent-primary animate-spin" />
+                  <span className="text-[10px] text-accent-primary font-medium">Compressing...</span>
                 </>
               ) : (
                 <>
-                  <div className="w-7 h-7 rounded-xl bg-[#8cee28]/15 text-[#8cee28] flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-xl bg-accent-primary/15 text-accent-primary flex items-center justify-center">
                     <Plus className="w-4 h-4 stroke-[3]" />
                   </div>
                   <span className="text-[11px] font-semibold text-white/90 text-center leading-tight">
@@ -340,7 +340,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 40 }}
-              className="relative w-full max-w-sm bg-[#13151b] border-t sm:border border-white/10 rounded-t-3xl sm:rounded-3xl p-5 space-y-3 shadow-2xl z-10"
+              className="relative w-full max-w-sm bg-surface-card border-t sm:border border-white/10 rounded-t-3xl sm:rounded-3xl p-5 space-y-3 shadow-2xl z-10"
             >
               <div className="flex items-center justify-between pb-2 border-b border-white/5">
                 <div>
@@ -384,7 +384,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
                   }}
                   className="w-full p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold flex items-center gap-3 transition-colors cursor-pointer border border-white/5"
                 >
-                  <div className="w-8 h-8 rounded-xl bg-[#8cee28]/20 text-[#8cee28] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-xl bg-accent-primary/20 text-accent-primary flex items-center justify-center">
                     <Camera className="w-4 h-4" />
                   </div>
                   <div className="text-left flex-1">
@@ -477,7 +477,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
                         onClick={() => setPreviewIndex(i)}
                         className={cn(
                           'w-2.5 h-2.5 rounded-full transition-all cursor-pointer',
-                          previewIndex === i ? 'bg-[#8cee28] w-5' : 'bg-white/30'
+                          previewIndex === i ? 'bg-accent-primary w-5' : 'bg-white/30'
                         )}
                         title={`Go to photo ${i + 1}`}
                       />

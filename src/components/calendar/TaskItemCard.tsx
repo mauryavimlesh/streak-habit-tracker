@@ -45,7 +45,7 @@ export function TaskItemCard({ task, onToggle, onEdit, onDelete }: TaskItemCardP
         return {
           icon: Dumbbell,
           iconBg: 'bg-[#1e2f1f]',
-          iconColor: 'text-[#8cee28]',
+          iconColor: 'text-accent-primary',
           badgeBorder: 'border-[#2d4d20]',
         };
       case 'Health':
@@ -66,7 +66,7 @@ export function TaskItemCard({ task, onToggle, onEdit, onDelete }: TaskItemCardP
         return {
           icon: Check,
           iconBg: 'bg-[#1f2421]',
-          iconColor: 'text-[#8cee28]',
+          iconColor: 'text-accent-primary',
           badgeBorder: 'border-[#273824]',
         };
     }
@@ -116,7 +116,7 @@ export function TaskItemCard({ task, onToggle, onEdit, onDelete }: TaskItemCardP
           className={cn(
             'w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-90 cursor-pointer border',
             task.completed
-              ? 'bg-[#23381c] border-[#3b5e28] text-[#8cee28]'
+              ? 'bg-[#23381c] border-[#3b5e28] text-accent-primary'
               : `${config.iconBg} ${config.badgeBorder} ${config.iconColor} hover:brightness-110`
           )}
         >

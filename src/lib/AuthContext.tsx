@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signOut } from 'firebase/auth';
+import { User, onAuthStateChanged, signOut, signInAnonymously } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { clearAllLocalData } from './settingsService';
 import { saveAppearanceSettings, applyAppearanceSettings } from './themeService';
+import { syncLocalToCloud } from './habitService';
 
 export interface UserProfile {
   name?: string;
@@ -125,7 +126,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
+    let isSigningIn = false;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser && !isSigningIn) {
+        isSigningIn = true;
+        try {
+          await signInAnonymously(auth);
+        } catch (e) {
+          console.error("Anonymous sign in failed:", e);
+          setLoading(false);
+        }
+        return;
+      }
+      isSigningIn = false;
       setUser(currentUser);
       const localProfile = getStoredLocalProfile();
 
@@ -179,6 +192,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               // Ignore local storage error
             }
 
+            // Sync local habits to the cloud
+            await syncLocalToCloud(currentUser.uid);
             // If local session had onboarding completed or new goals not yet saved in Firestore, backfill Firestore
             if (isCompleted && (!fsData.onboardingCompleted || !fsData.hasCompletedOnboarding)) {
               await saveUserProfileToFirestore({

@@ -43,9 +43,9 @@ export default function HelpSupport() {
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/more')}
@@ -66,9 +66,9 @@ export default function HelpSupport() {
         <FeedbackForm />
 
         {/* Section: Connect with Vimlesh */}
-        <div className="p-5 rounded-3xl bg-gradient-to-br from-[#13151b] to-[#181d13] border border-[#8cee28]/20 space-y-4">
+        <div className="p-5 rounded-3xl bg-gradient-to-br from-surface-card to-[#181d13] border border-accent-primary/20 space-y-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#8cee28] to-[#9eff38] text-black font-black text-xl flex items-center justify-center shadow-[0_4px_16px_rgba(140,238,40,0.3)]">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-accent-primary to-[#9eff38] text-black font-black text-xl flex items-center justify-center shadow-[0_4px_16px_rgba(140,238,40,0.3)]">
               V
             </div>
             <div>
@@ -97,14 +97,14 @@ export default function HelpSupport() {
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => triggerHaptic('tap')}
-                  className="p-3.5 rounded-2xl bg-black/40 border border-white/5 hover:border-[#8cee28]/40 flex items-center justify-between transition-all group cursor-pointer"
+                  className="p-3.5 rounded-2xl bg-black/40 border border-white/5 hover:border-accent-primary/40 flex items-center justify-between transition-all group cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-white/5 group-hover:bg-[#8cee28]/20 group-hover:text-[#8cee28] flex items-center justify-center text-white/70 transition-colors">
+                    <div className="w-9 h-9 rounded-xl bg-white/5 group-hover:bg-accent-primary/20 group-hover:text-accent-primary flex items-center justify-center text-white/70 transition-colors">
                       <Icon className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-white group-hover:text-[#8cee28] transition-colors flex items-center gap-1.5">
+                      <h4 className="text-xs font-bold text-white group-hover:text-accent-primary transition-colors flex items-center gap-1.5">
                         <span>{link.name}</span>
                         {link.badge && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-[#7d8495] font-semibold">
@@ -133,7 +133,7 @@ export default function HelpSupport() {
               return (
                 <div
                   key={idx}
-                  className="rounded-2xl bg-[#13151b] border border-white/5 overflow-hidden transition-colors"
+                  className="rounded-2xl bg-surface-card border border-white/5 overflow-hidden transition-colors"
                 >
                   <button
                     type="button"

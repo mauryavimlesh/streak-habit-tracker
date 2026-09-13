@@ -27,23 +27,27 @@ export default function AICoach() {
       
       const data = await response.json();
       
+      if (!response.ok) {
+         throw new Error(data.error || 'Server error');
+      }
+      
       if (data.text) {
         setMessages(prev => [...prev, { role: 'ai', text: data.text }]);
       }
     } catch (error) {
       console.error(error);
-      setMessages(prev => [...prev, { role: 'ai', text: 'Sorry, I am having trouble connecting right now.' }]);
+      setMessages(prev => [...prev, { role: 'ai', text: error.message || 'Sorry, I am having trouble connecting right now.' }]);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#0d0e12] text-white max-w-md mx-auto">
+    <div className="flex flex-col h-screen bg-background text-white max-w-md mx-auto">
       <header className="flex items-center justify-between p-6 pb-4 border-b border-[#1f232c]">
         <button 
           onClick={() => navigate(-1)}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-[#13151b] border border-[#1f232c] hover:bg-white/10 transition-colors cursor-pointer"
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-card border border-[#1f232c] hover:bg-white/10 transition-colors cursor-pointer"
         >
           <ChevronLeft className="w-5 h-5 text-[#7d8495]" />
         </button>
@@ -51,7 +55,7 @@ export default function AICoach() {
           <h1 className="text-base font-semibold flex items-center gap-1.5 justify-center text-white">
             AI Coach <Sparkles className="w-4 h-4 text-[#a78bfa]" />
           </h1>
-          <p className="text-xs text-[#8cee28] font-medium">● Online</p>
+          <p className="text-xs text-accent-primary font-medium">● Online</p>
         </div>
         <div className="w-10 h-10" />
       </header>
@@ -63,7 +67,7 @@ export default function AICoach() {
               className={`p-4 max-w-[85%] rounded-[20px] shadow-sm ${
                 msg.role === 'user' 
                   ? 'bg-[#23381c] border border-[#345228] text-white rounded-br-sm' 
-                  : 'bg-[#13151b] border border-[#1f232c] text-[#e4e7ec] rounded-bl-sm'
+                  : 'bg-surface-card border border-[#1f232c] text-[#e4e7ec] rounded-bl-sm'
               }`}
             >
               <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
@@ -72,7 +76,7 @@ export default function AICoach() {
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="p-4 bg-[#13151b] border border-[#1f232c] rounded-[20px] rounded-bl-sm">
+            <div className="p-4 bg-surface-card border border-[#1f232c] rounded-[20px] rounded-bl-sm">
               <div className="flex space-x-1.5">
                 <div className="w-2 h-2 rounded-full bg-[#7d8495] animate-bounce" style={{ animationDelay: '0ms' }} />
                 <div className="w-2 h-2 rounded-full bg-[#7d8495] animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -83,7 +87,7 @@ export default function AICoach() {
         )}
       </div>
 
-      <div className="p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] border-t border-[#1f232c] bg-[#0d0e12]">
+      <div className="p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] border-t border-[#1f232c] bg-background">
         <div className="relative">
           <input 
             type="text"
@@ -91,12 +95,12 @@ export default function AICoach() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
             placeholder="Ask anything..."
-            className="w-full bg-[#13151b] border border-[#1f232c] rounded-2xl pl-5 pr-12 py-3.5 outline-none focus:border-[#8cee28]/50 transition-colors text-sm text-white placeholder-[#7d8495]"
+            className="w-full bg-surface-card border border-[#1f232c] rounded-2xl pl-5 pr-12 py-3.5 outline-none focus:border-accent-primary/50 transition-colors text-sm text-white placeholder-[#7d8495]"
           />
           <button 
             onClick={sendMessage}
             disabled={!input.trim() || loading}
-            className="absolute right-2 top-2 bottom-2 w-9 flex items-center justify-center rounded-xl bg-[#8cee28] text-black disabled:opacity-40 transition-opacity hover:opacity-90 cursor-pointer"
+            className="absolute right-2 top-2 bottom-2 w-9 flex items-center justify-center rounded-xl bg-accent-primary text-black disabled:opacity-40 transition-opacity hover:opacity-90 cursor-pointer"
           >
             <Send className="w-4 h-4" />
           </button>

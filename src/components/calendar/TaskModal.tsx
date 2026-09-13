@@ -176,7 +176,7 @@ export function TaskModal({
                     className={cn(
                       'py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer capitalize',
                       type === t.value
-                        ? 'bg-[#23381c] text-[#8cee28] border border-[#375a27] shadow-sm'
+                        ? 'bg-[#23381c] text-accent-primary border border-[#375a27] shadow-sm'
                         : 'text-[#7d8495] hover:text-white'
                     )}
                   >
@@ -189,7 +189,7 @@ export function TaskModal({
             {/* Title */}
             <div>
               <label className="block text-xs font-semibold text-[#8b93a6] mb-1.5">
-                Title <span className="text-[#8cee28]">*</span>
+                Title <span className="text-accent-primary">*</span>
               </label>
               <input
                 type="text"
@@ -197,7 +197,7 @@ export function TaskModal({
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Outdoor run, Apply to YC..."
                 required
-                className="w-full px-4 py-3 bg-[#0a0c10] border border-[#202532] rounded-2xl text-sm text-white placeholder-[#525766] focus:outline-none focus:border-[#8cee28]/60 transition-colors"
+                className="w-full px-4 py-3 bg-[#0a0c10] border border-[#202532] rounded-2xl text-sm text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60 transition-colors"
               />
             </div>
 
@@ -211,7 +211,7 @@ export function TaskModal({
                 onChange={(e) => setDescription(e.target.value)}
                 rows={2}
                 placeholder="Notes, agenda details, or subtasks..."
-                className="w-full px-4 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-sm text-white placeholder-[#525766] focus:outline-none focus:border-[#8cee28]/60 transition-colors resize-none"
+                className="w-full px-4 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-sm text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60 transition-colors resize-none"
               />
             </div>
 
@@ -219,14 +219,14 @@ export function TaskModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-[#8b93a6] mb-1.5 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5" /> Date <span className="text-[#8cee28]">*</span>
+                  <Calendar className="w-3.5 h-3.5" /> Date <span className="text-accent-primary">*</span>
                 </label>
                 <input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                   required
-                  className="w-full px-3.5 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-sm text-white focus:outline-none focus:border-[#8cee28]/60 transition-colors"
+                  className="w-full px-3.5 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-sm text-white focus:outline-none focus:border-accent-primary/60 transition-colors"
                 />
               </div>
 
@@ -240,7 +240,7 @@ export function TaskModal({
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
                     placeholder="1:30 PM"
-                    className="w-1/2 px-3 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-[#8cee28]/60 transition-colors"
+                    className="w-1/2 px-3 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60 transition-colors"
                   />
                   <span className="text-[#525766] text-xs">–</span>
                   <input
@@ -248,7 +248,7 @@ export function TaskModal({
                     value={timeEnd}
                     onChange={(e) => setTimeEnd(e.target.value)}
                     placeholder="2:00 PM"
-                    className="w-1/2 px-3 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-[#8cee28]/60 transition-colors"
+                    className="w-1/2 px-3 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60 transition-colors"
                   />
                 </div>
               </div>
@@ -264,7 +264,7 @@ export function TaskModal({
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as any)}
-                  className="w-full px-3.5 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-xs text-white focus:outline-none focus:border-[#8cee28]/60 transition-colors"
+                  className="w-full px-3.5 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-xs text-white focus:outline-none focus:border-accent-primary/60 transition-colors"
                 >
                   {CATEGORIES.map((cat) => (
                     <option key={cat} value={cat} className="bg-[#12141b] text-white">
@@ -312,7 +312,7 @@ export function TaskModal({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-6 py-3 rounded-2xl bg-[#8cee28] hover:bg-[#9eff38] active:scale-95 text-[#0d0e12] text-sm font-bold shadow-[0_4px_16px_rgba(140,238,40,0.25)] transition-all cursor-pointer disabled:opacity-50"
+                className="px-6 py-3 rounded-2xl bg-accent-primary hover:bg-[#9eff38] active:scale-95 text-background text-sm font-bold shadow-[0_4px_16px_rgba(140,238,40,0.25)] transition-all cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? 'Saving...' : initialTask ? 'Update Task' : 'Save Task'}
               </button>

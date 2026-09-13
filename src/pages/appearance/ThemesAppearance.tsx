@@ -39,9 +39,9 @@ export default function ThemesAppearance() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/more')}
@@ -59,12 +59,12 @@ export default function ThemesAppearance() {
       {/* Main Content */}
       <main className="flex-1 max-w-md mx-auto w-full px-5 pt-4 space-y-5">
         {/* Live Canvas Preview Card */}
-        <div className="p-4 rounded-3xl bg-[#13151b] border border-white/10 space-y-3 shadow-xl">
+        <div className="p-4 rounded-3xl bg-surface-card border border-white/10 space-y-3 shadow-xl">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-[#7d8495] uppercase tracking-wider">
               Live Preview
             </span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#8cee28]/15 text-[#8cee28] border border-[#8cee28]/30">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-accent-primary/15 text-accent-primary border border-accent-primary/30">
               {THEME_MODE_MAP[settings.theme].name}
             </span>
           </div>
@@ -111,7 +111,7 @@ export default function ThemesAppearance() {
                     'p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative',
                     isSelected
                       ? 'bg-white/10 border-white/30 shadow-lg'
-                      : 'bg-[#13151b] border-white/5 hover:border-white/15'
+                      : 'bg-surface-card border-white/5 hover:border-white/15'
                   )}
                 >
                   <div className="flex items-center justify-between mb-2">
@@ -120,7 +120,7 @@ export default function ThemesAppearance() {
                       style={{ backgroundColor: info.bg }}
                     />
                     {isSelected && (
-                      <div className="w-4 h-4 rounded-full bg-[#8cee28] text-black flex items-center justify-center">
+                      <div className="w-4 h-4 rounded-full bg-accent-primary text-black flex items-center justify-center">
                         <Check className="w-2.5 h-2.5 stroke-[3]" />
                       </div>
                     )}
@@ -149,7 +149,7 @@ export default function ThemesAppearance() {
                   type="button"
                   onClick={() => handleUpdate({ accent: acc })}
                   className={cn(
-                    'p-3 rounded-2xl bg-[#13151b] border flex flex-col items-center gap-1.5 transition-all cursor-pointer',
+                    'p-3 rounded-2xl bg-surface-card border flex flex-col items-center gap-1.5 transition-all cursor-pointer',
                     isSelected
                       ? 'border-white/40 bg-white/10 scale-105 shadow-md'
                       : 'border-white/5 hover:border-white/15'
@@ -175,7 +175,7 @@ export default function ThemesAppearance() {
           <label className="text-xs font-semibold text-[#7d8495] uppercase tracking-wider block">
             Visual Experience
           </label>
-          <div className="p-4 rounded-3xl bg-[#13151b] border border-white/5 space-y-4">
+          <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-4">
             {/* Glassmorphism Toggle */}
             <div className="flex items-center justify-between">
               <div>
@@ -187,7 +187,7 @@ export default function ThemesAppearance() {
                 onClick={() => handleUpdate({ glassEffect: !settings.glassEffect })}
                 className={cn(
                   'w-11 h-6 rounded-full transition-colors relative cursor-pointer',
-                  settings.glassEffect ? 'bg-[#8cee28]' : 'bg-white/10'
+                  settings.glassEffect ? 'bg-accent-primary' : 'bg-white/10'
                 )}
               >
                 <div
@@ -210,7 +210,7 @@ export default function ThemesAppearance() {
                 onClick={() => handleUpdate({ ambientGlow: !settings.ambientGlow })}
                 className={cn(
                   'w-11 h-6 rounded-full transition-colors relative cursor-pointer',
-                  settings.ambientGlow ? 'bg-[#8cee28]' : 'bg-white/10'
+                  settings.ambientGlow ? 'bg-accent-primary' : 'bg-white/10'
                 )}
               >
                 <div

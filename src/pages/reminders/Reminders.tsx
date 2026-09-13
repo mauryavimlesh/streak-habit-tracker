@@ -58,7 +58,7 @@ const CATEGORY_CONFIG: Record<
   ReminderCategory,
   { label: string; icon: any; color: string; bg: string }
 > = {
-  habit: { label: 'Habit Cue', icon: Flame, color: 'text-[#8cee28]', bg: 'bg-[#8cee28]/15 border-[#8cee28]/30' },
+  habit: { label: 'Habit Cue', icon: Flame, color: 'text-accent-primary', bg: 'bg-accent-primary/15 border-accent-primary/30' },
   task: { label: 'Task Item', icon: ListTodo, color: 'text-blue-400', bg: 'bg-blue-500/15 border-blue-500/30' },
   morning: { label: 'Morning Plan', icon: SunMedium, color: 'text-amber-400', bg: 'bg-amber-500/15 border-amber-500/30' },
   night: { label: 'Night Review', icon: Moon, color: 'text-purple-400', bg: 'bg-purple-500/15 border-purple-500/30' },
@@ -251,9 +251,9 @@ export default function Reminders() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/more')}
@@ -269,7 +269,7 @@ export default function Reminders() {
 
         <button
           onClick={handleOpenCreate}
-          className="px-3.5 py-1.5 rounded-full bg-[#8cee28] text-black font-semibold text-xs flex items-center gap-1.5 shadow-[0_2px_12px_rgba(140,238,40,0.3)] hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
+          className="px-3.5 py-1.5 rounded-full bg-accent-primary text-black font-semibold text-xs flex items-center gap-1.5 shadow-[0_2px_12px_rgba(140,238,40,0.3)] hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5 stroke-[3]" />
           <span>New Alert</span>
@@ -284,7 +284,7 @@ export default function Reminders() {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="p-3 rounded-2xl bg-[#8cee28]/20 border border-[#8cee28]/40 text-[#8cee28] text-xs font-semibold flex items-center gap-2.5 shadow-lg"
+            className="p-3 rounded-2xl bg-accent-primary/20 border border-accent-primary/40 text-accent-primary text-xs font-semibold flex items-center gap-2.5 shadow-lg"
           >
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{testSentToast}</span>
@@ -292,14 +292,14 @@ export default function Reminders() {
         )}
 
         {/* Permission Banner & Test Notification Action */}
-        <div className="p-4 rounded-3xl bg-[#13151b] border border-white/10 space-y-3">
+        <div className="p-4 rounded-3xl bg-surface-card border border-white/10 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div
                 className={cn(
                   'w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 border',
                   permissionState === 'granted'
-                    ? 'bg-[#8cee28]/15 border-[#8cee28]/30 text-[#8cee28]'
+                    ? 'bg-accent-primary/15 border-accent-primary/30 text-accent-primary'
                     : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
                 )}
               >
@@ -335,7 +335,7 @@ export default function Reminders() {
                 Enable
               </button>
             ) : (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#8cee28]/15 text-[#8cee28] font-bold border border-[#8cee28]/30">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-primary/15 text-accent-primary font-bold border border-accent-primary/30">
                 Active
               </span>
             )}
@@ -348,7 +348,7 @@ export default function Reminders() {
               onClick={handleSendTestNotification}
               className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold flex items-center gap-1.5 border border-white/10 transition-colors cursor-pointer"
             >
-              <Send className="w-3 h-3 text-[#8cee28]" />
+              <Send className="w-3 h-3 text-accent-primary" />
               <span>Send test notification</span>
             </button>
           </div>
@@ -358,7 +358,7 @@ export default function Reminders() {
         {reminders.length === 0 ? (
           <div className="py-16 text-center space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-[#7d8495]">
-              <BellOff className="w-6 h-6 text-[#8cee28]" />
+              <BellOff className="w-6 h-6 text-accent-primary" />
             </div>
             <h3 className="text-base font-semibold text-white">No reminders scheduled</h3>
             <p className="text-xs text-[#7d8495] max-w-xs mx-auto">
@@ -366,7 +366,7 @@ export default function Reminders() {
             </p>
             <button
               onClick={handleOpenCreate}
-              className="mt-2 px-5 py-2.5 rounded-xl bg-[#8cee28] text-black font-semibold text-xs inline-flex items-center gap-2 hover:bg-[#9eff38] cursor-pointer"
+              className="mt-2 px-5 py-2.5 rounded-xl bg-accent-primary text-black font-semibold text-xs inline-flex items-center gap-2 hover:bg-[#9eff38] cursor-pointer"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Create Alert</span>
@@ -382,7 +382,7 @@ export default function Reminders() {
                 <div
                   key={r.id}
                   className={cn(
-                    'p-4 rounded-3xl bg-[#13151b] border transition-all space-y-2.5',
+                    'p-4 rounded-3xl bg-surface-card border transition-all space-y-2.5',
                     r.enabled ? 'border-white/10' : 'border-white/5 opacity-60'
                   )}
                 >
@@ -417,7 +417,7 @@ export default function Reminders() {
 
                         <div className="flex items-center gap-2 text-xs text-[#7d8495] mt-1 flex-wrap">
                           <span className="font-semibold text-white/90 flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-[#8cee28]" />
+                            <Clock className="w-3 h-3 text-accent-primary" />
                             {r.time}
                           </span>
                           <span>•</span>
@@ -428,7 +428,7 @@ export default function Reminders() {
                           {r.linkedEntityName && (
                             <>
                               <span>•</span>
-                              <span className="text-[#8cee28]/80 text-[11px] truncate">
+                              <span className="text-accent-primary/80 text-[11px] truncate">
                                 Linked: {r.linkedEntityName}
                               </span>
                             </>
@@ -444,7 +444,7 @@ export default function Reminders() {
                         onClick={() => handleToggle(r.id)}
                         className={cn(
                           'w-12 h-6 rounded-full transition-colors relative cursor-pointer',
-                          r.enabled ? 'bg-[#8cee28]' : 'bg-white/10'
+                          r.enabled ? 'bg-accent-primary' : 'bg-white/10'
                         )}
                         aria-label="Toggle reminder"
                       >
@@ -503,9 +503,9 @@ export default function Reminders() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-sm bg-[#13151b] border border-white/10 rounded-3xl p-6 z-10 space-y-4 text-center shadow-2xl"
+              className="relative w-full max-w-sm bg-surface-card border border-white/10 rounded-3xl p-6 z-10 space-y-4 text-center shadow-2xl"
             >
-              <div className="w-14 h-14 rounded-2xl bg-[#8cee28]/15 border border-[#8cee28]/30 flex items-center justify-center text-[#8cee28] mx-auto">
+              <div className="w-14 h-14 rounded-2xl bg-accent-primary/15 border border-accent-primary/30 flex items-center justify-center text-accent-primary mx-auto">
                 <Bell className="w-7 h-7" />
               </div>
               <div className="space-y-2">
@@ -519,7 +519,7 @@ export default function Reminders() {
                 <button
                   type="button"
                   onClick={handleRequestPermission}
-                  className="w-full py-3 rounded-2xl bg-[#8cee28] text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] transition-colors cursor-pointer shadow-[0_2px_12px_rgba(140,238,40,0.3)]"
+                  className="w-full py-3 rounded-2xl bg-accent-primary text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] transition-colors cursor-pointer shadow-[0_2px_12px_rgba(140,238,40,0.3)]"
                 >
                   Allow Notifications
                 </button>
@@ -551,7 +551,7 @@ export default function Reminders() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md bg-[#13151b] border border-white/10 rounded-3xl p-5 z-10 space-y-4 max-h-[90vh] overflow-y-auto"
+              className="relative w-full max-w-md bg-surface-card border border-white/10 rounded-3xl p-5 z-10 space-y-4 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between pb-2 border-b border-white/10">
                 <h3 className="text-base font-bold text-white">
@@ -578,7 +578,7 @@ export default function Reminders() {
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="e.g. Morning Movement, Hydration Check"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                   />
                 </div>
 
@@ -592,7 +592,7 @@ export default function Reminders() {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Specific intention or cue"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                   />
                 </div>
 
@@ -607,7 +607,7 @@ export default function Reminders() {
                       value={time}
                       onChange={(e) => setTime(e.target.value)}
                       placeholder="e.g. 07:30 AM"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                     />
                   </div>
                   <div>
@@ -617,7 +617,7 @@ export default function Reminders() {
                     <select
                       value={category}
                       onChange={(e) => setCategory(e.target.value as ReminderCategory)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                     >
                       <option value="habit">Habit Cue</option>
                       <option value="task">Calendar Task</option>
@@ -636,7 +636,7 @@ export default function Reminders() {
                   <select
                     value={repeat}
                     onChange={(e) => setRepeat(e.target.value as ReminderRepeat)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                   >
                     {REPEAT_OPTIONS.map((opt) => (
                       <option key={opt.id} value={opt.id}>
@@ -663,7 +663,7 @@ export default function Reminders() {
                             className={cn(
                               'py-2 rounded-xl text-[11px] font-semibold border text-center transition-all cursor-pointer',
                               isSelected
-                                ? 'bg-[#8cee28] border-[#8cee28] text-black'
+                                ? 'bg-accent-primary border-accent-primary text-black'
                                 : 'bg-black/30 border-white/5 text-[#7d8495] hover:text-white'
                             )}
                           >
@@ -684,7 +684,7 @@ export default function Reminders() {
                     <select
                       value={linkedHabitId}
                       onChange={(e) => setLinkedHabitId(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                     >
                       <option value="">None (Independent Reminder)</option>
                       {habits.map((h) => (
@@ -698,7 +698,7 @@ export default function Reminders() {
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-2xl bg-[#8cee28] text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] transition-colors cursor-pointer shadow-[0_2px_12px_rgba(140,238,40,0.3)] mt-2"
+                  className="w-full py-3 rounded-2xl bg-accent-primary text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] transition-colors cursor-pointer shadow-[0_2px_12px_rgba(140,238,40,0.3)] mt-2"
                 >
                   {editingReminder ? 'Update Reminder' : 'Save Reminder'}
                 </button>

@@ -163,9 +163,9 @@ export default function Analytics() {
   }, [habits, completedLogs]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
       {/* Top Header */}
-      <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/more')}
@@ -204,7 +204,7 @@ export default function Analytics() {
         {/* Primary Streak & Metric Bento */}
         <div className="grid grid-cols-2 gap-3">
           {/* Current Streak Card */}
-          <div className="p-4 rounded-3xl bg-[#13151b] border border-white/5 space-y-2">
+          <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs text-[#7d8495]">Current Streak</span>
               <div className="w-7 h-7 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-400">
@@ -213,16 +213,16 @@ export default function Analytics() {
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="text-2xl font-black text-white">{currentStreak}</span>
-              <span className="text-xs font-semibold text-[#8cee28]">days</span>
+              <span className="text-xs font-semibold text-accent-primary">days</span>
             </div>
             <p className="text-[11px] text-[#7d8495]">Best: {bestStreak} days</p>
           </div>
 
           {/* Completions Card */}
-          <div className="p-4 rounded-3xl bg-[#13151b] border border-white/5 space-y-2">
+          <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs text-[#7d8495]">Total Checks</span>
-              <div className="w-7 h-7 rounded-full bg-[#8cee28]/10 flex items-center justify-center text-[#8cee28]">
+              <div className="w-7 h-7 rounded-full bg-accent-primary/10 flex items-center justify-center text-accent-primary">
                 <Zap className="w-4 h-4" />
               </div>
             </div>
@@ -235,13 +235,13 @@ export default function Analytics() {
         </div>
 
         {/* Interactive Bar Chart for Completion Trends */}
-        <div className="p-5 rounded-3xl bg-[#13151b] border border-white/5 space-y-3">
+        <div className="p-5 rounded-3xl bg-surface-card border border-white/5 space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-white">Daily Habit Frequency</h3>
               <p className="text-[11px] text-[#7d8495]">Completed routines over time</p>
             </div>
-            <BarChart3 className="w-4 h-4 text-[#8cee28]" />
+            <BarChart3 className="w-4 h-4 text-accent-primary" />
           </div>
 
           <div className="h-44 w-full pt-2">
@@ -262,7 +262,7 @@ export default function Analytics() {
                 <Tooltip
                   cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
                   contentStyle={{
-                    backgroundColor: '#13151b',
+                    backgroundColor: 'var(--app-card-bg)',
                     borderColor: 'rgba(255, 255, 255, 0.1)',
                     borderRadius: '12px',
                     fontSize: '11px',
@@ -273,7 +273,7 @@ export default function Analytics() {
                   {chartData.map((_, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill="#8cee28"
+                      fill="var(--app-accent)"
                       className="hover:opacity-80 transition-opacity"
                     />
                   ))}
@@ -284,7 +284,7 @@ export default function Analytics() {
         </div>
 
         {/* Task & Goal Synergy Summary */}
-        <div className="p-4 rounded-3xl bg-[#13151b] border border-white/5 space-y-3">
+        <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-3">
           <h3 className="text-sm font-bold text-white">Execution Efficiency</h3>
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div className="p-3 rounded-2xl bg-black/30 border border-white/5">
@@ -308,12 +308,12 @@ export default function Analytics() {
 
         {/* Most Consistent Habit Spotlight */}
         {mostConsistentHabit && (
-          <div className="p-4 rounded-3xl bg-gradient-to-br from-[#13151b] to-[#182012] border border-[#8cee28]/20 flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-[#8cee28]/15 border border-[#8cee28]/30 flex items-center justify-center text-[#8cee28] shrink-0">
+          <div className="p-4 rounded-3xl bg-gradient-to-br from-surface-card to-[#182012] border border-accent-primary/20 flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-accent-primary/15 border border-accent-primary/30 flex items-center justify-center text-accent-primary shrink-0">
               <Award className="w-6 h-6" />
             </div>
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8cee28]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-accent-primary">
                 MVP Habit
               </span>
               <h4 className="text-sm font-bold text-white mt-0.5">{mostConsistentHabit.name}</h4>
@@ -324,7 +324,7 @@ export default function Analytics() {
 
         {/* Category Breakdown */}
         {categoryCounts.length > 0 && (
-          <div className="p-4 rounded-3xl bg-[#13151b] border border-white/5 space-y-2.5">
+          <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-2.5">
             <h3 className="text-sm font-bold text-white">Routines by Category</h3>
             <div className="space-y-2">
               {categoryCounts.map((cat) => (
@@ -335,7 +335,7 @@ export default function Analytics() {
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-black/40 overflow-hidden">
                     <div
-                      className="h-full bg-[#8cee28] rounded-full"
+                      className="h-full bg-accent-primary rounded-full"
                       style={{ width: `${cat.percent}%` }}
                     />
                   </div>

@@ -38,9 +38,9 @@ const TYPES: {
     id: 'task',
     label: 'Task',
     icon: CheckSquare,
-    activeColor: 'text-[#8cee28]',
-    activeBorder: 'border-[#8cee28]/50',
-    badgeBg: 'bg-[#8cee28]/10 text-[#8cee28]',
+    activeColor: 'text-accent-primary',
+    activeBorder: 'border-accent-primary/50',
+    badgeBg: 'bg-accent-primary/10 text-accent-primary',
   },
   {
     id: 'meeting',
@@ -219,7 +219,7 @@ export function CreateTaskBottomSheet({
           <div className="flex items-center justify-between pb-3 border-b border-white/10">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#8cee28]/15 text-[#8cee28] border border-[#8cee28]/25">
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-accent-primary/15 text-accent-primary border border-accent-primary/25">
                   STREAK Calendar
                 </span>
                 <span className="text-xs text-[#7d8495]">
@@ -277,7 +277,7 @@ export function CreateTaskBottomSheet({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g., Zone 2 Cardio Run, Architecture Review"
-                className="w-full px-4 py-3 rounded-2xl bg-black/50 border border-white/10 text-white placeholder-white/25 focus:outline-none focus:border-[#8cee28] focus:ring-1 focus:ring-[#8cee28] text-sm transition-all"
+                className="w-full px-4 py-3 rounded-2xl bg-black/50 border border-white/10 text-white placeholder-white/25 focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary text-sm transition-all"
               />
               {error && <p className="text-xs text-red-400 mt-1.5">{error}</p>}
             </div>
@@ -305,7 +305,7 @@ export function CreateTaskBottomSheet({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-medium text-[#7d8495] flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-[#8cee28]" />
+                  <Calendar className="w-3.5 h-3.5 text-accent-primary" />
                   <span>Scheduled Date</span>
                 </label>
               </div>
@@ -316,7 +316,7 @@ export function CreateTaskBottomSheet({
                   className={cn(
                     'py-2 px-3 rounded-xl text-xs font-medium border text-center transition-all cursor-pointer',
                     date === todayStr
-                      ? 'bg-[#8cee28]/15 border-[#8cee28]/50 text-[#8cee28]'
+                      ? 'bg-accent-primary/15 border-accent-primary/50 text-accent-primary'
                       : 'bg-black/30 border-white/10 text-white/70 hover:bg-white/5'
                   )}
                 >
@@ -328,7 +328,7 @@ export function CreateTaskBottomSheet({
                   className={cn(
                     'py-2 px-3 rounded-xl text-xs font-medium border text-center transition-all cursor-pointer',
                     date === tomorrowStr
-                      ? 'bg-[#8cee28]/15 border-[#8cee28]/50 text-[#8cee28]'
+                      ? 'bg-accent-primary/15 border-accent-primary/50 text-accent-primary'
                       : 'bg-black/30 border-white/10 text-white/70 hover:bg-white/5'
                   )}
                 >
@@ -338,7 +338,7 @@ export function CreateTaskBottomSheet({
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="py-2 px-2 rounded-xl text-xs font-medium bg-black/30 border border-white/10 text-white text-center focus:outline-none focus:border-[#8cee28]"
+                  className="py-2 px-2 rounded-xl text-xs font-medium bg-black/30 border border-white/10 text-white text-center focus:outline-none focus:border-accent-primary"
                 />
               </div>
             </div>
@@ -346,7 +346,7 @@ export function CreateTaskBottomSheet({
             {/* Time Shortcuts */}
             <div>
               <label className="text-xs font-medium text-[#7d8495] flex items-center gap-1.5 mb-1.5">
-                <Clock className="w-3.5 h-3.5 text-[#8cee28]" />
+                <Clock className="w-3.5 h-3.5 text-accent-primary" />
                 <span>Time of Day</span>
               </label>
               <div className="flex items-center gap-2">
@@ -372,7 +372,7 @@ export function CreateTaskBottomSheet({
                   value={time}
                   onChange={(e) => setTime(e.target.value)}
                   placeholder="Custom"
-                  className="w-24 px-2 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white text-center focus:outline-none focus:border-[#8cee28]"
+                  className="w-24 px-2 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white text-center focus:outline-none focus:border-accent-primary"
                 />
               </div>
             </div>
@@ -380,7 +380,7 @@ export function CreateTaskBottomSheet({
             {/* Category Chips */}
             <div>
               <label className="text-xs font-medium text-[#7d8495] flex items-center gap-1.5 mb-1.5">
-                <Tag className="w-3.5 h-3.5 text-[#8cee28]" />
+                <Tag className="w-3.5 h-3.5 text-accent-primary" />
                 <span>Category</span>
               </label>
               <div className="flex flex-wrap gap-1.5">
@@ -392,7 +392,7 @@ export function CreateTaskBottomSheet({
                     className={cn(
                       'px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer',
                       category === cat
-                        ? 'bg-[#8cee28]/20 border-[#8cee28]/60 text-[#8cee28]'
+                        ? 'bg-accent-primary/20 border-accent-primary/60 text-accent-primary'
                         : 'bg-black/30 border-white/5 text-white/60 hover:text-white hover:bg-white/5'
                     )}
                   >
@@ -448,7 +448,7 @@ export function CreateTaskBottomSheet({
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Add details, link, or preparation notes..."
                   rows={2}
-                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-white/20 focus:outline-none focus:border-[#8cee28]"
+                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-white/20 focus:outline-none focus:border-accent-primary"
                 />
               </motion.div>
             )}
@@ -458,7 +458,7 @@ export function CreateTaskBottomSheet({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3.5 px-4 rounded-2xl bg-[#8cee28] text-[#0d0e12] font-bold text-sm tracking-wide flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.4)] hover:bg-[#9eff38] hover:shadow-[0_4px_32px_rgba(140,238,40,0.6)] active:scale-[0.985] transition-all cursor-pointer disabled:opacity-50"
+                className="w-full py-3.5 px-4 rounded-2xl bg-accent-primary text-background font-bold text-sm tracking-wide flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.4)] hover:bg-[#9eff38] hover:shadow-[0_4px_32px_rgba(140,238,40,0.6)] active:scale-[0.985] transition-all cursor-pointer disabled:opacity-50"
               >
                 <Check className="w-4 h-4 stroke-[3]" />
                 <span>{isSubmitting ? 'Creating Item...' : 'Create Item'}</span>
@@ -473,7 +473,7 @@ export function CreateTaskBottomSheet({
                 }}
                 className="flex items-center justify-center gap-1.5 text-xs text-[#7d8495] hover:text-white py-1 transition-colors cursor-pointer"
               >
-                <Sparkles className="w-3.5 h-3.5 text-[#8cee28]" />
+                <Sparkles className="w-3.5 h-3.5 text-accent-primary" />
                 <span>Want to build a repeating habit streak instead?</span>
                 <ChevronRight className="w-3 h-3 text-[#7d8495]" />
               </button>

@@ -37,7 +37,7 @@ export function CalendarHeader({
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
                 <path
-                  className="text-[#8cee28]"
+                  className="text-accent-primary"
                   strokeDasharray={`${streakScore}, 100`}
                   strokeWidth="2.5"
                   strokeLinecap="round"

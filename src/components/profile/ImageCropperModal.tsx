@@ -151,7 +151,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.94 }}
           transition={{ duration: 0.2 }}
-          className="w-full max-w-sm bg-[#13151b] border border-[#222733] rounded-[28px] overflow-hidden shadow-2xl flex flex-col"
+          className="w-full max-w-sm bg-surface-card border border-[#222733] rounded-[28px] overflow-hidden shadow-2xl flex flex-col"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-5 pt-4 pb-2">
@@ -170,7 +170,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           </p>
 
           {/* Viewfinder Canvas Area */}
-          <div className="relative w-full aspect-square max-w-[280px] mx-auto bg-[#0a0b0e] rounded-full overflow-hidden border-2 border-[#8cee28]/30 shadow-inner flex items-center justify-center select-none touch-none">
+          <div className="relative w-full aspect-square max-w-[280px] mx-auto bg-[#0a0b0e] rounded-full overflow-hidden border-2 border-accent-primary/30 shadow-inner flex items-center justify-center select-none touch-none">
             {/* Draggable & Scalable Image */}
             <div
               ref={containerRef}
@@ -203,7 +203,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           {/* Controls */}
           <div className="p-5 space-y-4">
             {/* Zoom Slider */}
-            <div className="flex items-center gap-3 bg-[#0d0e12] px-3.5 py-2.5 rounded-2xl border border-white/5">
+            <div className="flex items-center gap-3 bg-background px-3.5 py-2.5 rounded-2xl border border-white/5">
               <button
                 type="button"
                 onClick={() => handleZoomChange(zoom - 0.2)}
@@ -219,7 +219,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
                 step="0.05"
                 value={zoom}
                 onChange={(e) => handleZoomChange(parseFloat(e.target.value))}
-                className="flex-1 accent-[#8cee28] cursor-pointer"
+                className="flex-1 accent-accent-primary cursor-pointer"
               />
               <button
                 type="button"
@@ -265,7 +265,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
                 type="button"
                 onClick={handleSave}
                 disabled={isProcessing}
-                className="flex-1 py-3 px-4 rounded-2xl bg-[#8cee28] hover:bg-[#9eff38] active:scale-95 text-black font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(140,238,40,0.25)]"
+                className="flex-1 py-3 px-4 rounded-2xl bg-accent-primary hover:bg-[#9eff38] active:scale-95 text-black font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(140,238,40,0.25)]"
               >
                 {isProcessing ? (
                   <>

@@ -149,9 +149,9 @@ export default function Goals() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/more')}
@@ -169,7 +169,7 @@ export default function Goals() {
 
         <button
           onClick={() => setIsCreateOpen(true)}
-          className="px-3.5 py-1.5 rounded-full bg-[#8cee28] text-black font-semibold text-xs flex items-center gap-1.5 shadow-[0_2px_12px_rgba(140,238,40,0.3)] hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
+          className="px-3.5 py-1.5 rounded-full bg-accent-primary text-black font-semibold text-xs flex items-center gap-1.5 shadow-[0_2px_12px_rgba(140,238,40,0.3)] hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5 stroke-[3]" />
           <span>New Goal</span>
@@ -206,7 +206,7 @@ export default function Goals() {
         {filteredGoals.length === 0 ? (
           <div className="py-16 text-center space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-[#7d8495]">
-              <Target className="w-6 h-6 text-[#8cee28]" />
+              <Target className="w-6 h-6 text-accent-primary" />
             </div>
             <h3 className="text-base font-semibold text-white">No goals in this view</h3>
             <p className="text-xs text-[#7d8495] max-w-xs mx-auto">
@@ -214,7 +214,7 @@ export default function Goals() {
             </p>
             <button
               onClick={() => setIsCreateOpen(true)}
-              className="mt-2 px-5 py-2.5 rounded-xl bg-[#8cee28] text-black font-semibold text-xs inline-flex items-center gap-2 hover:bg-[#9eff38] cursor-pointer"
+              className="mt-2 px-5 py-2.5 rounded-xl bg-accent-primary text-black font-semibold text-xs inline-flex items-center gap-2 hover:bg-[#9eff38] cursor-pointer"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Create Goal</span>
@@ -231,7 +231,7 @@ export default function Goals() {
                   key={goal.id}
                   layout
                   onClick={() => setSelectedGoal(goal)}
-                  className="p-4 rounded-2xl bg-[#13151b] border border-white/5 hover:border-white/15 transition-all cursor-pointer space-y-3 group"
+                  className="p-4 rounded-2xl bg-surface-card border border-white/5 hover:border-white/15 transition-all cursor-pointer space-y-3 group"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-1">
@@ -245,12 +245,12 @@ export default function Goals() {
                           </span>
                         )}
                         {isCompleted && (
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#8cee28]/10 text-[#8cee28] border border-[#8cee28]/20 flex items-center gap-1">
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-accent-primary/10 text-accent-primary border border-accent-primary/20 flex items-center gap-1">
                             <Award className="w-3 h-3" /> Done
                           </span>
                         )}
                       </div>
-                      <h3 className="text-sm font-bold text-white group-hover:text-[#8cee28] transition-colors">
+                      <h3 className="text-sm font-bold text-white group-hover:text-accent-primary transition-colors">
                         {goal.title}
                       </h3>
                       {goal.description && (
@@ -274,14 +274,14 @@ export default function Goals() {
                       transition={{ duration: 0.5, ease: 'easeOut' }}
                       className={cn(
                         'h-full rounded-full',
-                        isCompleted ? 'bg-[#8cee28]' : 'bg-gradient-to-r from-[#8cee28]/80 to-[#8cee28]'
+                        isCompleted ? 'bg-accent-primary' : 'bg-gradient-to-r from-accent-primary/80 to-accent-primary'
                       )}
                     />
                   </div>
 
                   <div className="flex items-center justify-between text-xs text-[#7d8495] pt-1">
                     <span className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-[#8cee28]" /> Target: {goal.targetDate}
+                      <Calendar className="w-3.5 h-3.5 text-accent-primary" /> Target: {goal.targetDate}
                     </span>
                     {goal.milestones && goal.milestones.length > 0 && (
                       <span>
@@ -312,11 +312,11 @@ export default function Goals() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md bg-[#13151b] border border-white/10 rounded-3xl p-5 z-10 space-y-4 max-h-[85vh] overflow-y-auto"
+              className="relative w-full max-w-md bg-surface-card border border-white/10 rounded-3xl p-5 z-10 space-y-4 max-h-[85vh] overflow-y-auto"
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-xs uppercase font-semibold text-[#8cee28] tracking-wider">
+                  <span className="text-xs uppercase font-semibold text-accent-primary tracking-wider">
                     {selectedGoal.category}
                   </span>
                   <h3 className="text-lg font-bold text-white mt-0.5">{selectedGoal.title}</h3>
@@ -361,7 +361,7 @@ export default function Goals() {
 
                 <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
                   <div
-                    className="h-full bg-[#8cee28] rounded-full transition-all duration-300"
+                    className="h-full bg-accent-primary rounded-full transition-all duration-300"
                     style={{
                       width: `${Math.min(
                         100,
@@ -387,7 +387,7 @@ export default function Goals() {
                         className="w-full p-2.5 rounded-xl bg-black/30 border border-white/5 hover:border-white/15 flex items-center gap-2.5 text-left transition-all cursor-pointer"
                       >
                         {m.completed ? (
-                          <CheckCircle2 className="w-4 h-4 text-[#8cee28] shrink-0" />
+                          <CheckCircle2 className="w-4 h-4 text-accent-primary shrink-0" />
                         ) : (
                           <Circle className="w-4 h-4 text-[#7d8495] shrink-0" />
                         )}
@@ -451,7 +451,7 @@ export default function Goals() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md bg-[#13151b] border border-white/10 rounded-3xl p-5 z-10 space-y-4 max-h-[90vh] overflow-y-auto"
+              className="relative w-full max-w-md bg-surface-card border border-white/10 rounded-3xl p-5 z-10 space-y-4 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between pb-2 border-b border-white/10">
                 <h3 className="text-base font-bold text-white">Create Long-Term Goal</h3>
@@ -473,7 +473,7 @@ export default function Goals() {
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     placeholder="e.g. Run Half Marathon, Read 12 Books"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:outline-none focus:border-[#8cee28]"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:outline-none focus:border-accent-primary"
                   />
                 </div>
 
@@ -484,7 +484,7 @@ export default function Goals() {
                     onChange={(e) => setNewDesc(e.target.value)}
                     rows={2}
                     placeholder="Why this matters and how it shapes your discipline..."
-                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                   />
                 </div>
 
@@ -494,7 +494,7 @@ export default function Goals() {
                     <select
                       value={newCategory}
                       onChange={(e) => setNewCategory(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                     >
                       <option value="Fitness">Fitness</option>
                       <option value="Study">Study & Focus</option>
@@ -510,7 +510,7 @@ export default function Goals() {
                       type="date"
                       value={newTargetDate}
                       onChange={(e) => setNewTargetDate(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                     />
                   </div>
                 </div>
@@ -533,7 +533,7 @@ export default function Goals() {
                         }
                       }}
                       placeholder="Add a milestone and press Enter"
-                      className="flex-1 px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                      className="flex-1 px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                     />
                     <button
                       type="button"
@@ -574,7 +574,7 @@ export default function Goals() {
                       min="1"
                       value={newTarget}
                       onChange={(e) => setNewTarget(Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                     />
                   </div>
                   <div>
@@ -584,14 +584,14 @@ export default function Goals() {
                       value={newUnit}
                       onChange={(e) => setNewUnit(e.target.value)}
                       placeholder="e.g. km, books, hours, %"
-                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-[#8cee28]"
+                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
                     />
                   </div>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-2xl bg-[#8cee28] text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] transition-colors cursor-pointer mt-2"
+                  className="w-full py-3 rounded-2xl bg-accent-primary text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] transition-colors cursor-pointer mt-2"
                 >
                   Create Goal
                 </button>

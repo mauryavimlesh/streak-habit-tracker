@@ -175,7 +175,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
             transition={{ type: 'spring', damping: 26, stiffness: 300 }}
-            className="w-full max-w-md bg-[#13151b] border border-[#212633] rounded-t-[32px] sm:rounded-[32px] overflow-hidden shadow-2xl max-h-[92vh] flex flex-col"
+            className="w-full max-w-md bg-surface-card border border-[#212633] rounded-t-[32px] sm:rounded-[32px] overflow-hidden shadow-2xl max-h-[92vh] flex flex-col"
           >
             {/* Sheet Drag Handle for mobile */}
             <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
@@ -202,7 +202,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 <div
                   className={`p-3.5 rounded-2xl flex items-center gap-2.5 text-xs font-medium ${
                     statusMessage.type === 'success'
-                      ? 'bg-[#8cee28]/10 text-[#8cee28] border border-[#8cee28]/20'
+                      ? 'bg-accent-primary/10 text-accent-primary border border-accent-primary/20'
                       : 'bg-red-500/10 text-red-400 border border-red-500/20'
                   }`}
                 >
@@ -242,7 +242,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                       triggerHaptic('tap');
                       setShowPhotoOptions(true);
                     }}
-                    className="px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-[#8cee28] hover:text-[#9eff38] border border-white/10 transition-colors cursor-pointer flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-accent-primary hover:text-[#9eff38] border border-white/10 transition-colors cursor-pointer flex items-center gap-1.5"
                   >
                     <Camera className="w-3.5 h-3.5" />
                     <span>Change Profile Photo</span>
@@ -267,7 +267,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               {/* Name Input */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-[#7d8495] uppercase tracking-wider flex items-center gap-1.5">
-                  <UserIcon className="w-3.5 h-3.5 text-[#8cee28]" />
+                  <UserIcon className="w-3.5 h-3.5 text-accent-primary" />
                   <span>Your Name / Username</span>
                 </label>
                 <div className="relative">
@@ -277,7 +277,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                     onChange={(e) => setName(e.target.value)}
                     maxLength={40}
                     placeholder="e.g. Vimlesh"
-                    className="w-full px-4 py-3 bg-[#0d0e12] border border-[#232834] focus:border-[#8cee28] rounded-2xl text-white text-sm focus:outline-none transition-colors"
+                    className="w-full px-4 py-3 bg-background border border-[#232834] focus:border-accent-primary rounded-2xl text-white text-sm focus:outline-none transition-colors"
                   />
                   <span className="absolute right-3.5 top-3.5 text-[11px] text-[#7d8495]">
                     {name.length}/40
@@ -286,14 +286,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               </div>
 
               {/* Account / Sync Status Card */}
-              <div className="p-4 rounded-2xl bg-[#0d0e12] border border-white/5 space-y-2">
+              <div className="p-4 rounded-2xl bg-background border border-white/5 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-[#7d8495] uppercase tracking-wider flex items-center gap-1.5">
                     <Mail className="w-3.5 h-3.5 text-blue-400" />
                     <span>Account Status</span>
                   </span>
                   {user ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#8cee28] bg-[#8cee28]/10 px-2 py-0.5 rounded-md border border-[#8cee28]/20">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent-primary bg-accent-primary/10 px-2 py-0.5 rounded-md border border-accent-primary/20">
                       <ShieldCheck className="w-3 h-3" />
                       <span>Synced</span>
                     </span>
@@ -322,7 +322,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                         onClose();
                         navigate('/login');
                       }}
-                      className="px-3 py-1.5 rounded-xl bg-[#8cee28]/15 hover:bg-[#8cee28]/25 text-xs font-semibold text-[#8cee28] border border-[#8cee28]/30 transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                      className="px-3 py-1.5 rounded-xl bg-accent-primary/15 hover:bg-accent-primary/25 text-xs font-semibold text-accent-primary border border-accent-primary/30 transition-colors cursor-pointer flex items-center gap-1 shrink-0"
                     >
                       <LogIn className="w-3.5 h-3.5" />
                       <span>Sign In</span>
@@ -346,7 +346,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 type="button"
                 onClick={handleSaveAll}
                 disabled={isSaving}
-                className="flex-1 py-3 px-4 rounded-2xl bg-[#8cee28] hover:bg-[#9eff38] active:scale-95 text-black font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(140,238,40,0.25)]"
+                className="flex-1 py-3 px-4 rounded-2xl bg-accent-primary hover:bg-[#9eff38] active:scale-95 text-black font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(140,238,40,0.25)]"
               >
                 {isSaving ? (
                   <>
@@ -426,7 +426,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   }}
                   className="w-full p-3.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-sm font-medium flex items-center gap-3 transition-colors cursor-pointer"
                 >
-                  <div className="w-8 h-8 rounded-xl bg-[#8cee28]/20 text-[#8cee28] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-xl bg-accent-primary/20 text-accent-primary flex items-center justify-center">
                     <Camera className="w-4 h-4" />
                   </div>
                   <div className="text-left">
@@ -509,7 +509,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               exit={{ opacity: 0, scale: 0.94 }}
               className="w-full max-w-sm bg-[#181b23] border border-[#2e3547] rounded-3xl p-6 text-center space-y-4 shadow-2xl"
             >
-              <div className="w-14 h-14 rounded-2xl bg-[#8cee28]/15 border border-[#8cee28]/30 text-[#8cee28] mx-auto flex items-center justify-center">
+              <div className="w-14 h-14 rounded-2xl bg-accent-primary/15 border border-accent-primary/30 text-accent-primary mx-auto flex items-center justify-center">
                 <LogIn className="w-7 h-7" />
               </div>
               <div>
@@ -529,7 +529,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                     onClose();
                     navigate('/login');
                   }}
-                  className="w-full py-3 rounded-2xl bg-[#8cee28] hover:bg-[#9eff38] text-black font-semibold text-sm transition-all cursor-pointer shadow-[0_0_20px_rgba(140,238,40,0.3)] flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-2xl bg-accent-primary hover:bg-[#9eff38] text-black font-semibold text-sm transition-all cursor-pointer shadow-[0_0_20px_rgba(140,238,40,0.3)] flex items-center justify-center gap-2"
                 >
                   <LogIn className="w-4 h-4" />
                   <span>Log in / Sign Up</span>

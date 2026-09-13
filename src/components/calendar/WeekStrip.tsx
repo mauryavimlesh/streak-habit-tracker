@@ -84,7 +84,7 @@ export function WeekStrip({
                     isSelected
                       ? 'text-white font-extrabold'
                       : isToday
-                      ? 'text-[#8cee28] font-bold'
+                      ? 'text-accent-primary font-bold'
                       : 'text-white/80 group-hover:text-white'
                   )}
                 >
@@ -94,13 +94,13 @@ export function WeekStrip({
                   {hasTasks && (
                     <span
                       className={cn(
-                        'absolute -bottom-1 w-1.5 h-1.5 rounded-full ring-2 ring-[#0d0e12]',
+                        'absolute -bottom-1 w-1.5 h-1.5 rounded-full ring-2 ring-background',
                         isSelected
                           ? taskInfo.hasHighPriority
                             ? 'bg-[#f87171]'
-                            : 'bg-[#8cee28]'
+                            : 'bg-accent-primary'
                           : allCompleted
-                          ? 'bg-[#8cee28]'
+                          ? 'bg-accent-primary'
                           : taskInfo.hasHighPriority
                           ? 'bg-[#f87171]'
                           : 'bg-[#60a5fa]'
@@ -111,7 +111,7 @@ export function WeekStrip({
 
                 {/* Today small indicator ring if not selected */}
                 {isToday && !isSelected && (
-                  <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#8cee28]" />
+                  <span className="absolute bottom-1 w-1 h-1 rounded-full bg-accent-primary" />
                 )}
               </button>
             );
@@ -136,8 +136,8 @@ export function WeekStrip({
         aria-label="Pull down or tap to view full month calendar"
         className="flex flex-col items-center justify-center pt-2 pb-0.5 cursor-pointer group select-none"
       >
-        <div className="w-10 h-1 rounded-full bg-white/20 group-hover:bg-[#8cee28] group-hover:w-12 transition-all duration-200" />
-        <div className="flex items-center gap-1 text-[10px] font-medium text-white/30 group-hover:text-[#8cee28] mt-1 transition-colors">
+        <div className="w-10 h-1 rounded-full bg-white/20 group-hover:bg-accent-primary group-hover:w-12 transition-all duration-200" />
+        <div className="flex items-center gap-1 text-[10px] font-medium text-white/30 group-hover:text-accent-primary mt-1 transition-colors">
           <ChevronDown className="w-3 h-3 group-hover:translate-y-0.5 transition-transform" />
           <span>Swipe or tap for Month</span>
         </div>

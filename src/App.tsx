@@ -34,8 +34,8 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0d0e12]">
-        <div className="w-8 h-8 border-t-2 border-[#8cee28] rounded-full animate-spin"></div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-t-2 border-accent-primary rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -58,8 +58,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0d0e12]">
-        <div className="w-8 h-8 border-t-2 border-[#8cee28] rounded-full animate-spin"></div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-t-2 border-accent-primary rounded-full animate-spin"></div>
       </div>
     );
   }

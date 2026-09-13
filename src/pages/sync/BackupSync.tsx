@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { downloadBackupFile, importBackupData } from '../../lib/settingsService';
+import { syncLocalToCloud } from '../../lib/habitService';
 import { cn } from '../../lib/utils';
 
 export default function BackupSync() {
@@ -62,9 +63,9 @@ export default function BackupSync() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/more')}
@@ -82,10 +83,10 @@ export default function BackupSync() {
       {/* Main Content */}
       <main className="flex-1 max-w-md mx-auto w-full px-5 pt-4 space-y-4">
         {/* Cloud Sync Status Card */}
-        <div className="p-5 rounded-3xl bg-[#13151b] border border-white/5 space-y-4">
+        <div className="p-5 rounded-3xl bg-surface-card border border-white/5 space-y-4">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#8cee28]/15 border border-[#8cee28]/30 flex items-center justify-center text-[#8cee28]">
+              <div className="w-10 h-10 rounded-2xl bg-accent-primary/15 border border-accent-primary/30 flex items-center justify-center text-accent-primary">
                 <Cloud className="w-5 h-5" />
               </div>
               <div>
@@ -100,7 +101,7 @@ export default function BackupSync() {
               className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 hover:text-white border border-white/10 transition-all cursor-pointer disabled:opacity-50"
               title="Sync Now"
             >
-              <RefreshCw className={cn('w-4 h-4', isSyncing && 'animate-spin text-[#8cee28]')} />
+              <RefreshCw className={cn('w-4 h-4', isSyncing && 'animate-spin text-accent-primary')} />
             </button>
           </div>
 
@@ -113,9 +114,9 @@ export default function BackupSync() {
         </div>
 
         {/* Data Portability (Export & Import) */}
-        <div className="p-5 rounded-3xl bg-[#13151b] border border-white/5 space-y-3.5">
+        <div className="p-5 rounded-3xl bg-surface-card border border-white/5 space-y-3.5">
           <div className="flex items-center gap-2">
-            <HardDrive className="w-4 h-4 text-[#8cee28]" />
+            <HardDrive className="w-4 h-4 text-accent-primary" />
             <h3 className="text-sm font-bold text-white">Data Portability</h3>
           </div>
           <p className="text-xs text-[#7d8495] leading-relaxed">
@@ -127,7 +128,7 @@ export default function BackupSync() {
               className={cn(
                 'p-3 rounded-2xl text-xs flex items-center gap-2',
                 importMessage.type === 'success'
-                  ? 'bg-[#8cee28]/15 border border-[#8cee28]/30 text-[#8cee28]'
+                  ? 'bg-accent-primary/15 border border-accent-primary/30 text-accent-primary'
                   : 'bg-red-500/15 border border-red-500/30 text-red-400'
               )}
             >
@@ -146,7 +147,7 @@ export default function BackupSync() {
               onClick={downloadBackupFile}
               className="py-3 px-3 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold border border-white/10 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
-              <Download className="w-4 h-4 text-[#8cee28]" />
+              <Download className="w-4 h-4 text-accent-primary" />
               <span>Export JSON</span>
             </button>
 
@@ -169,7 +170,7 @@ export default function BackupSync() {
         </div>
 
         {/* Offline-First Privacy Guarantee */}
-        <div className="p-4 rounded-3xl bg-[#13151b] border border-white/5 flex items-start gap-3">
+        <div className="p-4 rounded-3xl bg-surface-card border border-white/5 flex items-start gap-3">
           <div className="w-9 h-9 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
             <ShieldCheck className="w-5 h-5" />
           </div>

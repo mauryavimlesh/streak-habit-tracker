@@ -395,7 +395,7 @@ export default function Calendar() {
           type="button"
           onClick={() => setIsActionMenuOpen(true)}
           aria-label="Create New"
-          className="w-14 h-14 rounded-full bg-[#8cee28] text-[#0a0c10] flex items-center justify-center shadow-[0_0_24px_rgba(140,238,40,0.4)] hover:shadow-[0_0_36px_rgba(140,238,40,0.65)] transition-all cursor-pointer"
+          className="w-14 h-14 rounded-full bg-accent-primary text-[#0a0c10] flex items-center justify-center shadow-[0_0_24px_rgba(140,238,40,0.4)] hover:shadow-[0_0_36px_rgba(140,238,40,0.65)] transition-all cursor-pointer"
         >
           <Plus className="w-7 h-7 stroke-[2.8]" />
         </motion.button>

@@ -21,7 +21,7 @@ export function AddActionMenu({ isOpen, onClose, onSelectAction }: AddActionMenu
       label: '+ New Task',
       subtitle: 'Schedule actionable to-do with priority & time',
       icon: CheckSquare,
-      iconColor: 'text-[#8cee28]',
+      iconColor: 'text-accent-primary',
       iconBg: 'bg-[#23381c] border-[#385e28]',
       handler: () => {
         triggerHaptic('selection');
@@ -34,7 +34,7 @@ export function AddActionMenu({ isOpen, onClose, onSelectAction }: AddActionMenu
       label: '+ New Habit',
       subtitle: 'Build a recurring discipline & daily streak',
       icon: Flame,
-      iconColor: 'text-[#8cee28]',
+      iconColor: 'text-accent-primary',
       iconBg: 'bg-[#182813] border-[#29421e]',
       handler: () => {
         triggerHaptic('tap');
@@ -101,7 +101,7 @@ export function AddActionMenu({ isOpen, onClose, onSelectAction }: AddActionMenu
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 120 }}
           transition={{ type: 'spring', damping: 26, stiffness: 320 }}
-          className="relative w-full max-w-md bg-[#13151b] border-t sm:border border-[#212634] rounded-t-[32px] sm:rounded-[32px] p-5 shadow-[0_-12px_40px_rgba(0,0,0,0.6)] z-10 overflow-hidden mb-[74px] sm:mb-0"
+          className="relative w-full max-w-md bg-surface-card border-t sm:border border-[#212634] rounded-t-[32px] sm:rounded-[32px] p-5 shadow-[0_-12px_40px_rgba(0,0,0,0.6)] z-10 overflow-hidden mb-[74px] sm:mb-0"
         >
           {/* Top Pull Indicator on mobile */}
           <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mb-3 sm:hidden" />
@@ -133,7 +133,7 @@ export function AddActionMenu({ isOpen, onClose, onSelectAction }: AddActionMenu
                   <act.icon className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-sm font-semibold text-white group-hover:text-[#8cee28] transition-colors">
+                  <h4 className="text-sm font-semibold text-white group-hover:text-accent-primary transition-colors">
                     {act.label}
                   </h4>
                   <p className="text-xs text-[#7d8495] truncate">{act.subtitle}</p>

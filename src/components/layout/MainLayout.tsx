@@ -5,7 +5,7 @@ import { cn } from '../../lib/utils';
 
 export default function MainLayout() {
   return (
-    <div className="flex flex-col h-screen bg-[#0d0e12] text-white overflow-hidden select-none">
+    <div className="flex flex-col h-screen bg-background text-white overflow-hidden select-none">
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+84px)] scroll-smooth">
         <Outlet />
@@ -16,9 +16,6 @@ export default function MainLayout() {
         <div className="bg-[#0e1015]/95 backdrop-blur-2xl border-t border-[#1e222b] h-[74px] pb-[env(safe-area-inset-bottom)] px-2 sm:px-4 flex items-center justify-between overflow-x-auto no-scrollbar">
           <NavItem to="/" icon={<Home className="w-5 h-5" />} label="Home" />
           <NavItem to="/calendar" icon={<CalendarIcon className="w-5 h-5" />} label="Calendar" />
-          <NavItem to="/goals" icon={<Target className="w-5 h-5" />} label="Goals" />
-          <NavItem to="/journal" icon={<BookOpen className="w-5 h-5" />} label="Journal" />
-          <NavItem to="/analytics" icon={<BarChart3 className="w-5 h-5" />} label="Analytics" />
           <NavItem to="/more" icon={<LayoutGrid className="w-5 h-5" />} label="More" />
         </div>
       </nav>
@@ -33,7 +30,7 @@ function NavItem({ to, icon, label }: { to: string; icon: React.ReactNode; label
       className={({ isActive }) =>
         cn(
           "relative flex flex-col items-center justify-center min-w-[60px] flex-1 h-full transition-all duration-200 active:scale-95",
-          isActive ? "text-[#8cee28]" : "text-[#737988] hover:text-[#a0a6b5]"
+          isActive ? "text-accent-primary" : "text-[#737988] hover:text-[#a0a6b5]"
         )
       }
     >
@@ -42,7 +39,7 @@ function NavItem({ to, icon, label }: { to: string; icon: React.ReactNode; label
           <div
             className={cn(
               "w-12 h-8 rounded-xl flex items-center justify-center transition-all duration-200",
-              isActive ? "bg-[#23381c] text-[#8cee28]" : "bg-transparent text-[#737988]"
+              isActive ? "bg-[#23381c] text-accent-primary" : "bg-transparent text-[#737988]"
             )}
           >
             {icon}
@@ -50,7 +47,7 @@ function NavItem({ to, icon, label }: { to: string; icon: React.ReactNode; label
           <span
             className={cn(
               "text-[11px] font-medium tracking-tight mt-0.5",
-              isActive ? "text-[#8cee28] font-semibold" : "text-[#737988]"
+              isActive ? "text-accent-primary font-semibold" : "text-[#737988]"
             )}
           >
             {label}

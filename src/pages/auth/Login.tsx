@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, linkWithPopup, linkWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 import { Navigate } from 'react-router';
 import { useAuth } from '../../lib/AuthContext';
@@ -13,7 +13,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
-  if (user) {
+  if (user && !user.isAnonymous) {
     return <Navigate to="/" replace />;
   }
 
@@ -23,10 +23,27 @@ export default function Login() {
     setLoading(true);
     
     try {
-      if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
+      if (user && user.isAnonymous) {
+        if (isLogin) {
+          await signInWithEmailAndPassword(auth, email, password);
+        } else {
+          const credential = EmailAuthProvider.credential(email, password);
+          try {
+            await linkWithCredential(user, credential);
+          } catch (linkErr: any) {
+             if (linkErr.code === 'auth/credential-already-in-use') {
+                 await signInWithEmailAndPassword(auth, email, password);
+             } else {
+                 throw linkErr;
+             }
+          }
+        }
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
+        if (isLogin) {
+          await signInWithEmailAndPassword(auth, email, password);
+        } else {
+          await createUserWithEmailAndPassword(auth, email, password);
+        }
       }
     } catch (err: any) {
       let errorMessage = 'An error occurred. Please try again.';
@@ -49,7 +66,19 @@ export default function Login() {
       setLoading(true);
       try {
         const provider = new GoogleAuthProvider();
-        await signInWithPopup(auth, provider);
+        if (user && user.isAnonymous) {
+           try {
+             await linkWithPopup(user, provider);
+           } catch (linkErr: any) {
+             if (linkErr.code === 'auth/credential-already-in-use') {
+                await signInWithPopup(auth, provider);
+             } else {
+                throw linkErr;
+             }
+           }
+        } else {
+           await signInWithPopup(auth, provider);
+        }
       } catch (err: any) {
         console.error('Google Sign-In Error:', err);
         let errorMessage = 'An error occurred with Google Sign-In.';
