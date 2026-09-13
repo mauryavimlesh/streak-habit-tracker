@@ -29,7 +29,16 @@ export default function Login() {
         await createUserWithEmailAndPassword(auth, email, password);
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred.');
+      let errorMessage = 'An error occurred. Please try again.';
+      const code = err.code || '';
+      if (code === 'auth/invalid-email') errorMessage = 'Please enter a valid email address.';
+      else if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') errorMessage = 'Email or password is incorrect.';
+      else if (code === 'auth/email-already-in-use') errorMessage = 'This email is already registered.';
+      else if (code === 'auth/weak-password') errorMessage = 'Password should be at least 6 characters.';
+      else if (code === 'auth/network-request-failed') errorMessage = 'Unable to connect. Please check your internet connection.';
+      else if (code === 'auth/popup-closed-by-user') errorMessage = 'Sign-in popup was closed before finishing.';
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -42,7 +51,13 @@ export default function Login() {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (err: any) {
-      setError(err.message || 'An error occurred with Google Sign-In.');
+      let errorMessage = 'An error occurred with Google Sign-In.';
+      const code = err.code || '';
+      if (code === 'auth/popup-closed-by-user') errorMessage = 'Sign-in popup was closed before finishing.';
+      else if (code === 'auth/network-request-failed') errorMessage = 'Unable to connect. Please check your internet connection.';
+      else if (code === 'auth/unauthorized-domain') errorMessage = 'This domain is not authorized for Google Sign-In. Please contact support.';
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

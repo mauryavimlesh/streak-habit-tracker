@@ -22,19 +22,39 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { readLocalHabits, readLocalLogs } from '../../lib/habitService';
-import { readLocalTasks } from '../../lib/taskService';
-import { readLocalGoals } from '../../lib/goalService';
+import { readLocalHabits, readLocalLogs, getUserHabits, getHabitLogs } from '../../lib/habitService';
+import { readLocalTasks, getAllTasks } from '../../lib/taskService';
+import { readLocalGoals, getUserGoals } from '../../lib/goalService';
+import { useAuth } from '../../lib/AuthContext';
+import { useEffect } from 'react';
 import { cn } from '../../lib/utils';
 
 export default function Analytics() {
   const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('week');
 
-  const habits = useMemo(() => readLocalHabits(), []);
-  const logs = useMemo(() => readLocalLogs(), []);
-  const tasks = useMemo(() => readLocalTasks(), []);
-  const goals = useMemo(() => readLocalGoals(), []);
+  const [habits, setHabits] = useState(readLocalHabits());
+  const [logs, setLogs] = useState(readLocalLogs());
+  const [tasks, setTasks] = useState(readLocalTasks());
+  const [goals, setGoals] = useState(readLocalGoals());
+  const { user } = useAuth();
+  
+  useEffect(() => {
+    async function loadData() {
+      if (!user) return;
+      const [fetchedHabits, fetchedLogs, fetchedTasks, fetchedGoals] = await Promise.all([
+        getUserHabits(user.uid),
+        getHabitLogs(user.uid),
+        getAllTasks(user.uid),
+        getUserGoals(user.uid)
+      ]);
+      setHabits(fetchedHabits);
+      setLogs(fetchedLogs);
+      setTasks(fetchedTasks);
+      setGoals(fetchedGoals);
+    }
+    loadData();
+  }, [user]);
 
   // Compute daily completion rates for the selected time range
   const chartData = useMemo(() => {

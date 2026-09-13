@@ -91,98 +91,98 @@ export default function App() {
           <Route
             path="/habits/new"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <CreateHabit />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/habits"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <MyHabits />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/goals"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <Goals />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/analytics"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <Analytics />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/journal"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <Journal />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/reminders"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <Reminders />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/themes"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <ThemesAppearance />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/sync"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <BackupSync />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/settings"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <Settings />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/support"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <HelpSupport />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/feedback"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <Feedback />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
           
           <Route
             path="/"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <MainLayout />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           >
             <Route index element={<Home />} />
@@ -193,9 +193,9 @@ export default function App() {
           <Route
             path="/ai-coach"
             element={
-              <OnboardingGate>
+              <ProtectedRoute>
                 <AICoach />
-              </OnboardingGate>
+              </ProtectedRoute>
             }
           />
         </Routes>

@@ -1,8 +1,23 @@
+import { db } from './firebase';
+import { 
+  collection, 
+  doc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  getDocs, 
+  query, 
+  where, 
+  orderBy, 
+  serverTimestamp 
+} from 'firebase/firestore';
+
 export type ReminderRepeat = 'once' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'custom' | 'monthly';
 export type ReminderCategory = 'habit' | 'task' | 'general' | 'morning' | 'night';
 
 export interface ReminderItem {
   id: string;
+  userId?: string;
   title: string;
   description?: string;
   date?: string; // YYYY-MM-DD (for 'once' or specific date)
@@ -82,7 +97,6 @@ export function readLocalReminders(): ReminderItem[] {
       return DEFAULT_REMINDERS;
     }
     const parsed: ReminderItem[] = JSON.parse(raw);
-    // Ensure all items have repeat & notificationEnabled fields
     return parsed.map((item) => ({
       ...item,
       repeat: item.repeat || (item.days?.length === 7 ? 'daily' : item.days?.length === 5 ? 'weekdays' : 'custom'),
@@ -101,41 +115,126 @@ export function saveLocalReminders(reminders: ReminderItem[]): void {
   }
 }
 
-export function toggleReminder(id: string): ReminderItem[] {
+export async function getUserReminders(userId: string): Promise<ReminderItem[]> {
+  const local = readLocalReminders();
+  if (!userId || userId === 'local' || userId === 'default') {
+    return local;
+  }
+
+  try {
+    const q = query(
+      collection(db, 'reminders'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    const firestoreReminders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ReminderItem));
+
+    if (firestoreReminders.length > 0) {
+      const map = new Map<string, ReminderItem>();
+      firestoreReminders.forEach(r => map.set(r.id!, r));
+      local.forEach(r => {
+        if (r.id && !map.has(r.id)) {
+          map.set(r.id, r);
+        }
+      });
+      const merged = Array.from(map.values());
+      saveLocalReminders(merged);
+      return merged;
+    }
+    return local;
+  } catch (err) {
+    console.error('Error fetching reminders from Firestore:', err);
+    return local;
+  }
+}
+
+export async function toggleReminder(id: string, userId?: string): Promise<ReminderItem[]> {
   const list = readLocalReminders();
-  const updated = list.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r));
+  const reminder = list.find((r) => r.id === id);
+  if (!reminder) return list;
+  
+  const newState = !reminder.enabled;
+  const updated = list.map((r) => (r.id === id ? { ...r, enabled: newState } : r));
   saveLocalReminders(updated);
+  
+  if (userId && userId !== 'local' && userId !== 'default') {
+    try {
+      const ref = doc(db, 'reminders', id);
+      await updateDoc(ref, { enabled: newState });
+    } catch (err) {
+      console.error('Failed to sync reminder toggle:', err);
+    }
+  }
+  
   return updated;
 }
 
-export function createReminder(
-  item: Omit<ReminderItem, 'id' | 'createdAt'>
-): ReminderItem {
+export async function createReminder(
+  item: Omit<ReminderItem, 'id' | 'createdAt'>,
+  userId?: string
+): Promise<ReminderItem> {
+  const list = readLocalReminders();
+  let newId = 'rem_' + Date.now();
+  let serverTime = new Date().toISOString();
+
+  if (userId && userId !== 'local' && userId !== 'default') {
+    try {
+      const docRef = await addDoc(collection(db, 'reminders'), {
+        ...item,
+        userId,
+        createdAt: serverTimestamp()
+      });
+      newId = docRef.id;
+    } catch (err) {
+      console.error('Failed to sync reminder creation:', err);
+    }
+  }
+
   const newReminder: ReminderItem = {
     ...item,
-    id: 'rem_' + Date.now(),
-    createdAt: new Date().toISOString(),
+    id: newId,
+    userId,
+    createdAt: serverTime,
   };
-  const list = readLocalReminders();
+  
   list.unshift(newReminder);
   saveLocalReminders(list);
   return newReminder;
 }
 
-export function updateReminder(
+export async function updateReminder(
   id: string,
-  updates: Partial<ReminderItem>
-): ReminderItem[] {
+  updates: Partial<ReminderItem>,
+  userId?: string
+): Promise<ReminderItem[]> {
   const list = readLocalReminders();
   const updated = list.map((r) => (r.id === id ? { ...r, ...updates } : r));
   saveLocalReminders(updated);
+  
+  if (userId && userId !== 'local' && userId !== 'default' && !id.startsWith('rem_')) {
+    try {
+      const ref = doc(db, 'reminders', id);
+      await updateDoc(ref, updates);
+    } catch (err) {
+      console.error('Failed to sync reminder update:', err);
+    }
+  }
   return updated;
 }
 
-export function deleteReminder(id: string): ReminderItem[] {
+export async function deleteReminder(id: string, userId?: string): Promise<ReminderItem[]> {
   const list = readLocalReminders();
   const updated = list.filter((r) => r.id !== id);
   saveLocalReminders(updated);
+  
+  if (userId && userId !== 'local' && userId !== 'default' && !id.startsWith('rem_')) {
+    try {
+      await deleteDoc(doc(db, 'reminders', id));
+    } catch (err) {
+      console.error('Failed to sync reminder deletion:', err);
+    }
+  }
   return updated;
 }
 
@@ -156,7 +255,7 @@ export async function sendSystemNotification(
 ): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   if (!('Notification' in window)) return false;
-
+  
   if (Notification.permission === 'granted') {
     try {
       if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
@@ -171,6 +270,7 @@ export async function sendSystemNotification(
           return true;
         }
       }
+      
       new Notification(title, {
         body: options?.body || 'Stay consistent with your daily goals on STREAK.',
         icon: '/favicon.ico',
@@ -183,4 +283,3 @@ export async function sendSystemNotification(
   }
   return false;
 }
-

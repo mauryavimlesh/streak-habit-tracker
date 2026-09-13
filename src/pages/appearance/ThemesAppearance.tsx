@@ -20,9 +20,11 @@ import {
   ACCENT_COLOR_MAP,
 } from '../../lib/themeService';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../lib/AuthContext';
 
 export default function ThemesAppearance() {
   const navigate = useNavigate();
+  const { updateProfile } = useAuth();
   const [settings, setSettings] = useState<AppearanceSettings>(readAppearanceSettings());
 
   useEffect(() => {

@@ -148,7 +148,10 @@ export default function More() {
       {profile && (
         <div className="pt-6">
           <button 
-            onClick={() => logout()}
+            onClick={async () => {
+              await logout();
+              navigate('/login');
+            }}
             className="w-full py-4 rounded-[16px] bg-red-500/10 text-red-400 font-medium text-sm hover:bg-red-500/20 transition-colors cursor-pointer"
           >
             Sign Out

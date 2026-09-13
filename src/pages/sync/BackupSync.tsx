@@ -35,6 +35,7 @@ export default function BackupSync() {
     setTimeout(() => {
       setIsSyncing(false);
       setSyncStatus('Cloud sync completed just now');
+      localStorage.setItem('lastSyncTime', Date.now().toString());
     }, 1200);
   };
 

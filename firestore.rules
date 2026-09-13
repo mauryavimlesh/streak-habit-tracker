@@ -26,7 +26,7 @@ service cloud.firestore {
     // Allow non-verified emails for testing/local development if needed, but strict is better. 
     // In many simple setups, email_verified might be false if they just signed up via email/password.
     // I will use a slightly relaxed isSignedIn to avoid blocking new users who haven't verified yet.
-    function isSignedInRelaxed() {
+    function request.auth != null {
       return request.auth != null && request.auth.uid != null;
     }
 
@@ -103,13 +103,13 @@ service cloud.firestore {
     
     // Users
     match /users/{userId} {
-      allow get: if isSignedInRelaxed() && request.auth.uid == userId;
-      allow create: if isSignedInRelaxed() 
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null 
         && request.auth.uid == userId
         && isValidUser(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if isSignedInRelaxed() 
+      allow update: if request.auth != null 
         && request.auth.uid == userId
         && isValidUser(incoming())
         && incoming().createdAt == existing().createdAt
@@ -118,27 +118,27 @@ service cloud.firestore {
 
     // Habits
     match /habits/{habitId} {
-      allow get: if isSignedInRelaxed() && existing().userId == request.auth.uid;
-      allow list: if isSignedInRelaxed() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedInRelaxed()
+      allow get: if request.auth != null && existing().userId == request.auth.uid;
+      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
         && isValidId(habitId)
         && isValidHabit(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if isSignedInRelaxed()
+      allow update: if request.auth != null
         && existing().userId == request.auth.uid
         && isValidHabit(incoming())
         && incoming().userId == existing().userId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time;
-      allow delete: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+      allow delete: if request.auth != null && existing().userId == request.auth.uid;
     }
 
     // Habit Logs
     match /habit_logs/{logId} {
-      allow get: if isSignedInRelaxed() && existing().userId == request.auth.uid;
-      allow list: if isSignedInRelaxed() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedInRelaxed()
+      allow get: if request.auth != null && existing().userId == request.auth.uid;
+      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
         && isValidId(logId)
         && isValidHabitLog(incoming())
         && incoming().createdAt == request.time
@@ -146,66 +146,93 @@ service cloud.firestore {
         // Enforce that the referenced habit exists and belongs to the user
         && exists(/databases/$(database)/documents/habits/$(incoming().habitId))
         && get(/databases/$(database)/documents/habits/$(incoming().habitId)).data.userId == request.auth.uid;
-      allow update: if isSignedInRelaxed()
+      allow update: if request.auth != null
         && existing().userId == request.auth.uid
         && isValidHabitLog(incoming())
         && incoming().userId == existing().userId
         && incoming().habitId == existing().habitId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time;
-      allow delete: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+      allow delete: if request.auth != null && existing().userId == request.auth.uid;
     }
 
     // Goals
     match /goals/{goalId} {
-      allow get: if isSignedInRelaxed() && existing().userId == request.auth.uid;
-      allow list: if isSignedInRelaxed() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedInRelaxed()
+      allow get: if request.auth != null && existing().userId == request.auth.uid;
+      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
         && isValidId(goalId)
         && isValidGoal(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if isSignedInRelaxed()
+      allow update: if request.auth != null
         && existing().userId == request.auth.uid
         && isValidGoal(incoming())
         && incoming().userId == existing().userId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time;
-      allow delete: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+      allow delete: if request.auth != null && existing().userId == request.auth.uid;
     }
 
     // Journal Logs
     match /journal_logs/{logId} {
-      allow get: if isSignedInRelaxed() && existing().userId == request.auth.uid;
-      allow list: if isSignedInRelaxed() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedInRelaxed()
+      allow get: if request.auth != null && existing().userId == request.auth.uid;
+      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
         && isValidId(logId)
         && isValidJournalLog(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if isSignedInRelaxed()
+      allow update: if request.auth != null
         && existing().userId == request.auth.uid
         && isValidJournalLog(incoming())
         && incoming().userId == existing().userId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time;
-      allow delete: if isSignedInRelaxed() && existing().userId == request.auth.uid;
+      allow delete: if request.auth != null && existing().userId == request.auth.uid;
+    }
+
+
+    function isValidReminder(data) {
+      return data.keys().hasAll(['userId', 'title', 'time', 'repeat', 'enabled', 'notificationEnabled', 'category', 'createdAt'])
+        && data.userId == request.auth.uid
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.time is string
+        && data.repeat is string
+        && data.enabled is bool
+        && data.notificationEnabled is bool
+        && data.category is string;
+    }
+
+    // Reminders
+    match /reminders/{reminderId} {
+      allow get: if request.auth != null && existing().userId == request.auth.uid;
+      allow list: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
+        && isValidId(reminderId)
+        && isValidReminder(incoming())
+        && incoming().createdAt == request.time;
+      allow update: if request.auth != null
+        && existing().userId == request.auth.uid
+        && isValidReminder(incoming())
+        && incoming().userId == existing().userId;
+      allow delete: if request.auth != null && existing().userId == request.auth.uid;
     }
 
     // Tasks
     match /tasks/{taskId} {
-      allow get: if isSignedInRelaxed() && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
-      allow list: if isSignedInRelaxed() && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
-      allow create: if isSignedInRelaxed()
+      allow get: if request.auth != null && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
+      allow list: if request.auth != null && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
+      allow create: if request.auth != null
         && isValidId(taskId)
         && isValidTask(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if isSignedInRelaxed()
+      allow update: if request.auth != null
         && (existing().userId == request.auth.uid || !('userId' in existing()))
         && isValidTask(incoming())
         && incoming().updatedAt == request.time;
-      allow delete: if isSignedInRelaxed() && (existing().userId == request.auth.uid || !('userId' in existing()));
+      allow delete: if request.auth != null && (existing().userId == request.auth.uid || !('userId' in existing()));
     }
   }
 }

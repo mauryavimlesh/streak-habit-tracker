@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../lib/AuthContext';
-import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Clock, CheckCircle2, Calendar as CalendarIcon } from 'lucide-react';
+import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Clock, CheckCircle2, Calendar as CalendarIcon, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog } from '../lib/habitService';
 import { TaskItem, subscribeToTasks, toggleTaskComplete } from '../lib/taskService';
 import { DailyReflection } from '../components/ui/DailyReflection';
 import { cn } from '../lib/utils';
 import UserAvatar from '../components/profile/UserAvatar';
+import confetti from 'canvas-confetti';
+import { WeeklyProgressChart } from '../components/ui/WeeklyProgressChart';
 
 // Reference authentic default habits matching the design reference
 const DEFAULT_HABITS: Habit[] = [
@@ -67,6 +69,10 @@ export default function Home() {
   const [todayTasks, setTodayTasks] = useState<TaskItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // New state variables for Habit Notes and Sync Toast
+  const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
+  const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
+
   // Local progress values for instant responsive Apple OS feedback
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({
     'default-1': 0,
@@ -86,6 +92,18 @@ export default function Home() {
   }, [user, todayStr]);
 
   useEffect(() => {
+    const lastSyncStr = localStorage.getItem('lastSyncTime');
+    if (lastSyncStr) {
+      const lastSyncTime = parseInt(lastSyncStr, 10);
+      if (Date.now() - lastSyncTime > 7 * 24 * 60 * 60 * 1000) {
+        setSyncToastMessage("It's been over 7 days since your last backup. Tap to sync now.");
+      }
+    } else {
+      localStorage.setItem('lastSyncTime', Date.now().toString());
+    }
+  }, []);
+
+  useEffect(() => {
     async function loadData() {
       if (!user) {
         setHabits(DEFAULT_HABITS);
@@ -103,19 +121,25 @@ export default function Home() {
 
         const [fetchedHabits, fetchedLogs] = await Promise.all([
           getUserHabits(user.uid),
-          getHabitLogs(user.uid, startDayString, todayString),
+          getHabitLogs(user.uid),
         ]);
 
+        setLogs(fetchedLogs);
         if (fetchedHabits.length > 0) {
           setHabits(fetchedHabits);
           // Initialize local progress from existing logs
           const progressMap: Record<string, number> = {};
+          const noteMap: Record<string, string> = {};
           fetchedLogs.forEach((l) => {
             if (l.date === todayString) {
               progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
+              if (l.note) {
+                 noteMap[l.habitId] = l.note;
+              }
             }
           });
           setLocalProgress((prev) => ({ ...prev, ...progressMap }));
+          setHabitNotes((prev) => ({ ...prev, ...noteMap }));
         } else {
           // If user is signed in but has no habits in DB yet, seed starter habits to Firestore
           const seeded = await seedDefaultHabits(user.uid);
@@ -226,6 +250,24 @@ export default function Home() {
     }
   };
 
+  const saveNote = async (habit: Habit, note: string) => {
+    if (!user) return;
+    const current = localProgress[habit.id!] ?? 0;
+    const target = habit.targetValue || 1;
+    try {
+      await logHabit({
+        userId: user.uid,
+        habitId: habit.id!,
+        date: todayStr,
+        status: current >= target ? 'completed' : 'missed',
+        progressValue: current,
+        note: note
+      });
+    } catch (err) {
+      console.error('Failed to save note:', err);
+    }
+  };
+
   // Direct toggle habit completion (e.g. tapping the card or checkmark)
   const handleToggleHabitComplete = async (habit: Habit) => {
     const habitId = habit.id!;
@@ -246,6 +288,23 @@ export default function Home() {
           // Ignore
         }
       }
+      
+      // Check if this completes the final habit for today
+      if (nextVal >= target) {
+        const willBeCompletedCount = displayedHabits.filter(h => {
+          if (h.id === habitId) return true;
+          return isHabitCompleted(h);
+        }).length;
+        
+        if (willBeCompletedCount === totalCount && totalCount > 0) {
+          confetti({
+            particleCount: 120,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#8cee28', '#ffffff', '#22361b']
+          });
+        }
+      }
     } else {
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         try {
@@ -258,12 +317,23 @@ export default function Home() {
 
     if (user) {
       try {
+        const status = nextVal >= target ? 'completed' : 'missed';
         await logHabit({
           userId: user.uid,
           habitId: habitId,
           date: todayStr,
-          status: nextVal >= target ? 'completed' : 'missed',
+          status,
           progressValue: nextVal,
+          note: habitNotes[habitId] || undefined,
+        });
+        setLogs(prev => {
+          const idx = prev.findIndex(l => l.habitId === habitId && l.date === todayStr);
+          if (idx !== -1) {
+            const copy = [...prev];
+            copy[idx] = { ...copy[idx], status, progressValue: nextVal };
+            return copy;
+          }
+          return [...prev, { habitId, date: todayStr, status, progressValue: nextVal } as any];
         });
       } catch (err) {
         console.error('Failed to log habit:', err);
@@ -305,6 +375,51 @@ export default function Home() {
       console.error('Failed to toggle task:', err);
     }
   };
+
+
+  const getGlobalStreak = () => {
+    // Collect all dates where at least one habit was completed
+    const completedDates = new Set<string>();
+    logs.forEach(l => {
+      if (l.status === 'completed' || (l.progressValue && l.progressValue > 0)) {
+        completedDates.add(l.date);
+      }
+    });
+    
+    // Sort descending
+    const sorted = Array.from(completedDates).sort((a, b) => b.localeCompare(a));
+    if (sorted.length === 0) return 0;
+    
+    const today = new Date().toLocaleDateString('en-CA');
+    let checkDate = new Date(today);
+    
+    let currentStreak = 0;
+    const hasToday = sorted.includes(today);
+    
+    const yesterday = new Date(checkDate);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toLocaleDateString('en-CA');
+    const hasYesterday = sorted.includes(yesterdayStr);
+    
+    if (hasToday || hasYesterday) {
+      checkDate = new Date(hasToday ? today : yesterdayStr);
+    } else {
+      return 0; // Streak broken
+    }
+    
+    while (true) {
+      const dateStr = checkDate.toLocaleDateString('en-CA');
+      if (sorted.includes(dateStr)) {
+        currentStreak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    
+    return currentStreak;
+  };
+  const globalStreak = getGlobalStreak();
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -434,12 +549,12 @@ export default function Home() {
             {/* Streak badge */}
             <div className="bg-[#1e3419] border border-[#2d5025] text-[#8cee28] px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold">
               <Flame className="w-3.5 h-3.5 fill-[#8cee28]/25 stroke-[#8cee28]" />
-              <span>0 days</span>
+              <span>{globalStreak} {globalStreak === 1 ? 'day' : 'days'}</span>
             </div>
 
             {/* Score badge */}
             <div className="bg-[#1a1d25] border border-[#262b36] text-[#9ca2b2] px-3.5 py-1.5 rounded-full text-xs font-semibold">
-              Score 0
+              Score {globalStreak * 10}
             </div>
           </div>
         </div>
@@ -498,8 +613,8 @@ export default function Home() {
               }
 
               return (
+                <div key={habit.id} className="flex flex-col gap-2">
                 <div
-                  key={habit.id}
                   onClick={() => handleToggleHabitComplete(habit)}
                   className="h-[72px] rounded-full glass-effect-interactive px-3.5 flex items-center justify-between group cursor-pointer transition-all active:scale-[0.99]"
                 >
@@ -575,11 +690,27 @@ export default function Home() {
                     )}
                   </div>
                 </div>
+                {isCompleted && (
+                  <div className="px-4 mb-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <input
+                      type="text"
+                      placeholder="Add a quick reflection or note..."
+                      value={habitNotes[habit.id!] || ''}
+                      onChange={(e) => setHabitNotes(prev => ({...prev, [habit.id!]: e.target.value}))}
+                      onBlur={() => saveNote(habit, habitNotes[habit.id!] || '')}
+                      className="w-full bg-transparent border-b border-[#262b36] text-[13px] text-white focus:outline-none focus:border-[#8cee28] pb-1.5 placeholder:text-[#7d8495] transition-colors"
+                    />
+                  </div>
+                )}
+                </div>
               );
             })}
           </div>
         )}
       </div>
+      
+      {/* Weekly Progress Chart Component */}
+      <WeeklyProgressChart logs={logs} habits={displayedHabits} />
 
       {/* Today's Tasks Section with tactile vibration feedback */}
       {todayTasks.length > 0 && (
@@ -654,6 +785,21 @@ export default function Home() {
       {user && (
         <div className="pt-2">
           <DailyReflection userId={user.uid} date={todayStr} />
+        </div>
+      )}
+
+      {syncToastMessage && (
+        <div 
+          className="fixed bottom-[100px] left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300 cursor-pointer"
+          onClick={() => {
+            setSyncToastMessage(null);
+            navigate('/sync');
+          }}
+        >
+          <div className="bg-[#8cee28] text-[#1a1d25] px-5 py-3 rounded-full shadow-lg font-semibold text-sm flex items-center gap-2 whitespace-nowrap">
+            <RefreshCw className="w-4 h-4" />
+            {syncToastMessage}
+          </div>
         </div>
       )}
     </div>

@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { clearAllLocalData } from './settingsService';
+import { saveAppearanceSettings, applyAppearanceSettings } from './themeService';
 
 export interface UserProfile {
   name?: string;
@@ -143,6 +145,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             );
 
             const resolvedName = fsData.name || fsData.userName || localProfile?.name || localProfile?.userName || currentUser.displayName || '';
+            if (fsData.appearancePreference) {
+              try {
+                const parsedTheme = JSON.parse(fsData.appearancePreference);
+                saveAppearanceSettings(parsedTheme);
+                applyAppearanceSettings(parsedTheme);
+              } catch (e) {}
+            }
             const merged: UserProfile = {
               ...localProfile,
               ...fsData,
@@ -238,7 +247,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const logout = async () => {
-    await signOut(auth);
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error('Logout error:', e);
+    } finally {
+      clearAllLocalData();
+      setUser(null);
+      setProfile(null);
+      setOnboardingCompleted(false);
+    }
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {

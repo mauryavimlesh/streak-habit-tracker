@@ -27,6 +27,7 @@ import {
   ReminderRepeat,
   ReminderCategory,
   readLocalReminders,
+  getUserReminders,
   saveLocalReminders,
   toggleReminder,
   createReminder,
@@ -35,7 +36,8 @@ import {
   requestNotificationPermission,
   sendSystemNotification,
 } from '../../lib/reminderService';
-import { readLocalHabits } from '../../lib/habitService';
+import { readLocalHabits, getUserHabits, Habit } from '../../lib/habitService';
+import { useAuth } from '../../lib/AuthContext';
 import { triggerHaptic } from '../../lib/haptics';
 import { DeveloperFooter } from '../../components/layout/DeveloperFooter';
 import { cn } from '../../lib/utils';
@@ -83,25 +85,37 @@ export default function Reminders() {
   const [selectedDays, setSelectedDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
   const [linkedHabitId, setLinkedHabitId] = useState('');
   const [notificationEnabled, setNotificationEnabled] = useState(true);
-
-  const habits = readLocalHabits();
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const { user } = useAuth();
 
   useEffect(() => {
-    setReminders(readLocalReminders());
+    async function loadData() {
+      setReminders(readLocalReminders());
+      setHabits(readLocalHabits());
+      if (user) {
+        const [fetchedReminders, fetchedHabits] = await Promise.all([
+          getUserReminders(user.uid),
+          getUserHabits(user.uid)
+        ]);
+        setReminders(fetchedReminders);
+        setHabits(fetchedHabits);
+      }
+    }
+    loadData();
     if (typeof window !== 'undefined' && 'Notification' in window) {
       setPermissionState(Notification.permission);
     }
-  }, []);
+  }, [user]);
 
-  const handleToggle = (id: string) => {
+  const handleToggle = async (id: string) => {
     triggerHaptic('tap');
-    const updated = toggleReminder(id);
+    const updated = await toggleReminder(id, user?.uid);
     setReminders(updated);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     triggerHaptic('light');
-    const updated = deleteReminder(id);
+    const updated = await deleteReminder(id, user?.uid);
     setReminders(updated);
   };
 
