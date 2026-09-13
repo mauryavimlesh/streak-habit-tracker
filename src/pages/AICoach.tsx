@@ -1,83 +1,385 @@
-import { useState } from 'react';
-import { ChevronLeft, Sparkles, Send } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  ChevronLeft,
+  Sparkles,
+  Send,
+  RefreshCw,
+  AlertCircle,
+  Trash2,
+  Bot,
+  User as UserIcon,
+  Flame,
+  Check,
+} from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { useAuth } from '../lib/AuthContext';
+import { Habit, getUserHabits, readLocalHabits } from '../lib/habitService';
+import {
+  ChatMessage,
+  CoachContext,
+  HabitSummary,
+  getAiCoachStatus,
+  sendCoachMessage,
+} from '../lib/aiCoachService';
+
+const LOCAL_STORAGE_CHAT_KEY = 'streak_ai_coach_messages_v1';
+
+const SUGGESTED_PROMPTS = [
+  '⚡ How do I build consistency?',
+  '🎯 Review my active habits',
+  '🌅 Help me build a morning routine',
+  '🔄 I broke a streak, how do I reset?',
+  '🧠 How do I beat procrastination?',
+];
 
 export default function AICoach() {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Array<{role: 'user' | 'ai', text: string}>>([
-    { role: 'ai', text: 'Hey Vimlesh! 👋 How can I help you with your habits today?' }
-  ]);
+  const { user, profile } = useAuth();
+
+  const userName = useMemo(() => {
+    return profile?.displayName || profile?.name || user?.displayName || 'there';
+  }, [profile, user]);
+
+  // Load chat history or initial welcome
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_CHAT_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved chat history:', e);
+    }
+    return [
+      {
+        id: 'initial-welcome',
+        role: 'ai',
+        text: `Hey ${userName}! 👋 I'm your STREAK AI Coach.\n\nI'm here to help you build momentum through small, consistent actions every day. What habit or routine are we working on today?`,
+        timestamp: Date.now(),
+      },
+    ];
+  });
+
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorState, setErrorState] = useState<{ message: string; failedPrompt?: string } | null>(null);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
-    
-    const userMessage = input.trim();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Save conversation locally
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_CHAT_KEY, JSON.stringify(messages));
+    } catch (e) {
+      console.warn('Failed saving messages to localStorage:', e);
+    }
+  }, [messages]);
+
+  // Check backend AI availability status
+  useEffect(() => {
+    let mounted = true;
+    getAiCoachStatus().then((status) => {
+      if (mounted) {
+        setIsConfigured(status.configured);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Fetch habits to feed context to coach
+  useEffect(() => {
+    let mounted = true;
+    async function loadHabits() {
+      try {
+        let loaded: Habit[] = [];
+        if (user?.uid) {
+          loaded = await getUserHabits(user.uid);
+        }
+        if (!loaded || loaded.length === 0) {
+          loaded = readLocalHabits();
+        }
+        if (mounted) {
+          setHabits(loaded);
+        }
+      } catch {
+        if (mounted) {
+          setHabits(readLocalHabits());
+        }
+      }
+    }
+    loadHabits();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.uid]);
+
+  // Construct coach context
+  const coachContext: CoachContext = useMemo(() => {
+    const habitSummaries: HabitSummary[] = (habits || []).map((h) => ({
+      id: h.id,
+      title: h.title || h.name || 'Habit',
+      category: h.category || 'General',
+      frequency: h.frequency || 'daily',
+      streak: h.streak || 0,
+    }));
+    const totalStreaks = habitSummaries.reduce((sum, h) => sum + (h.streak || 0), 0);
+
+    return {
+      userName,
+      habits: habitSummaries,
+      activeHabitCount: habitSummaries.length,
+      totalStreaks,
+    };
+  }, [userName, habits]);
+
+  // Auto-scroll when messages change or loading state toggles
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading, errorState]);
+
+  // Send message handler
+  const handleSendMessage = async (promptToSend?: string) => {
+    const textToSend = promptToSend || input.trim();
+    if (!textToSend || loading) return;
+
+    setErrorState(null);
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
+
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      role: 'user',
+      text: textToSend,
+      timestamp: Date.now(),
+    };
+
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setLoading(true);
 
     try {
-      const response = await fetch('/api/ai/coach', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage }),
+      const reply = await sendCoachMessage(textToSend, updatedMessages, coachContext);
+
+      const aiMessage: ChatMessage = {
+        id: `ai-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        role: 'ai',
+        text: reply,
+        timestamp: Date.now(),
+      };
+
+      setMessages((prev) => [...prev, aiMessage]);
+    } catch (err: any) {
+      console.error('AICoach Error:', err);
+      setErrorState({
+        message: err.message || 'Unable to get a response. Please try again.',
+        failedPrompt: textToSend,
       });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-         throw new Error(data.error || 'Server error');
-      }
-      
-      if (data.text) {
-        setMessages(prev => [...prev, { role: 'ai', text: data.text }]);
-      }
-    } catch (error) {
-      console.error(error);
-      setMessages(prev => [...prev, { role: 'ai', text: error.message || 'Sorry, I am having trouble connecting right now.' }]);
     } finally {
       setLoading(false);
     }
   };
 
+  // Retry failed prompt
+  const handleRetry = () => {
+    if (!errorState?.failedPrompt) return;
+    const prompt = errorState.failedPrompt;
+    setErrorState(null);
+    handleSendMessage(prompt);
+  };
+
+  // Clear chat history
+  const handleClearChat = () => {
+    if (messages.length <= 1) return;
+    const resetGreeting: ChatMessage = {
+      id: `initial-${Date.now()}`,
+      role: 'ai',
+      text: `Chat reset. Ready whenever you are, ${userName}! What would you like to explore?`,
+      timestamp: Date.now(),
+    };
+    setMessages([resetGreeting]);
+    setErrorState(null);
+    localStorage.removeItem(LOCAL_STORAGE_CHAT_KEY);
+  };
+
+  const handleCopy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Safe formatting helper for AI messages (bold, bullet points, numbered items)
+  const renderFormattedText = (text: string) => {
+    const paragraphs = text.split('\n\n');
+
+    return (
+      <div className="space-y-2.5 text-sm leading-relaxed text-[#e4e7ec]">
+        {paragraphs.map((para, pIdx) => {
+          const lines = para.split('\n');
+
+          // Check if paragraph is a list of bullets
+          const isBulletList = lines.every((l) => l.trim().startsWith('* ') || l.trim().startsWith('- '));
+          if (isBulletList) {
+            return (
+              <ul key={pIdx} className="space-y-1.5 my-1 pl-1">
+                {lines.map((line, lIdx) => {
+                  const itemContent = line.replace(/^[\*\-]\s+/, '');
+                  return (
+                    <li key={lIdx} className="flex items-start gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent-primary mt-2 shrink-0" />
+                      <span>{renderInlineFormatting(itemContent)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            );
+          }
+
+          // Regular paragraph with potential soft line breaks
+          return (
+            <p key={pIdx} className="whitespace-pre-wrap">
+              {lines.map((line, lIdx) => (
+                <span key={lIdx}>
+                  {renderInlineFormatting(line)}
+                  {lIdx < lines.length - 1 && <br />}
+                </span>
+              ))}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Helper to render bold markdown (**bold**)
+  const renderInlineFormatting = (content: string) => {
+    const parts = content.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, idx) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return (
+          <strong key={idx} className="font-semibold text-white">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      return part;
+    });
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-background text-white max-w-md mx-auto">
-      <header className="flex items-center justify-between p-6 pb-4 border-b border-[#1f232c]">
-        <button 
+    <div className="flex flex-col h-screen bg-background text-white max-w-lg mx-auto select-none">
+      {/* Header */}
+      <header className="flex items-center justify-between px-5 py-4 border-b border-[#1f232c] bg-background/95 backdrop-blur-md sticky top-0 z-10">
+        <button
+          id="ai-coach-back-btn"
           onClick={() => navigate(-1)}
           className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-card border border-[#1f232c] hover:bg-white/10 transition-colors cursor-pointer"
+          aria-label="Go back"
         >
           <ChevronLeft className="w-5 h-5 text-[#7d8495]" />
         </button>
+
         <div className="text-center">
           <h1 className="text-base font-semibold flex items-center gap-1.5 justify-center text-white">
             AI Coach <Sparkles className="w-4 h-4 text-[#a78bfa]" />
           </h1>
-          <p className="text-xs text-accent-primary font-medium">● Online</p>
+          <div className="flex items-center justify-center gap-1.5 text-xs">
+            {isConfigured === false ? (
+              <span className="text-amber-400 font-medium">● Config Required</span>
+            ) : (
+              <span className="text-accent-primary font-medium flex items-center gap-1">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
+                Online
+              </span>
+            )}
+            {habits.length > 0 && (
+              <span className="text-[#7d8495] flex items-center gap-0.5">
+                • <Flame className="w-3 h-3 text-amber-500" /> {habits.length} habits
+              </span>
+            )}
+          </div>
         </div>
-        <div className="w-10 h-10" />
+
+        <button
+          id="ai-coach-clear-btn"
+          onClick={handleClearChat}
+          title="Clear conversation"
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-card border border-[#1f232c] hover:bg-white/10 text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+          aria-label="Clear chat"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {messages.map((msg, idx) => (
-          <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div 
-              className={`p-4 max-w-[85%] rounded-[20px] shadow-sm ${
-                msg.role === 'user' 
-                  ? 'bg-[#23381c] border border-[#345228] text-white rounded-br-sm' 
-                  : 'bg-surface-card border border-[#1f232c] text-[#e4e7ec] rounded-bl-sm'
+      {/* Messages List */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} space-y-1`}
+          >
+            <div
+              className={`p-4 max-w-[88%] rounded-2xl shadow-sm text-sm relative group ${
+                msg.role === 'user'
+                  ? 'bg-[#23381c] border border-[#345228] text-white rounded-br-xs'
+                  : 'bg-surface-card border border-[#1f232c] text-[#e4e7ec] rounded-bl-xs'
               }`}
             >
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+              {msg.role === 'ai' && (
+                <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-[#1f232c]">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-[#a78bfa]">
+                    <Bot className="w-3.5 h-3.5" />
+                    <span>STREAK Coach</span>
+                  </div>
+                  <button
+                    onClick={() => handleCopy(msg.id, msg.text)}
+                    className="text-[11px] text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+                    title="Copy message"
+                  >
+                    {copiedId === msg.id ? (
+                      <span className="flex items-center gap-0.5 text-accent-primary">
+                        <Check className="w-3 h-3" /> Copied
+                      </span>
+                    ) : (
+                      'Copy'
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {msg.role === 'ai' ? (
+                renderFormattedText(msg.text)
+              ) : (
+                <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+              )}
             </div>
+
+            <span className="text-[10px] text-[#7d8495] px-1">
+              {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
           </div>
         ))}
+
+        {/* Loading Indicator State */}
         {loading && (
-          <div className="flex justify-start">
-            <div className="p-4 bg-surface-card border border-[#1f232c] rounded-[20px] rounded-bl-sm">
-              <div className="flex space-x-1.5">
+          <div className="flex flex-col items-start space-y-1">
+            <div className="p-4 bg-surface-card border border-[#1f232c] rounded-2xl rounded-bl-xs">
+              <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-[#1f232c]/50">
+                <Bot className="w-3.5 h-3.5 text-[#a78bfa] animate-pulse" />
+                <span className="text-xs font-medium text-[#a78bfa]">STREAK Coach is thinking...</span>
+              </div>
+              <div className="flex space-x-1.5 py-1">
                 <div className="w-2 h-2 rounded-full bg-[#7d8495] animate-bounce" style={{ animationDelay: '0ms' }} />
                 <div className="w-2 h-2 rounded-full bg-[#7d8495] animate-bounce" style={{ animationDelay: '150ms' }} />
                 <div className="w-2 h-2 rounded-full bg-[#7d8495] animate-bounce" style={{ animationDelay: '300ms' }} />
@@ -85,26 +387,84 @@ export default function AICoach() {
             </div>
           </div>
         )}
+
+        {/* Error State Card */}
+        {errorState && (
+          <div className="p-4 bg-[#2a1717] border border-[#522525] rounded-2xl flex flex-col gap-3 shadow-md">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-red-300">Coach Temporarily Unavailable</h3>
+                <p className="text-xs text-red-200/80 mt-0.5 leading-relaxed">{errorState.message}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pt-1 border-t border-[#522525]/60">
+              {errorState.failedPrompt && (
+                <button
+                  id="ai-coach-retry-btn"
+                  onClick={handleRetry}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950 hover:bg-red-900 border border-red-800 text-xs text-red-200 font-medium transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Try Again
+                </button>
+              )}
+              <button
+                onClick={() => setErrorState(null)}
+                className="px-3 py-1.5 text-xs text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
       </div>
 
+      {/* Suggested Quick Prompt Chips */}
+      <div className="px-4 py-2 border-t border-[#1f232c]/70 bg-background/50 overflow-x-auto no-scrollbar flex gap-2">
+        {SUGGESTED_PROMPTS.map((prompt, idx) => (
+          <button
+            key={idx}
+            disabled={loading}
+            onClick={() => handleSendMessage(prompt)}
+            className="whitespace-nowrap px-3 py-1.5 rounded-full bg-surface-card border border-[#1f232c] hover:border-accent-primary/40 hover:bg-white/5 text-xs text-[#b0b7c3] hover:text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
+
+      {/* Input Area */}
       <div className="p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] border-t border-[#1f232c] bg-background">
-        <div className="relative">
-          <input 
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSendMessage();
+          }}
+          className="relative flex items-center"
+        >
+          <input
+            ref={inputRef}
+            id="ai-coach-input"
             type="text"
             value={input}
+            disabled={loading}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Ask anything..."
-            className="w-full bg-surface-card border border-[#1f232c] rounded-2xl pl-5 pr-12 py-3.5 outline-none focus:border-accent-primary/50 transition-colors text-sm text-white placeholder-[#7d8495]"
+            placeholder={loading ? 'Coach is typing...' : 'Ask about your habits, routines, or mindset...'}
+            className="w-full bg-surface-card border border-[#1f232c] rounded-2xl pl-5 pr-12 py-3.5 outline-none focus:border-accent-primary/50 transition-colors text-sm text-white placeholder-[#7d8495] disabled:opacity-60"
           />
-          <button 
-            onClick={sendMessage}
+          <button
+            id="ai-coach-send-btn"
+            type="submit"
             disabled={!input.trim() || loading}
-            className="absolute right-2 top-2 bottom-2 w-9 flex items-center justify-center rounded-xl bg-accent-primary text-black disabled:opacity-40 transition-opacity hover:opacity-90 cursor-pointer"
+            aria-label="Send message"
+            className="absolute right-2 w-9 h-9 flex items-center justify-center rounded-xl bg-accent-primary text-black disabled:opacity-40 transition-opacity hover:opacity-90 cursor-pointer"
           >
-            <Send className="w-4 h-4" />
+            {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );
