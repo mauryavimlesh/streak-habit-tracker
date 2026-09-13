@@ -56,7 +56,7 @@ service cloud.firestore {
     }
 
     function isValidHabitLog(data) {
-      return data.keys().hasAll(['userId', 'habitId', 'date', 'status', 'createdAt', 'updatedAt'])
+      return data.keys().hasAll(['userId', 'habitId', 'date', 'status'])
         && data.userId == request.auth.uid
         && data.habitId is string && data.habitId.size() <= 128
         && data.date is string && data.date.size() <= 10 // YYYY-MM-DD
@@ -65,7 +65,7 @@ service cloud.firestore {
     }
 
     function isValidGoal(data) {
-      return data.keys().hasAll(['userId', 'title', 'createdAt', 'updatedAt'])
+      return data.keys().hasAll(['userId', 'title'])
         && data.userId == request.auth.uid
         && data.title is string && data.title.size() > 0 && data.title.size() <= 200
         && (!('description' in data) || (data.description is string && data.description.size() <= 1000))
@@ -75,7 +75,7 @@ service cloud.firestore {
     }
 
     function isValidJournalLog(data) {
-      return data.keys().hasAll(['userId', 'date', 'text', 'createdAt', 'updatedAt'])
+      return data.keys().hasAll(['userId', 'date', 'text'])
         && data.userId == request.auth.uid
         && data.date is string && data.date.size() <= 10 // YYYY-MM-DD
         && data.text is string && data.text.size() <= 5000;
@@ -101,12 +101,12 @@ service cloud.firestore {
       allow create: if request.auth != null 
         && request.auth.uid == userId
         && isValidUser(incoming())
-        && incoming().createdAt == request.time
+        && (!('createdAt' in incoming()) || incoming().createdAt == request.time)
         && incoming().updatedAt == request.time;
       allow update: if request.auth != null 
         && request.auth.uid == userId
         && isValidUser(incoming())
-        && incoming().createdAt == existing().createdAt
+        && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt)
         && incoming().updatedAt == request.time;
     }
 
@@ -117,13 +117,13 @@ service cloud.firestore {
       allow create: if request.auth != null
         && isValidId(habitId)
         && isValidHabit(incoming())
-        && incoming().createdAt == request.time
+        
         && incoming().updatedAt == request.time;
       allow update: if request.auth != null
         && existing().userId == request.auth.uid
         && isValidHabit(incoming())
         && incoming().userId == existing().userId
-        && incoming().createdAt == existing().createdAt
+        
         && incoming().updatedAt == request.time;
       allow delete: if request.auth != null && existing().userId == request.auth.uid;
     }
@@ -135,7 +135,7 @@ service cloud.firestore {
       allow create: if request.auth != null
         && isValidId(logId)
         && isValidHabitLog(incoming())
-        && incoming().createdAt == request.time
+        
         && incoming().updatedAt == request.time
         // Enforce that the referenced habit exists and belongs to the user
         && exists(/databases/$(database)/documents/habits/$(incoming().habitId))
@@ -145,7 +145,7 @@ service cloud.firestore {
         && isValidHabitLog(incoming())
         && incoming().userId == existing().userId
         && incoming().habitId == existing().habitId
-        && incoming().createdAt == existing().createdAt
+        
         && incoming().updatedAt == request.time;
       allow delete: if request.auth != null && existing().userId == request.auth.uid;
     }
@@ -157,13 +157,13 @@ service cloud.firestore {
       allow create: if request.auth != null
         && isValidId(goalId)
         && isValidGoal(incoming())
-        && incoming().createdAt == request.time
+        
         && incoming().updatedAt == request.time;
       allow update: if request.auth != null
         && existing().userId == request.auth.uid
         && isValidGoal(incoming())
         && incoming().userId == existing().userId
-        && incoming().createdAt == existing().createdAt
+        
         && incoming().updatedAt == request.time;
       allow delete: if request.auth != null && existing().userId == request.auth.uid;
     }
@@ -175,20 +175,20 @@ service cloud.firestore {
       allow create: if request.auth != null
         && isValidId(logId)
         && isValidJournalLog(incoming())
-        && incoming().createdAt == request.time
+        
         && incoming().updatedAt == request.time;
       allow update: if request.auth != null
         && existing().userId == request.auth.uid
         && isValidJournalLog(incoming())
         && incoming().userId == existing().userId
-        && incoming().createdAt == existing().createdAt
+        
         && incoming().updatedAt == request.time;
       allow delete: if request.auth != null && existing().userId == request.auth.uid;
     }
 
 
     function isValidReminder(data) {
-      return data.keys().hasAll(['userId', 'title', 'time', 'repeat', 'enabled', 'notificationEnabled', 'category', 'createdAt'])
+      return data.keys().hasAll(['userId', 'title', 'time', 'repeat', 'enabled', 'notificationEnabled', 'category'])
         && data.userId == request.auth.uid
         && data.title is string && data.title.size() > 0 && data.title.size() <= 200
         && data.time is string
@@ -205,7 +205,7 @@ service cloud.firestore {
       allow create: if request.auth != null
         && isValidId(reminderId)
         && isValidReminder(incoming())
-        && incoming().createdAt == request.time;
+        ;
       allow update: if request.auth != null
         && existing().userId == request.auth.uid
         && isValidReminder(incoming())
@@ -220,7 +220,7 @@ service cloud.firestore {
       allow create: if request.auth != null
         && isValidId(taskId)
         && isValidTask(incoming())
-        && incoming().createdAt == request.time
+        
         && incoming().updatedAt == request.time;
       allow update: if request.auth != null
         && (existing().userId == request.auth.uid || !('userId' in existing()))

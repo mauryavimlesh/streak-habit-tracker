@@ -64,9 +64,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+
 
   const isCompleted = Boolean(
     onboardingCompleted ||

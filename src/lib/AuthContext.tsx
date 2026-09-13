@@ -105,6 +105,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       else if (data.name !== undefined) fsData.userName = data.name;
       
       if (data.email !== undefined) fsData.email = data.email;
+      else if (!fsData.email && auth.currentUser?.email) fsData.email = auth.currentUser.email;
+      else if (!fsData.email) fsData.email = profile?.email || '';
       if (data.avatarUrl !== undefined) fsData.avatarUrl = data.avatarUrl || '';
       if (data.mainGoal !== undefined) fsData.mainGoal = data.mainGoal;
       if (data.selectedGoals !== undefined && Array.isArray(data.selectedGoals)) {
@@ -132,11 +134,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         isSigningIn = true;
         try {
           await signInAnonymously(auth);
+          return;
         } catch (e) {
           console.error("Anonymous sign in failed:", e);
+          // Fall back to local mode immediately
+          setUser(null);
+          const localProfile = getStoredLocalProfile();
+          setProfile(localProfile);
           setLoading(false);
+          isSigningIn = false;
+          return;
         }
-        return;
       }
       isSigningIn = false;
       setUser(currentUser);
