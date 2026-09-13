@@ -44,24 +44,33 @@ export default function Login() {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err: any) {
-      let errorMessage = 'An error occurred with Google Sign-In.';
-      const code = err.code || '';
-      if (code === 'auth/popup-closed-by-user') errorMessage = 'Sign-in popup was closed before finishing.';
-      else if (code === 'auth/network-request-failed') errorMessage = 'Unable to connect. Please check your internet connection.';
-      else if (code === 'auth/unauthorized-domain') errorMessage = 'This domain is not authorized for Google Sign-In. Please contact support.';
-      
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const handleGoogleSignIn = async () => {
+      setError('');
+      setLoading(true);
+      try {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      } catch (err: any) {
+        console.error('Google Sign-In Error:', err);
+        let errorMessage = 'An error occurred with Google Sign-In.';
+        const code = err.code || '';
+        
+        if (code === 'auth/popup-closed-by-user') errorMessage = 'Sign-in popup was closed before finishing.';
+        else if (code === 'auth/network-request-failed') errorMessage = 'Unable to connect. Please check your internet connection.';
+        else if (code === 'auth/unauthorized-domain') errorMessage = 'This domain is not authorized for Google Sign-In. Please add this URL to Firebase Auth authorized domains.';
+        else if (code === 'auth/popup-blocked') errorMessage = 'Sign-in popup was blocked. Please allow popups or open in a new tab.';
+        else if (err.message) errorMessage = err.message;
+        
+        // Check if running in an iframe
+        if (window !== window.top) {
+          errorMessage += ' Note: Google Sign-In often requires opening this app in a new tab (click the pop-out icon top right).';
+        }
+        
+        setError(errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
