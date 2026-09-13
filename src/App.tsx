@@ -6,6 +6,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { AuthProvider, useAuth } from './lib/AuthContext';
+import { Analytics as VercelAnalytics } from '@vercel/analytics/react';
 
 // Layouts
 import MainLayout from './components/layout/MainLayout';
@@ -198,8 +199,8 @@ export default function App() {
             }
           />
         </Routes>
+        <VercelAnalytics />
       </BrowserRouter>
     </AuthProvider>
   );
 }
-
