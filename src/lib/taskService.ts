@@ -34,6 +34,32 @@ export interface TaskItem {
 }
 
 const LOCAL_STORAGE_KEY = 'streak_tasks_v1';
+const TASKS_INITIALIZED_KEY = 'streak_tasks_initialized';
+
+// Deduplicate tasks by ID and by content (title + date + time + type)
+export function deduplicateTasks(tasks: TaskItem[]): TaskItem[] {
+  const seenIds = new Set<string>();
+  const seenContent = new Set<string>();
+  const result: TaskItem[] = [];
+
+  for (const task of tasks) {
+    if (!task || !task.title) continue;
+    const contentKey = `${task.title.trim().toLowerCase()}_${task.date}_${(task.time || '').trim()}_${task.type || 'task'}`;
+
+    if (task.id && seenIds.has(task.id)) {
+      continue;
+    }
+    if (seenContent.has(contentKey)) {
+      continue;
+    }
+
+    if (task.id) seenIds.add(task.id);
+    seenContent.add(contentKey);
+    result.push(task);
+  }
+
+  return result;
+}
 
 // Seed demo tasks for today and surrounding days so the calendar feels active out-of-the-box, matching the reference image
 export function getInitialSeedTasks(baseDateStr?: string): TaskItem[] {
@@ -168,10 +194,10 @@ function updateGuestTasksNamespace(tasks: TaskItem[]) {
 export function readLocalTasks(): TaskItem[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed;
+        return deduplicateTasks(parsed);
       }
     }
 
@@ -180,12 +206,21 @@ export function readLocalTasks(): TaskItem[] {
     if (guestRaw) {
       const parsed = JSON.parse(guestRaw);
       if (Array.isArray(parsed.tasks) && parsed.tasks.length > 0) {
-        return parsed.tasks;
+        const clean = deduplicateTasks(parsed.tasks);
+        saveLocalTasks(clean);
+        return clean;
       }
     }
 
-    const initial = getInitialSeedTasks();
+    // If user has already initialized before, do NOT re-seed on every empty read
+    const isInitialized = localStorage.getItem(TASKS_INITIALIZED_KEY);
+    if (isInitialized) {
+      return [];
+    }
+
+    const initial = deduplicateTasks(getInitialSeedTasks());
     saveLocalTasks(initial);
+    localStorage.setItem(TASKS_INITIALIZED_KEY, 'true');
     return initial;
   } catch (err) {
     console.error('Error reading local tasks:', err);
@@ -195,8 +230,9 @@ export function readLocalTasks(): TaskItem[] {
 
 export function saveLocalTasks(tasks: TaskItem[]) {
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
-    updateGuestTasksNamespace(tasks);
+    const clean = deduplicateTasks(tasks);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(clean));
+    updateGuestTasksNamespace(clean);
   } catch (err) {
     console.error('Error saving local tasks:', err);
   }
@@ -206,14 +242,14 @@ export function saveLocalTasks(tasks: TaskItem[]) {
 export async function getAllTasks(userId?: string): Promise<TaskItem[]> {
   const local = readLocalTasks();
 
-  if (!userId) {
-    return local;
+  if (!userId || userId === 'local' || userId === 'default') {
+    return deduplicateTasks(local);
   }
 
   try {
     const q = query(collection(db, 'tasks'), where('userId', '==', userId));
     const snapshot = await getDocs(q);
-    const firestoreTasks: TaskItem[] = snapshot.docs.map((docSnap) => {
+    const rawFirestoreTasks: TaskItem[] = snapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       return {
         id: docSnap.id,
@@ -233,46 +269,60 @@ export async function getAllTasks(userId?: string): Promise<TaskItem[]> {
       };
     });
 
-    if (firestoreTasks.length > 0) {
-      // Merge unique tasks (preferring Firestore by ID, appending local if not yet in Firestore)
-      const taskMap = new Map<string, TaskItem>();
-      firestoreTasks.forEach((t) => taskMap.set(t.id, t));
-      local.forEach((t) => {
-        if (!taskMap.has(t.id)) {
-          taskMap.set(t.id, t);
-        }
-      });
-      const merged = Array.from(taskMap.values());
-      saveLocalTasks(merged);
-      return merged;
-    } else if (local.length > 0) {
-      // Background-seed local tasks into Firestore for this user
-      local.forEach(async (task) => {
+    // Check if Firestore had duplicate documents and clean them up asynchronously
+    const seenContent = new Map<string, string>(); // contentKey -> primaryDocId
+    const duplicateDocIdsToDelete: string[] = [];
+    const firestoreTasks: TaskItem[] = [];
+
+    for (const t of rawFirestoreTasks) {
+      const contentKey = `${t.title.trim().toLowerCase()}_${t.date}_${(t.time || '').trim()}_${t.type || 'task'}`;
+      if (seenContent.has(contentKey)) {
+        duplicateDocIdsToDelete.push(t.id);
+      } else {
+        seenContent.set(contentKey, t.id);
+        firestoreTasks.push(t);
+      }
+    }
+
+    if (duplicateDocIdsToDelete.length > 0) {
+      duplicateDocIdsToDelete.forEach(async (id) => {
         try {
-          await addDoc(collection(db, 'tasks'), {
-            userId,
-            title: task.title,
-            description: task.description || '',
-            date: task.date,
-            time: task.time || '',
-            timeEnd: task.timeEnd || '',
-            category: task.category || 'General',
-            priority: task.priority || 'medium',
-            type: task.type || 'task',
-            completed: task.completed,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
+          await deleteDoc(doc(db, 'tasks', id));
         } catch {
-          // Ignore background sync errors
+          // ignore background cleanup error
         }
       });
     }
 
-    return local;
+    if (firestoreTasks.length > 0) {
+      // Retain only temporary local tasks created very recently that haven't synced yet
+      const taskMap = new Map<string, TaskItem>();
+      firestoreTasks.forEach((t) => taskMap.set(t.id, t));
+
+      local.forEach((t) => {
+        if (!taskMap.has(t.id) && t.id.startsWith('temp_task_')) {
+          const contentKey = `${t.title.trim().toLowerCase()}_${t.date}_${(t.time || '').trim()}_${t.type || 'task'}`;
+          if (!seenContent.has(contentKey)) {
+            taskMap.set(t.id, t);
+          }
+        }
+      });
+      const merged = deduplicateTasks(Array.from(taskMap.values()));
+      saveLocalTasks(merged);
+      localStorage.setItem(TASKS_INITIALIZED_KEY, 'true');
+      return merged;
+    } else {
+      // If Firestore has 0 tasks for this user
+      const isInitialized = localStorage.getItem(TASKS_INITIALIZED_KEY);
+      if (isInitialized) {
+        saveLocalTasks([]);
+        return [];
+      }
+      return deduplicateTasks(local);
+    }
   } catch (err) {
     console.warn('Firestore tasks query failed, using local storage:', err);
-    return local;
+    return deduplicateTasks(local);
   }
 }
 
@@ -281,9 +331,10 @@ export async function createTask(
   taskData: Omit<TaskItem, 'id' | 'createdAt' | 'updatedAt'>,
   userId?: string
 ): Promise<TaskItem> {
+  const tempId = 'temp_task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
   const newTask: TaskItem = {
     ...taskData,
-    id: 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+    id: tempId,
     userId,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -295,9 +346,8 @@ export async function createTask(
   saveLocalTasks(local);
 
   // 2. Sync with Firestore if authenticated
-  if (userId) {
+  if (userId && userId !== 'local' && userId !== 'default') {
     try {
-      const tempId = newTask.id;
       const docRef = await addDoc(collection(db, 'tasks'), {
         userId,
         title: newTask.title,
@@ -314,7 +364,8 @@ export async function createTask(
       });
       // Update local task with firestore doc ID
       newTask.id = docRef.id;
-      const updatedLocal = readLocalTasks().map((t) => (t.id === tempId ? newTask : t));
+      const currentLocal = readLocalTasks();
+      const updatedLocal = currentLocal.map((t) => (t.id === tempId ? newTask : t));
       saveLocalTasks(updatedLocal);
     } catch (err) {
       console.warn('Could not sync created task to Firestore:', err);
@@ -346,7 +397,7 @@ export async function updateTask(
   saveLocalTasks(local);
 
   // Background sync with Firestore
-  if (userId && !taskId.startsWith('task_seed_')) {
+  if (userId && userId !== 'local' && userId !== 'default' && !taskId.startsWith('temp_task_')) {
     try {
       const firestoreUpdates: any = {
         updatedAt: serverTimestamp(),
@@ -391,10 +442,10 @@ export function subscribeToTasks(
   onUpdate: (tasks: TaskItem[]) => void
 ): () => void {
   // Immediately supply cached local tasks for instant rendering
-  const local = readLocalTasks();
+  const local = deduplicateTasks(readLocalTasks());
   onUpdate(local);
 
-  if (!userId) {
+  if (!userId || userId === 'local' || userId === 'default') {
     return () => {};
   }
 
@@ -403,7 +454,7 @@ export function subscribeToTasks(
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const firestoreTasks: TaskItem[] = snapshot.docs.map((docSnap) => {
+        const rawFirestoreTasks: TaskItem[] = snapshot.docs.map((docSnap) => {
           const data = docSnap.data();
           return {
             id: docSnap.id,
@@ -423,21 +474,31 @@ export function subscribeToTasks(
           };
         });
 
-        if (firestoreTasks.length > 0) {
-          // Merge any newly created local tasks that haven't synced yet
-          const taskMap = new Map<string, TaskItem>();
-          firestoreTasks.forEach((t) => taskMap.set(t.id, t));
-          local.forEach((t) => {
-            if (!taskMap.has(t.id) && t.id.startsWith('task_')) {
+        const seenContent = new Set<string>();
+        const firestoreTasks: TaskItem[] = [];
+        for (const t of rawFirestoreTasks) {
+          const contentKey = `${t.title.trim().toLowerCase()}_${t.date}_${(t.time || '').trim()}_${t.type || 'task'}`;
+          if (!seenContent.has(contentKey)) {
+            seenContent.add(contentKey);
+            firestoreTasks.push(t);
+          }
+        }
+
+        // Merge any newly created in-flight local tasks
+        const currentLocal = readLocalTasks();
+        const taskMap = new Map<string, TaskItem>();
+        firestoreTasks.forEach((t) => taskMap.set(t.id, t));
+        currentLocal.forEach((t) => {
+          if (!taskMap.has(t.id) && t.id.startsWith('temp_task_')) {
+            const contentKey = `${t.title.trim().toLowerCase()}_${t.date}_${(t.time || '').trim()}_${t.type || 'task'}`;
+            if (!seenContent.has(contentKey)) {
               taskMap.set(t.id, t);
             }
-          });
-          const merged = Array.from(taskMap.values());
-          saveLocalTasks(merged);
-          onUpdate(merged);
-        } else {
-          onUpdate(local);
-        }
+          }
+        });
+        const merged = deduplicateTasks(Array.from(taskMap.values()));
+        saveLocalTasks(merged);
+        onUpdate(merged);
       },
       (err) => {
         console.warn('Firestore tasks subscription error:', err);
@@ -451,13 +512,13 @@ export function subscribeToTasks(
   }
 }
 
-// Delete Task
+// Delete Task (permanently deletes in local storage AND Firestore)
 export async function deleteTask(taskId: string, userId?: string): Promise<boolean> {
   const local = readLocalTasks();
   const filtered = local.filter((t) => t.id !== taskId);
   saveLocalTasks(filtered);
 
-  if (userId && !taskId.startsWith('task_seed_') && !taskId.startsWith('task_')) {
+  if (userId && userId !== 'local' && userId !== 'default') {
     try {
       await deleteDoc(doc(db, 'tasks', taskId));
     } catch (err) {
@@ -469,15 +530,16 @@ export async function deleteTask(taskId: string, userId?: string): Promise<boole
   return true;
 }
 
-
 export const syncLocalTasksToCloud = async (userId: string) => {
   if (!userId || userId === 'local' || userId === 'default') return;
-  const localTasks = readLocalTasks();
+  const localTasks = deduplicateTasks(readLocalTasks());
   let syncCount = 0;
   for (const task of localTasks) {
     if (!task.userId || task.userId === 'local' || task.userId !== userId) {
       task.userId = userId;
-      const targetDocId = task.id || 'task_' + Date.now();
+      const targetDocId = task.id.startsWith('task-seed-')
+        ? 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6)
+        : task.id || 'task_' + Date.now();
       const targetDocRef = doc(db, 'tasks', targetDocId);
       try {
         const snap = await getDoc(targetDocRef);
@@ -509,6 +571,7 @@ export const syncLocalTasksToCloud = async (userId: string) => {
     }
   }
   if (syncCount > 0) {
-    saveLocalTasks([]); // clear local after migration
+    // Clear out local cache and let real-time subscription hydrate
+    saveLocalTasks([]);
   }
 };

@@ -57,6 +57,31 @@ const LOCAL_HABITS_KEY = 'streak_habits_v1';
 const LOCAL_LOGS_KEY = 'streak_habit_logs_v1';
 const GUEST_DATA_KEY = 'streak_guest_data';
 
+// Deduplicate habits by ID and by name (case-insensitive)
+export function deduplicateHabits(habits: Habit[]): Habit[] {
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  const result: Habit[] = [];
+
+  for (const habit of habits) {
+    if (!habit || !habit.name) continue;
+    const nameKey = habit.name.trim().toLowerCase();
+
+    if (habit.id && seenIds.has(habit.id)) {
+      continue;
+    }
+    if (seenNames.has(nameKey)) {
+      continue;
+    }
+
+    if (habit.id) seenIds.add(habit.id);
+    seenNames.add(nameKey);
+    result.push(habit);
+  }
+
+  return result;
+}
+
 function updateGuestNamespaceField(field: 'habits' | 'habitLogs', value: any) {
   try {
     const raw = localStorage.getItem(GUEST_DATA_KEY);
@@ -74,14 +99,21 @@ function updateGuestNamespaceField(field: 'habits' | 'habitLogs', value: any) {
 export function readLocalHabits(): Habit[] {
   try {
     const raw = localStorage.getItem(LOCAL_HABITS_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return deduplicateHabits(parsed);
+      }
+    }
     
     // Check inside streak_guest_data namespace
     const guestRaw = localStorage.getItem(GUEST_DATA_KEY);
     if (guestRaw) {
       const parsed = JSON.parse(guestRaw);
       if (Array.isArray(parsed.habits) && parsed.habits.length > 0) {
-        return parsed.habits;
+        const clean = deduplicateHabits(parsed.habits);
+        saveLocalHabits(clean);
+        return clean;
       }
     }
     return [];
@@ -92,8 +124,9 @@ export function readLocalHabits(): Habit[] {
 
 export function saveLocalHabits(habits: Habit[]): void {
   try {
-    localStorage.setItem(LOCAL_HABITS_KEY, JSON.stringify(habits));
-    updateGuestNamespaceField('habits', habits);
+    const clean = deduplicateHabits(habits);
+    localStorage.setItem(LOCAL_HABITS_KEY, JSON.stringify(clean));
+    updateGuestNamespaceField('habits', clean);
   } catch {
     // Ignore storage quota
   }
@@ -166,7 +199,7 @@ export const getUserHabits = async (userId: string): Promise<Habit[]> => {
   const local = readLocalHabits();
   
   if (!userId || userId === 'local' || userId === 'default') {
-    return local;
+    return deduplicateHabits(local);
   }
 
   try {
@@ -176,27 +209,51 @@ export const getUserHabits = async (userId: string): Promise<Habit[]> => {
       orderBy('createdAt', 'desc')
     );
     const snapshot = await getDocs(q);
-    const firestoreHabits = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Habit));
+    const rawFirestoreHabits = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Habit));
 
-    if (firestoreHabits.length > 0) {
-      // Merge unique habits (prefer Firestore)
-      const map = new Map<string, Habit>();
-      firestoreHabits.forEach(h => map.set(h.id!, h));
-      local.forEach(h => {
-        if (h.id && !map.has(h.id)) {
-          map.set(h.id, h);
+    // Deduplicate by habit name (case-insensitive)
+    const seenNames = new Map<string, string>(); // nameKey -> primaryDocId
+    const duplicateDocIdsToDelete: string[] = [];
+    const firestoreHabits: Habit[] = [];
+
+    for (const h of rawFirestoreHabits) {
+      if (!h || !h.name) continue;
+      const nameKey = h.name.trim().toLowerCase();
+      if (seenNames.has(nameKey)) {
+        if (h.id) duplicateDocIdsToDelete.push(h.id);
+      } else {
+        if (h.id) seenNames.set(nameKey, h.id);
+        firestoreHabits.push(h);
+      }
+    }
+
+    if (duplicateDocIdsToDelete.length > 0) {
+      duplicateDocIdsToDelete.forEach(async (id) => {
+        try {
+          await deleteDoc(doc(db, 'habits', id));
+        } catch {
+          // ignore background cleanup error
         }
       });
-      const merged = Array.from(map.values());
-      saveLocalHabits(merged);
-      return merged;
-    } else if (local.length > 0) {
-      return local;
     }
-    return [];
+
+    if (firestoreHabits.length > 0) {
+      // Clean, single-source-of-truth habits from Firestore
+      const clean = deduplicateHabits(firestoreHabits);
+      saveLocalHabits(clean);
+      localStorage.setItem(`streak_habits_initialized_${userId}`, 'true');
+      return clean;
+    } else {
+      const isInitialized = localStorage.getItem(`streak_habits_initialized_${userId}`);
+      if (isInitialized) {
+        saveLocalHabits([]);
+        return [];
+      }
+      return deduplicateHabits(local);
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, 'habits');
-    return local;
+    return deduplicateHabits(local);
   }
 };
 
@@ -208,7 +265,7 @@ export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
     saveLocalHabits(local);
   }
 
-  if (!habitId.startsWith('habit_') && !habitId.startsWith('default-')) {
+  if (!habitId.startsWith('temp_habit_') && !habitId.startsWith('default-')) {
     try {
       const habitRef = doc(db, 'habits', habitId);
       await updateDoc(habitRef, {
@@ -221,16 +278,42 @@ export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
   }
 };
 
-export const deleteHabit = async (habitId: string) => {
+export const deleteHabit = async (habitId: string, userId?: string) => {
   const local = readLocalHabits();
   const filtered = local.filter(h => h.id !== habitId);
   saveLocalHabits(filtered);
 
-  if (!habitId.startsWith('habit_') && !habitId.startsWith('default-')) {
+  // Clean up local logs associated with this habit
+  const localLogs = readLocalLogs();
+  const filteredLogs = localLogs.filter(l => l.habitId !== habitId);
+  saveLocalLogs(filteredLogs);
+
+  if (!habitId.startsWith('temp_habit_') && !habitId.startsWith('default-')) {
     try {
       await deleteDoc(doc(db, 'habits', habitId));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `habits/${habitId}`);
+    }
+  }
+
+  // Also asynchronously clean up Firestore habit_logs for this habit
+  if (userId && userId !== 'local' && userId !== 'default') {
+    try {
+      const q = query(
+        collection(db, 'habit_logs'),
+        where('userId', '==', userId),
+        where('habitId', '==', habitId)
+      );
+      const snap = await getDocs(q);
+      snap.docs.forEach(async (d) => {
+        try {
+          await deleteDoc(doc(db, 'habit_logs', d.id));
+        } catch {
+          // ignore
+        }
+      });
+    } catch {
+      // ignore
     }
   }
 
@@ -241,7 +324,6 @@ export const deleteHabit = async (habitId: string) => {
 export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'updatedAt'>) => {
   // Update local logs immediately
   const localLogs = readLocalLogs();
-  let syncedLogs = 0;
   const existingIdx = localLogs.findIndex(
     l => l.habitId === logData.habitId && l.date === logData.date
   );
@@ -300,6 +382,27 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
 };
 
 export const seedDefaultHabits = async (userId: string): Promise<Habit[]> => {
+  if (!userId || userId === 'local' || userId === 'default') return [];
+
+  // 1. Guard check: has this user already seeded or initialized habits?
+  const seededFlag = localStorage.getItem(`streak_habits_seeded_${userId}`);
+  if (seededFlag) {
+    return [];
+  }
+
+  // 2. Check Firestore: if habits exist already in Firestore, do NOT seed duplicates!
+  try {
+    const q = query(collection(db, 'habits'), where('userId', '==', userId));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      localStorage.setItem(`streak_habits_seeded_${userId}`, 'true');
+      localStorage.setItem(`streak_habits_initialized_${userId}`, 'true');
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Habit));
+    }
+  } catch {
+    // continue
+  }
+
   const defaults: Omit<Habit, 'id' | 'createdAt' | 'updatedAt'>[] = [
     {
       userId,
@@ -352,6 +455,9 @@ export const seedDefaultHabits = async (userId: string): Promise<Habit[]> => {
       });
       created.push({ id: docRef.id, ...habit });
     }
+    localStorage.setItem(`streak_habits_seeded_${userId}`, 'true');
+    localStorage.setItem(`streak_habits_initialized_${userId}`, 'true');
+    saveLocalHabits(created);
     return created;
   } catch (error) {
     console.error('Failed to seed default habits:', error);
@@ -559,10 +665,6 @@ export const syncLocalToCloud = async (userId: string) => {
     }
   }
   if (syncedLogs > 0) saveLocalLogs([]);
-  
-  // After sync, save back with updated userIds
-  saveLocalHabits(localHabits);
-  saveLocalLogs(localLogs);
 };
 
 export const subscribeToHabits = (
@@ -604,8 +706,9 @@ export const subscribeToHabits = (
       });
 
       if (habits.length > 0) {
-        saveLocalHabits(habits);
-        callback(habits);
+        const clean = deduplicateHabits(habits);
+        saveLocalHabits(clean);
+        callback(clean);
       } else {
         callback(readLocalHabits());
       }

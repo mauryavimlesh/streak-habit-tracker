@@ -60,22 +60,55 @@ const DEFAULT_ENTRIES: JournalEntry[] = [
   },
 ];
 
+const JOURNAL_INITIALIZED_KEY = 'streak_journal_initialized';
+
+export function deduplicateJournal(entries: JournalEntry[]): JournalEntry[] {
+  const seenIds = new Set<string>();
+  const seenContent = new Set<string>();
+  const result: JournalEntry[] = [];
+
+  for (const entry of entries) {
+    if (!entry || !entry.text) continue;
+    const contentKey = `${entry.date}_${(entry.title || '').trim().toLowerCase()}_${entry.text.trim().toLowerCase().slice(0, 40)}`;
+    if (entry.id && seenIds.has(entry.id)) continue;
+    if (seenContent.has(contentKey)) continue;
+
+    if (entry.id) seenIds.add(entry.id);
+    seenContent.add(contentKey);
+    result.push(entry);
+  }
+
+  return result.sort((a, b) => b.date.localeCompare(a.date));
+}
+
 export function readLocalJournal(): JournalEntry[] {
   try {
     const raw = localStorage.getItem(LOCAL_JOURNAL_KEY);
-    if (!raw) {
-      saveLocalJournal(DEFAULT_ENTRIES);
-      return DEFAULT_ENTRIES;
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return deduplicateJournal(parsed);
+      }
     }
-    return JSON.parse(raw);
+    
+    // Check if user has initialized previously
+    const isInit = localStorage.getItem(JOURNAL_INITIALIZED_KEY);
+    if (isInit) {
+      return [];
+    }
+
+    saveLocalJournal(DEFAULT_ENTRIES);
+    localStorage.setItem(JOURNAL_INITIALIZED_KEY, 'true');
+    return deduplicateJournal(DEFAULT_ENTRIES);
   } catch {
-    return DEFAULT_ENTRIES;
+    return deduplicateJournal(DEFAULT_ENTRIES);
   }
 }
 
 export function saveLocalJournal(entries: JournalEntry[]): void {
   try {
-    localStorage.setItem(LOCAL_JOURNAL_KEY, JSON.stringify(entries));
+    const clean = deduplicateJournal(entries);
+    localStorage.setItem(LOCAL_JOURNAL_KEY, JSON.stringify(clean));
   } catch {
     // Ignore
   }
@@ -84,13 +117,13 @@ export function saveLocalJournal(entries: JournalEntry[]): void {
 export async function getUserJournal(userId?: string): Promise<JournalEntry[]> {
   const local = readLocalJournal();
   if (!userId || userId === 'local' || userId === 'default') {
-    return local;
+    return deduplicateJournal(local);
   }
 
   try {
     const q = query(collection(db, 'journal_logs'), where('userId', '==', userId));
     const snapshot = await getDocs(q);
-    const firestoreEntries: JournalEntry[] = snapshot.docs.map((docSnap) => {
+    const rawFirestoreEntries: JournalEntry[] = snapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       return {
         id: docSnap.id,
@@ -110,21 +143,47 @@ export async function getUserJournal(userId?: string): Promise<JournalEntry[]> {
       };
     });
 
-    if (firestoreEntries.length > 0) {
-      const map = new Map<string, JournalEntry>();
-      firestoreEntries.forEach((e) => map.set(e.id, e));
-      local.forEach((e) => {
-        if (!map.has(e.id)) map.set(e.id, e);
-      });
-      const merged = Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
-      saveLocalJournal(merged);
-      return merged;
+    // Deduplicate in Firestore
+    const seenContent = new Map<string, string>();
+    const duplicateDocIdsToDelete: string[] = [];
+    const firestoreEntries: JournalEntry[] = [];
+
+    for (const e of rawFirestoreEntries) {
+      const contentKey = `${e.date}_${(e.title || '').trim().toLowerCase()}_${e.text.trim().toLowerCase().slice(0, 40)}`;
+      if (seenContent.has(contentKey)) {
+        duplicateDocIdsToDelete.push(e.id);
+      } else {
+        seenContent.set(contentKey, e.id);
+        firestoreEntries.push(e);
+      }
     }
 
-    return local;
+    if (duplicateDocIdsToDelete.length > 0) {
+      duplicateDocIdsToDelete.forEach(async (id) => {
+        try {
+          await deleteDoc(doc(db, 'journal_logs', id));
+        } catch {
+          // ignore
+        }
+      });
+    }
+
+    if (firestoreEntries.length > 0) {
+      const clean = deduplicateJournal(firestoreEntries);
+      saveLocalJournal(clean);
+      localStorage.setItem(JOURNAL_INITIALIZED_KEY, 'true');
+      return clean;
+    } else {
+      const isInit = localStorage.getItem(JOURNAL_INITIALIZED_KEY);
+      if (isInit) {
+        saveLocalJournal([]);
+        return [];
+      }
+      return deduplicateJournal(local);
+    }
   } catch (err) {
     console.warn('Firestore journal query fallback to local:', err);
-    return local;
+    return deduplicateJournal(local);
   }
 }
 
@@ -132,7 +191,7 @@ export async function createJournalEntry(
   entryData: Omit<JournalEntry, 'id' | 'createdAt' | 'updatedAt'>,
   userId?: string
 ): Promise<JournalEntry> {
-  const tempId = 'journal_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  const tempId = 'temp_journal_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
   const newEntry: JournalEntry = {
     ...entryData,
     id: tempId,
@@ -193,7 +252,7 @@ export async function updateJournalEntry(
   local[index] = updated;
   saveLocalJournal(local);
 
-  if (userId && !entryId.startsWith('entry-seed_') && !entryId.startsWith('journal_')) {
+  if (userId && userId !== 'local' && userId !== 'default' && !entryId.startsWith('temp_journal_')) {
     try {
       await updateDoc(doc(db, 'journal_logs', entryId), {
         ...updates,
@@ -213,7 +272,7 @@ export async function deleteJournalEntry(entryId: string, userId?: string): Prom
   const filtered = local.filter((e) => e.id !== entryId);
   saveLocalJournal(filtered);
 
-  if (userId && !entryId.startsWith('entry-seed_') && !entryId.startsWith('journal_')) {
+  if (userId && userId !== 'local' && userId !== 'default') {
     try {
       await deleteDoc(doc(db, 'journal_logs', entryId));
     } catch (err) {

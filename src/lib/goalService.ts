@@ -109,30 +109,66 @@ function updateGuestGoalsNamespace(goals: Goal[]) {
   }
 }
 
+const GOALS_INITIALIZED_KEY = 'streak_goals_initialized';
+
+export function deduplicateGoals(goals: Goal[]): Goal[] {
+  const seenIds = new Set<string>();
+  const seenTitles = new Set<string>();
+  const result: Goal[] = [];
+
+  for (const g of goals) {
+    if (!g || !g.title) continue;
+    const titleKey = g.title.trim().toLowerCase();
+    if (g.id && seenIds.has(g.id)) continue;
+    if (seenTitles.has(titleKey)) continue;
+
+    if (g.id) seenIds.add(g.id);
+    seenTitles.add(titleKey);
+    result.push(g);
+  }
+
+  return result;
+}
+
 export function readLocalGoals(): Goal[] {
   try {
     const raw = localStorage.getItem(LOCAL_GOALS_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return deduplicateGoals(parsed);
+      }
+    }
 
     const guestRaw = localStorage.getItem(GUEST_DATA_KEY);
     if (guestRaw) {
       const parsed = JSON.parse(guestRaw);
       if (Array.isArray(parsed.goals) && parsed.goals.length > 0) {
-        return parsed.goals;
+        const clean = deduplicateGoals(parsed.goals);
+        saveLocalGoals(clean);
+        return clean;
       }
     }
 
+    // If previously initialized, return empty
+    const isInit = localStorage.getItem(GOALS_INITIALIZED_KEY);
+    if (isInit) {
+      return [];
+    }
+
     saveLocalGoals(DEFAULT_GOALS);
-    return DEFAULT_GOALS;
+    localStorage.setItem(GOALS_INITIALIZED_KEY, 'true');
+    return deduplicateGoals(DEFAULT_GOALS);
   } catch {
-    return DEFAULT_GOALS;
+    return deduplicateGoals(DEFAULT_GOALS);
   }
 }
 
 export function saveLocalGoals(goals: Goal[]): void {
   try {
-    localStorage.setItem(LOCAL_GOALS_KEY, JSON.stringify(goals));
-    updateGuestGoalsNamespace(goals);
+    const clean = deduplicateGoals(goals);
+    localStorage.setItem(LOCAL_GOALS_KEY, JSON.stringify(clean));
+    updateGuestGoalsNamespace(clean);
   } catch {
     // Ignore storage issues
   }
@@ -141,13 +177,13 @@ export function saveLocalGoals(goals: Goal[]): void {
 export async function getUserGoals(userId?: string): Promise<Goal[]> {
   const local = readLocalGoals();
   if (!userId || userId === 'local' || userId === 'default') {
-    return local;
+    return deduplicateGoals(local);
   }
 
   try {
     const q = query(collection(db, 'goals'), where('userId', '==', userId));
     const snapshot = await getDocs(q);
-    const firestoreGoals: Goal[] = snapshot.docs.map((docSnap) => {
+    const rawFirestoreGoals: Goal[] = snapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       return {
         id: docSnap.id,
@@ -168,21 +204,47 @@ export async function getUserGoals(userId?: string): Promise<Goal[]> {
       };
     });
 
-    if (firestoreGoals.length > 0) {
-      const map = new Map<string, Goal>();
-      firestoreGoals.forEach((g) => map.set(g.id, g));
-      local.forEach((g) => {
-        if (!map.has(g.id)) map.set(g.id, g);
-      });
-      const merged = Array.from(map.values());
-      saveLocalGoals(merged);
-      return merged;
+    // Deduplicate in Firestore
+    const seenTitles = new Map<string, string>();
+    const duplicateDocIdsToDelete: string[] = [];
+    const firestoreGoals: Goal[] = [];
+
+    for (const g of rawFirestoreGoals) {
+      const titleKey = (g.title || '').trim().toLowerCase();
+      if (seenTitles.has(titleKey)) {
+        duplicateDocIdsToDelete.push(g.id);
+      } else {
+        seenTitles.set(titleKey, g.id);
+        firestoreGoals.push(g);
+      }
     }
 
-    return local;
+    if (duplicateDocIdsToDelete.length > 0) {
+      duplicateDocIdsToDelete.forEach(async (id) => {
+        try {
+          await deleteDoc(doc(db, 'goals', id));
+        } catch {
+          // ignore
+        }
+      });
+    }
+
+    if (firestoreGoals.length > 0) {
+      const clean = deduplicateGoals(firestoreGoals);
+      saveLocalGoals(clean);
+      localStorage.setItem(GOALS_INITIALIZED_KEY, 'true');
+      return clean;
+    } else {
+      const isInit = localStorage.getItem(GOALS_INITIALIZED_KEY);
+      if (isInit) {
+        saveLocalGoals([]);
+        return [];
+      }
+      return deduplicateGoals(local);
+    }
   } catch (err) {
     console.warn('Firestore goals query fallback to local:', err);
-    return local;
+    return deduplicateGoals(local);
   }
 }
 
@@ -190,7 +252,7 @@ export async function createGoal(
   goalData: Omit<Goal, 'id' | 'createdAt' | 'updatedAt'>,
   userId?: string
 ): Promise<Goal> {
-  const tempId = 'goal_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  const tempId = 'temp_goal_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
   const newGoal: Goal = {
     ...goalData,
     id: tempId,
@@ -257,7 +319,7 @@ export async function updateGoal(
     trackGoalCompleted(updated.category);
   }
 
-  if (userId && !goalId.startsWith('goal-seed_') && !goalId.startsWith('goal_')) {
+  if (userId && userId !== 'local' && userId !== 'default' && !goalId.startsWith('temp_goal_')) {
     try {
       await updateDoc(doc(db, 'goals', goalId), {
         ...updates,
@@ -277,7 +339,7 @@ export async function deleteGoal(goalId: string, userId?: string): Promise<boole
   const filtered = local.filter((g) => g.id !== goalId);
   saveLocalGoals(filtered);
 
-  if (userId && !goalId.startsWith('goal-seed_') && !goalId.startsWith('goal_')) {
+  if (userId && userId !== 'local' && userId !== 'default') {
     try {
       await deleteDoc(doc(db, 'goals', goalId));
     } catch (err) {

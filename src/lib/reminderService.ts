@@ -94,27 +94,58 @@ const DEFAULT_REMINDERS: ReminderItem[] = [
   },
 ];
 
+const REMINDERS_INITIALIZED_KEY = 'streak_reminders_initialized';
+
+export function deduplicateReminders(reminders: ReminderItem[]): ReminderItem[] {
+  const seenIds = new Set<string>();
+  const seenKeys = new Set<string>();
+  const result: ReminderItem[] = [];
+
+  for (const r of reminders) {
+    if (!r || !r.title) continue;
+    const key = `${(r.title || '').trim().toLowerCase()}_${r.time}`;
+    if (r.id && seenIds.has(r.id)) continue;
+    if (seenKeys.has(key)) continue;
+
+    if (r.id) seenIds.add(r.id);
+    seenKeys.add(key);
+    result.push(r);
+  }
+
+  return result;
+}
+
 export function readLocalReminders(): ReminderItem[] {
   try {
     const raw = localStorage.getItem(LOCAL_REMINDERS_KEY);
-    if (!raw) {
-      saveLocalReminders(DEFAULT_REMINDERS);
-      return DEFAULT_REMINDERS;
+    if (raw !== null) {
+      const parsed: ReminderItem[] = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return deduplicateReminders(parsed.map((item) => ({
+          ...item,
+          repeat: item.repeat || (item.days?.length === 7 ? 'daily' : item.days?.length === 5 ? 'weekdays' : 'custom'),
+          notificationEnabled: item.notificationEnabled ?? true,
+        })));
+      }
     }
-    const parsed: ReminderItem[] = JSON.parse(raw);
-    return parsed.map((item) => ({
-      ...item,
-      repeat: item.repeat || (item.days?.length === 7 ? 'daily' : item.days?.length === 5 ? 'weekdays' : 'custom'),
-      notificationEnabled: item.notificationEnabled ?? true,
-    }));
+
+    const isInit = localStorage.getItem(REMINDERS_INITIALIZED_KEY);
+    if (isInit) {
+      return [];
+    }
+
+    saveLocalReminders(DEFAULT_REMINDERS);
+    localStorage.setItem(REMINDERS_INITIALIZED_KEY, 'true');
+    return deduplicateReminders(DEFAULT_REMINDERS);
   } catch {
-    return DEFAULT_REMINDERS;
+    return deduplicateReminders(DEFAULT_REMINDERS);
   }
 }
 
 export function saveLocalReminders(reminders: ReminderItem[]): void {
   try {
-    localStorage.setItem(LOCAL_REMINDERS_KEY, JSON.stringify(reminders));
+    const clean = deduplicateReminders(reminders);
+    localStorage.setItem(LOCAL_REMINDERS_KEY, JSON.stringify(clean));
   } catch {
     // Ignore
   }
@@ -123,7 +154,7 @@ export function saveLocalReminders(reminders: ReminderItem[]): void {
 export async function getUserReminders(userId: string): Promise<ReminderItem[]> {
   const local = readLocalReminders();
   if (!userId || userId === 'local' || userId === 'default') {
-    return local;
+    return deduplicateReminders(local);
   }
 
   try {
@@ -133,24 +164,49 @@ export async function getUserReminders(userId: string): Promise<ReminderItem[]> 
       orderBy('createdAt', 'desc')
     );
     const snapshot = await getDocs(q);
-    const firestoreReminders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ReminderItem));
+    const rawFirestoreReminders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ReminderItem));
 
-    if (firestoreReminders.length > 0) {
-      const map = new Map<string, ReminderItem>();
-      firestoreReminders.forEach(r => map.set(r.id!, r));
-      local.forEach(r => {
-        if (r.id && !map.has(r.id)) {
-          map.set(r.id, r);
+    // Deduplicate in Firestore
+    const seenKeys = new Map<string, string>();
+    const duplicateDocIdsToDelete: string[] = [];
+    const firestoreReminders: ReminderItem[] = [];
+
+    for (const r of rawFirestoreReminders) {
+      const key = `${(r.title || '').trim().toLowerCase()}_${r.time}`;
+      if (seenKeys.has(key)) {
+        if (r.id) duplicateDocIdsToDelete.push(r.id);
+      } else {
+        if (r.id) seenKeys.set(key, r.id);
+        firestoreReminders.push(r);
+      }
+    }
+
+    if (duplicateDocIdsToDelete.length > 0) {
+      duplicateDocIdsToDelete.forEach(async (id) => {
+        try {
+          await deleteDoc(doc(db, 'reminders', id));
+        } catch {
+          // ignore
         }
       });
-      const merged = Array.from(map.values());
-      saveLocalReminders(merged);
-      return merged;
     }
-    return local;
+
+    if (firestoreReminders.length > 0) {
+      const clean = deduplicateReminders(firestoreReminders);
+      saveLocalReminders(clean);
+      localStorage.setItem(REMINDERS_INITIALIZED_KEY, 'true');
+      return clean;
+    } else {
+      const isInit = localStorage.getItem(REMINDERS_INITIALIZED_KEY);
+      if (isInit) {
+        saveLocalReminders([]);
+        return [];
+      }
+      return deduplicateReminders(local);
+    }
   } catch (err) {
     console.error('Error fetching reminders from Firestore:', err);
-    return local;
+    return deduplicateReminders(local);
   }
 }
 
@@ -163,7 +219,7 @@ export async function toggleReminder(id: string, userId?: string): Promise<Remin
   const updated = list.map((r) => (r.id === id ? { ...r, enabled: newState } : r));
   saveLocalReminders(updated);
   
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (userId && userId !== 'local' && userId !== 'default' && !id.startsWith('temp_rem_')) {
     try {
       const ref = doc(db, 'reminders', id);
       await updateDoc(ref, { enabled: newState });
@@ -180,7 +236,7 @@ export async function createReminder(
   userId?: string
 ): Promise<ReminderItem> {
   const list = readLocalReminders();
-  let newId = 'rem_' + Date.now();
+  let newId = 'temp_rem_' + Date.now();
   let serverTime = new Date().toISOString();
 
   if (userId && userId !== 'local' && userId !== 'default') {
@@ -219,7 +275,7 @@ export async function updateReminder(
   const updated = list.map((r) => (r.id === id ? { ...r, ...updates } : r));
   saveLocalReminders(updated);
   
-  if (userId && userId !== 'local' && userId !== 'default' && !id.startsWith('rem_')) {
+  if (userId && userId !== 'local' && userId !== 'default' && !id.startsWith('temp_rem_')) {
     try {
       const ref = doc(db, 'reminders', id);
       await updateDoc(ref, updates);
@@ -236,7 +292,7 @@ export async function deleteReminder(id: string, userId?: string): Promise<Remin
   const updated = list.filter((r) => r.id !== id);
   saveLocalReminders(updated);
   
-  if (userId && userId !== 'local' && userId !== 'default' && !id.startsWith('rem_')) {
+  if (userId && userId !== 'local' && userId !== 'default') {
     try {
       await deleteDoc(doc(db, 'reminders', id));
     } catch (err) {

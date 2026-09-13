@@ -68,6 +68,8 @@ export default function Home() {
   const [logs, setLogs] = useState<HabitLog[]>([]);
   const [todayTasks, setTodayTasks] = useState<TaskItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showAllHabits, setShowAllHabits] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   // New state variables for Habit Notes and Sync Toast
   const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
@@ -141,18 +143,23 @@ export default function Home() {
           setLocalProgress((prev) => ({ ...prev, ...progressMap }));
           setHabitNotes((prev) => ({ ...prev, ...noteMap }));
         } else {
-          // If user is signed in but has no habits in DB yet, seed starter habits to Firestore
-          const seeded = await seedDefaultHabits(user.uid);
-          if (seeded.length > 0) {
-            setHabits(seeded);
+          // Check if user has already initialized their habits account
+          const isInit = localStorage.getItem(`streak_habits_initialized_${user.uid}`);
+          if (!isInit) {
+            const seeded = await seedDefaultHabits(user.uid);
+            if (seeded.length > 0) {
+              setHabits(seeded);
+            } else {
+              setHabits([]);
+            }
           } else {
-            setHabits(DEFAULT_HABITS);
+            setHabits([]);
           }
         }
         setLogs(fetchedLogs);
       } catch (err) {
         console.error(err);
-        setHabits(DEFAULT_HABITS);
+        setHabits([]);
       } finally {
         setIsLoading(false);
       }
@@ -160,7 +167,9 @@ export default function Home() {
     loadData();
   }, [user]);
 
-  const displayedHabits = habits.length > 0 ? habits : DEFAULT_HABITS;
+  const displayedHabits = !user ? (habits.length > 0 ? habits : DEFAULT_HABITS) : habits;
+  const visibleHabits = showAllHabits ? displayedHabits : displayedHabits.slice(0, 3);
+  const visibleTasks = showAllTasks ? todayTasks : todayTasks.slice(0, 3);
 
   // Determine step size for incrementing
   const getStep = (habit: Habit) => {
@@ -600,9 +609,19 @@ export default function Home() {
 
         {isLoading ? (
           <div className="text-center text-sm text-[#7d8495] py-12">Loading habits...</div>
+        ) : visibleHabits.length === 0 ? (
+          <div className="text-center py-8 px-4 rounded-[24px] bg-[#161922] border border-[#212633]">
+            <p className="text-[14px] text-[#7d8495] mb-3">No active habits yet.</p>
+            <button
+              onClick={() => navigate('/habits/new')}
+              className="text-xs font-semibold px-4 py-2 rounded-full bg-accent-primary text-black inline-flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[3]" /> Add your first habit
+            </button>
+          </div>
         ) : (
           <div className="space-y-3">
-            {displayedHabits.map((habit) => {
+            {visibleHabits.map((habit) => {
               const visuals = getHabitVisuals(habit);
               const currentVal = localProgress[habit.id!] ?? 0;
               const target = habit.targetValue || 1;
@@ -711,6 +730,25 @@ export default function Home() {
                 </div>
               );
             })}
+
+            {displayedHabits.length > 3 && (
+              <div className="flex items-center justify-between pt-1 px-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAllHabits(!showAllHabits)}
+                  className="text-[13px] font-semibold text-accent-primary hover:text-[#a5ff36] transition-colors cursor-pointer py-1"
+                >
+                  {showAllHabits ? 'Show Less' : `View All Habits (${displayedHabits.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/habits')}
+                  className="text-[12px] font-medium text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+                >
+                  Manage All
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -734,7 +772,7 @@ export default function Home() {
           </div>
 
           <div className="space-y-2.5">
-            {todayTasks.map((task) => (
+            {visibleTasks.map((task) => (
               <div
                 key={task.id}
                 onClick={(e) => handleToggleTask(e, task.id)}
@@ -783,6 +821,25 @@ export default function Home() {
                 </span>
               </div>
             ))}
+
+            {todayTasks.length > 3 && (
+              <div className="flex items-center justify-between pt-1 px-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAllTasks(!showAllTasks)}
+                  className="text-[13px] font-semibold text-accent-primary hover:text-[#a5ff36] transition-colors cursor-pointer py-1"
+                >
+                  {showAllTasks ? 'Show Less' : `View All Tasks (${todayTasks.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/calendar')}
+                  className="text-[12px] font-medium text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+                >
+                  Open Calendar
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

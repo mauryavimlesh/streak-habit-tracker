@@ -127,7 +127,41 @@ export default function Analytics() {
     return Math.max(1, streak);
   }, [logs]);
 
-  const bestStreak = Math.max(currentStreak, 14);
+  // Real best streak calculation across recorded history
+  const bestStreak = useMemo(() => {
+    if (logs.length === 0) return currentStreak;
+    const uniqueDates: string[] = Array.from(new Set<string>(
+      logs
+        .filter((l) => l.status === 'completed' || (l.progressValue && l.progressValue > 0))
+        .map((l) => l.date)
+    )).sort();
+
+    if (uniqueDates.length === 0) return currentStreak;
+
+    let maxRun = 0;
+    let currentRun = 0;
+    let prevTime = 0;
+
+    for (const dateStr of uniqueDates) {
+      const parts = dateStr.split('-').map(Number);
+      const currTime = new Date(parts[0], parts[1] - 1, parts[2]).getTime();
+      if (prevTime === 0) {
+        currentRun = 1;
+      } else {
+        const diffDays = Math.round((currTime - prevTime) / (1000 * 60 * 60 * 24));
+        if (diffDays === 1) {
+          currentRun++;
+        } else if (diffDays > 1) {
+          currentRun = 1;
+        }
+      }
+      prevTime = currTime;
+      if (currentRun > maxRun) {
+        maxRun = currentRun;
+      }
+    }
+    return Math.max(currentStreak, maxRun);
+  }, [logs, currentStreak]);
 
   // Category breakdown
   const categoryCounts = useMemo(() => {
