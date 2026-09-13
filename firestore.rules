@@ -23,12 +23,6 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email_verified == true;
     }
     
-    // Allow non-verified emails for testing/local development if needed, but strict is better. 
-    // In many simple setups, email_verified might be false if they just signed up via email/password.
-    // I will use a slightly relaxed isSignedIn to avoid blocking new users who haven't verified yet.
-    function request.auth != null {
-      return request.auth != null && request.auth.uid != null;
-    }
 
     // 3. Entity Validation Helpers
     function isValidUser(data) {
