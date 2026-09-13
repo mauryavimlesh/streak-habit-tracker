@@ -11,8 +11,11 @@ import {
   where, 
   orderBy, 
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  onSnapshot,
 } from 'firebase/firestore';
+import { trackHabitCreated, trackHabitCompleted, trackHabitDeleted } from './analyticsService';
+import { handleFirestoreError, OperationType } from './firestoreErrors';
 
 export type HabitFrequency = 'daily' | 'selected_days' | 'weekly' | 'custom';
 export type TargetType = 'binary' | 'count' | 'duration' | 'quantity';
@@ -25,6 +28,7 @@ export interface HabitLog {
   status: 'completed' | 'skipped' | 'failed' | 'in_progress' | 'partial' | 'missed';
   progressValue?: number;
   note?: string;
+  reflection?: string;
   completedAt?: any;
   createdAt?: any;
   updatedAt?: any;
@@ -51,11 +55,36 @@ export interface Habit {
 
 const LOCAL_HABITS_KEY = 'streak_habits_v1';
 const LOCAL_LOGS_KEY = 'streak_habit_logs_v1';
+const GUEST_DATA_KEY = 'streak_guest_data';
+
+function updateGuestNamespaceField(field: 'habits' | 'habitLogs', value: any) {
+  try {
+    const raw = localStorage.getItem(GUEST_DATA_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      parsed[field] = value;
+      parsed.updatedAt = new Date().toISOString();
+      localStorage.setItem(GUEST_DATA_KEY, JSON.stringify(parsed));
+    }
+  } catch {
+    // Ignore
+  }
+}
 
 export function readLocalHabits(): Habit[] {
   try {
     const raw = localStorage.getItem(LOCAL_HABITS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (raw) return JSON.parse(raw);
+    
+    // Check inside streak_guest_data namespace
+    const guestRaw = localStorage.getItem(GUEST_DATA_KEY);
+    if (guestRaw) {
+      const parsed = JSON.parse(guestRaw);
+      if (Array.isArray(parsed.habits) && parsed.habits.length > 0) {
+        return parsed.habits;
+      }
+    }
+    return [];
   } catch {
     return [];
   }
@@ -64,6 +93,7 @@ export function readLocalHabits(): Habit[] {
 export function saveLocalHabits(habits: Habit[]): void {
   try {
     localStorage.setItem(LOCAL_HABITS_KEY, JSON.stringify(habits));
+    updateGuestNamespaceField('habits', habits);
   } catch {
     // Ignore storage quota
   }
@@ -72,7 +102,16 @@ export function saveLocalHabits(habits: Habit[]): void {
 export function readLocalLogs(): HabitLog[] {
   try {
     const raw = localStorage.getItem(LOCAL_LOGS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (raw) return JSON.parse(raw);
+
+    const guestRaw = localStorage.getItem(GUEST_DATA_KEY);
+    if (guestRaw) {
+      const parsed = JSON.parse(guestRaw);
+      if (Array.isArray(parsed.habitLogs) && parsed.habitLogs.length > 0) {
+        return parsed.habitLogs;
+      }
+    }
+    return [];
   } catch {
     return [];
   }
@@ -81,34 +120,10 @@ export function readLocalLogs(): HabitLog[] {
 export function saveLocalLogs(logs: HabitLog[]): void {
   try {
     localStorage.setItem(LOCAL_LOGS_KEY, JSON.stringify(logs));
+    updateGuestNamespaceField('habitLogs', logs);
   } catch {
     // Ignore
   }
-}
-
-// Error Handler following Firebase blueprint
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    operationType,
-    path
-  };
-  console.warn('Firestore fallback: ', JSON.stringify(errInfo));
 }
 
 // Habit CRUD
@@ -143,6 +158,7 @@ export const createHabit = async (habitData: Omit<Habit, 'id' | 'createdAt' | 'u
     }
   }
 
+  trackHabitCreated(habitData.category, habitData.frequencyType);
   return tempId;
 };
 
@@ -217,12 +233,15 @@ export const deleteHabit = async (habitId: string) => {
       handleFirestoreError(error, OperationType.DELETE, `habits/${habitId}`);
     }
   }
+
+  trackHabitDeleted();
 };
 
 // Habit Logs CRUD
 export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'updatedAt'>) => {
   // Update local logs immediately
   const localLogs = readLocalLogs();
+  let syncedLogs = 0;
   const existingIdx = localLogs.findIndex(
     l => l.habitId === logData.habitId && l.date === logData.date
   );
@@ -239,6 +258,12 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
     localLogs.unshift(updatedLog);
   }
   saveLocalLogs(localLogs);
+
+  if (logData.status === 'completed') {
+    const habits = readLocalHabits();
+    const habit = habits.find((h) => h.id === logData.habitId);
+    trackHabitCompleted(habit?.category);
+  }
 
   if (logData.userId && logData.userId !== 'local' && logData.userId !== 'default') {
     try {
@@ -462,38 +487,175 @@ export const getReflection = async (userId: string, date: string): Promise<Journ
 export const syncLocalToCloud = async (userId: string) => {
   if (!userId || userId === 'local' || userId === 'default') return;
   const localHabits = readLocalHabits();
+  let syncedHabits = 0;
   for (const habit of localHabits) {
     if (!habit.userId || habit.userId === 'local' || habit.userId !== userId) {
-       habit.userId = userId;
-       try {
-         await setDoc(doc(db, 'habits', habit.id || 'habit_' + Date.now()), {
-           ...habit,
-           updatedAt: serverTimestamp(),
-           createdAt: habit.createdAt || serverTimestamp(),
-         }, { merge: true });
-       } catch (e) {
-         console.error('Failed to sync habit', e);
-       }
+      habit.userId = userId;
+      const targetDocId = habit.id || 'habit_' + Date.now();
+      const targetDocRef = doc(db, 'habits', targetDocId);
+      try {
+        const snap = await getDoc(targetDocRef);
+        const habitPayload: Record<string, any> = {
+          userId,
+          name: habit.name,
+          category: habit.category || 'General',
+          frequencyType: habit.frequencyType || 'daily',
+          targetType: habit.targetType || 'binary',
+          archived: Boolean(habit.archived),
+          updatedAt: serverTimestamp(),
+        };
+        if (habit.description) habitPayload.description = habit.description;
+        if (habit.icon) habitPayload.icon = habit.icon;
+        if (habit.color) habitPayload.color = habit.color;
+        if (Array.isArray(habit.frequencyValue)) habitPayload.frequencyValue = habit.frequencyValue;
+        if (habit.targetValue !== undefined) habitPayload.targetValue = Number(habit.targetValue) || 1;
+        if (habit.targetUnit) habitPayload.targetUnit = habit.targetUnit;
+        if (habit.reminderTime) habitPayload.reminderTime = habit.reminderTime;
+
+        if (!snap.exists()) {
+          habitPayload.createdAt = serverTimestamp();
+          await setDoc(targetDocRef, habitPayload);
+        } else {
+          await updateDoc(targetDocRef, habitPayload);
+        }
+        syncedHabits++;
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `habits/${targetDocId}`);
+      }
     }
   }
+  if (syncedHabits > 0) saveLocalHabits([]);
   
   const localLogs = readLocalLogs();
+  let syncedLogs = 0;
   for (const log of localLogs) {
     if (!log.userId || log.userId === 'local' || log.userId !== userId) {
-       log.userId = userId;
-       try {
-         await setDoc(doc(db, 'habit_logs', log.id || 'log_' + Date.now()), {
-           ...log,
-           updatedAt: serverTimestamp(),
-           createdAt: log.createdAt || serverTimestamp(),
-         }, { merge: true });
-       } catch (e) {
-         console.error('Failed to sync log', e);
-       }
+      log.userId = userId;
+      const targetDocId = log.id || 'log_' + Date.now();
+      const targetDocRef = doc(db, 'habit_logs', targetDocId);
+      try {
+        const snap = await getDoc(targetDocRef);
+        const logPayload: Record<string, any> = {
+          userId,
+          habitId: log.habitId,
+          date: log.date,
+          status: log.status,
+          updatedAt: serverTimestamp(),
+        };
+        if (log.progressValue !== undefined) logPayload.progressValue = Number(log.progressValue) || 0;
+        if (log.note) logPayload.note = log.note;
+        if (log.reflection) logPayload.reflection = log.reflection;
+
+        if (!snap.exists()) {
+          logPayload.createdAt = serverTimestamp();
+          await setDoc(targetDocRef, logPayload);
+        } else {
+          await updateDoc(targetDocRef, logPayload);
+        }
+        syncedLogs++;
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `habit_logs/${targetDocId}`);
+      }
     }
   }
+  if (syncedLogs > 0) saveLocalLogs([]);
   
   // After sync, save back with updated userIds
   saveLocalHabits(localHabits);
   saveLocalLogs(localLogs);
+};
+
+export const subscribeToHabits = (
+  userId: string | undefined,
+  callback: (habits: Habit[]) => void
+): (() => void) => {
+  if (!userId || userId === 'local' || userId === 'default') {
+    callback(readLocalHabits());
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, 'habits'),
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc')
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const habits = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          userId: data.userId,
+          name: data.name,
+          category: data.category,
+          icon: data.icon,
+          color: data.color,
+          frequencyType: data.frequencyType,
+          frequencyValue: data.frequencyValue || [],
+          targetType: data.targetType,
+          targetValue: data.targetValue,
+          targetUnit: data.targetUnit,
+          reminderTime: data.reminderTime,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
+        } as Habit;
+      });
+
+      if (habits.length > 0) {
+        saveLocalHabits(habits);
+        callback(habits);
+      } else {
+        callback(readLocalHabits());
+      }
+    },
+    (err) => {
+      console.warn('subscribeToHabits fallback to local:', err);
+      callback(readLocalHabits());
+    }
+  );
+};
+
+export const subscribeToHabitLogs = (
+  userId: string | undefined,
+  callback: (logs: HabitLog[]) => void
+): (() => void) => {
+  if (!userId || userId === 'local' || userId === 'default') {
+    callback(readLocalLogs());
+    return () => {};
+  }
+
+  const q = query(collection(db, 'habit_logs'), where('userId', '==', userId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const logs = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          userId: data.userId,
+          habitId: data.habitId,
+          date: data.date,
+          status: data.status,
+          progressValue: data.progressValue,
+          note: data.note,
+          reflection: data.reflection,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
+        } as HabitLog;
+      });
+
+      if (logs.length > 0) {
+        saveLocalLogs(logs);
+        callback(logs);
+      } else {
+        callback(readLocalLogs());
+      }
+    },
+    (err) => {
+      console.warn('subscribeToHabitLogs fallback to local:', err);
+      callback(readLocalLogs());
+    }
+  );
 };

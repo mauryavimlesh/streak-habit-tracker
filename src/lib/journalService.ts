@@ -3,13 +3,18 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
+  getDoc,
   updateDoc,
   deleteDoc,
   getDocs,
   query,
   where,
   serverTimestamp,
+  onSnapshot,
 } from 'firebase/firestore';
+import { trackJournalCreated } from './analyticsService';
+import { handleFirestoreError, OperationType } from './firestoreErrors';
 
 export type JournalMood = 'great' | 'good' | 'neutral' | 'tired' | 'stressed';
 
@@ -162,9 +167,11 @@ export async function createJournalEntry(
       saveLocalJournal(updatedLocal);
     } catch (err) {
       console.warn('Could not sync journal entry to Firestore:', err);
+      handleFirestoreError(err, OperationType.CREATE, 'journal_logs');
     }
   }
 
+  trackJournalCreated(newEntry.mood);
   return newEntry;
 }
 
@@ -194,6 +201,7 @@ export async function updateJournalEntry(
       });
     } catch (err) {
       console.warn('Could not sync journal update to Firestore:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `journal_logs/${entryId}`);
     }
   }
 
@@ -210,8 +218,101 @@ export async function deleteJournalEntry(entryId: string, userId?: string): Prom
       await deleteDoc(doc(db, 'journal_logs', entryId));
     } catch (err) {
       console.warn('Could not delete journal in Firestore:', err);
+      handleFirestoreError(err, OperationType.DELETE, `journal_logs/${entryId}`);
     }
   }
 
   return true;
+}
+
+
+export const syncLocalJournalToCloud = async (userId: string) => {
+  if (!userId || userId === 'local' || userId === 'default') return;
+  const localJournal = readLocalJournal();
+  let syncCount = 0;
+  for (const entry of localJournal) {
+    if (!entry.userId || entry.userId === 'local' || entry.userId !== userId) {
+      entry.userId = userId;
+      const targetDocId = entry.id || 'journal_' + Date.now();
+      const targetDocRef = doc(db, 'journal_logs', targetDocId);
+      try {
+        const snap = await getDoc(targetDocRef);
+        const journalPayload: Record<string, any> = {
+          userId,
+          date: entry.date,
+          text: entry.text || '',
+          updatedAt: serverTimestamp(),
+        };
+        if (entry.time) journalPayload.time = entry.time;
+        if (entry.mood) journalPayload.mood = entry.mood;
+        if (entry.title) journalPayload.title = entry.title;
+        if (entry.prompt) journalPayload.prompt = entry.prompt;
+        if (Array.isArray(entry.tags)) journalPayload.tags = entry.tags;
+        if (Array.isArray(entry.images)) journalPayload.images = entry.images;
+        if (Array.isArray(entry.linkedHabitIds)) journalPayload.linkedHabitIds = entry.linkedHabitIds;
+        if (Array.isArray(entry.linkedGoalIds)) journalPayload.linkedGoalIds = entry.linkedGoalIds;
+
+        if (!snap.exists()) {
+          journalPayload.createdAt = serverTimestamp();
+          await setDoc(targetDocRef, journalPayload);
+        } else {
+          await updateDoc(targetDocRef, journalPayload);
+        }
+        syncCount++;
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `journal_logs/${targetDocId}`);
+      }
+    }
+  }
+  if (syncCount > 0) {
+    saveLocalJournal([]); // clear local after migration
+  }
+};
+
+export function subscribeToJournal(
+  userId: string | undefined,
+  callback: (entries: JournalEntry[]) => void
+): () => void {
+  if (!userId || userId === 'local' || userId === 'default') {
+    callback(readLocalJournal());
+    return () => {};
+  }
+
+  const q = query(collection(db, 'journal_logs'), where('userId', '==', userId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const firestoreEntries: JournalEntry[] = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          userId: data.userId,
+          date: data.date,
+          time: data.time || '8:00 PM',
+          mood: (data.mood as JournalMood) || 'good',
+          title: data.title,
+          text: data.text || '',
+          tags: data.tags || [],
+          images: data.images || [],
+          linkedHabitIds: data.linkedHabitIds || [],
+          linkedGoalIds: data.linkedGoalIds || [],
+          prompt: data.prompt,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
+        };
+      });
+
+      if (firestoreEntries.length > 0) {
+        const sorted = firestoreEntries.sort((a, b) => b.date.localeCompare(a.date));
+        saveLocalJournal(sorted);
+        callback(sorted);
+      } else {
+        callback(readLocalJournal());
+      }
+    },
+    (err) => {
+      console.warn('subscribeToJournal error fallback to local:', err);
+      callback(readLocalJournal());
+    }
+  );
 }

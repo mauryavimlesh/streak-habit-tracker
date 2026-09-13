@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -16,8 +16,12 @@ import {
   X,
   LogOut,
   LogIn,
+  ShieldCheck,
+  CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
+import { hasGuestDataToMigrate } from '../../lib/guestMigrationService';
 import {
   AppSettings,
   readAppSettings,
@@ -31,13 +35,26 @@ import DeveloperFooter from '../../components/layout/DeveloperFooter';
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { user, profile, updateProfile, signOut } = useAuth();
+  const { user, profile, updateProfile, signOut, isGuest, resetGuestSession, migrateGuestData } = useAuth();
 
   const [settings, setSettings] = useState<AppSettings>(readAppSettings());
-  const [displayName, setDisplayName] = useState(profile?.displayName || profile?.name || 'Vimlesh');
+  const [displayName, setDisplayName] = useState(profile?.displayName || profile?.name || 'Guest Explorer');
   const [isEditingName, setIsEditingName] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationStatus, setMigrationStatus] = useState<string | null>(() => {
+    return sessionStorage.getItem('streak_guest_migrated') === 'true'
+      ? 'Guest data migrated to Firestore'
+      : null;
+  });
+  const [hasPendingGuestData, setHasPendingGuestData] = useState(() => hasGuestDataToMigrate());
+
+  useEffect(() => {
+    if (profile?.displayName || profile?.name) {
+      setDisplayName(profile.displayName || profile.name);
+    }
+  }, [profile]);
 
   const handleUpdateSetting = (updates: Partial<AppSettings>) => {
     const updated = { ...settings, ...updates };
@@ -120,23 +137,35 @@ export default function Settings() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white">{profile?.displayName || profile?.name || 'Vimlesh'}</h3>
+                    <h3 className="text-sm font-bold text-white">{profile?.displayName || profile?.name || 'Guest Explorer'}</h3>
+                    {isGuest && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-accent-primary/15 text-accent-primary border border-accent-primary/30">
+                        Guest
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => setIsEditProfileOpen(true)}
-                      className="text-[10px] text-accent-primary hover:underline cursor-pointer"
+                      className="text-[10px] text-accent-primary hover:underline cursor-pointer ml-1"
                     >
-                      Edit Profile
+                      Edit
                     </button>
                   </div>
                 )}
-                <p className="text-xs text-[#7d8495]">
-                  {user ? user.email : 'Local profile (Signed out)'}
+                <p className="text-xs text-[#7d8495] flex items-center gap-1.5 mt-0.5">
+                  {isGuest ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
+                      <span>Guest mode (saved in streak_guest_data)</span>
+                    </>
+                  ) : (
+                    user?.email || 'Logged in'
+                  )}
                 </p>
               </div>
             </div>
 
-            {user ? (
+            {user && !user.isAnonymous ? (
               <button
                 type="button"
                 onClick={signOut}
@@ -149,13 +178,79 @@ export default function Settings() {
               <button
                 type="button"
                 onClick={() => navigate('/login')}
-                className="px-3 py-1.5 rounded-xl bg-accent-primary/15 hover:bg-accent-primary/25 text-xs font-semibold text-accent-primary border border-accent-primary/30 transition-colors cursor-pointer flex items-center gap-1"
+                className="px-3 py-1.5 rounded-xl bg-accent-primary hover:bg-[#9eff38] text-xs font-semibold text-black transition-colors cursor-pointer flex items-center gap-1 shadow-[0_0_15px_rgba(140,238,40,0.25)]"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span>Sign In</span>
               </button>
             )}
           </div>
+
+          {isGuest && (
+            <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+              <div className="flex items-start gap-2.5 p-2.5 rounded-2xl bg-accent-primary/5 border border-accent-primary/15 text-[11px] text-[#a3b1cc]">
+                <ShieldCheck className="w-4 h-4 text-accent-primary shrink-0 mt-0.5" />
+                <span>
+                  Your guest streaks, habits, and tasks are safely stored locally in <code className="text-white font-mono text-[10px]">streak_guest_data</code>. When you sign in, everything will be migrated to Firestore and cleared locally only after confirmed database write.
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-1">
+                <span className="text-[#7d8495]">Want a fresh guest profile?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newGuest = resetGuestSession();
+                    setDisplayName(newGuest.displayName);
+                  }}
+                  className="text-white/70 hover:text-white underline text-[11px] cursor-pointer"
+                >
+                  Reset Guest Session
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isGuest && hasPendingGuestData && (
+            <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+              <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-amber-200 text-[11px]">Unmigrated guest data found in browser</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={isMigrating}
+                  onClick={async () => {
+                    setIsMigrating(true);
+                    try {
+                      const res = await migrateGuestData();
+                      if (res?.success) {
+                        setMigrationStatus('Successfully migrated guest data to Firestore');
+                        setHasPendingGuestData(false);
+                      } else {
+                        setMigrationStatus(res?.error || 'Migration failed');
+                      }
+                    } catch (e: any) {
+                      setMigrationStatus(e?.message || 'Error migrating data');
+                    } finally {
+                      setIsMigrating(false);
+                    }
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-semibold text-[10px] flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw className={cn("w-3 h-3", isMigrating && "animate-spin")} />
+                  <span>{isMigrating ? 'Migrating...' : 'Migrate Now'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isGuest && migrationStatus && (
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-accent-primary bg-accent-primary/10 border border-accent-primary/20 px-3 py-1.5 rounded-xl">
+              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+              <span>{migrationStatus}</span>
+            </div>
+          )}
         </div>
 
         {/* General Preferences */}

@@ -6,10 +6,15 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
+  getDoc,
   query,
   where,
   serverTimestamp,
+  onSnapshot,
+  setDoc,
 } from 'firebase/firestore';
+import { trackGoalCreated, trackGoalCompleted } from './analyticsService';
+import { handleFirestoreError, OperationType } from './firestoreErrors';
 
 export interface Milestone {
   id: string;
@@ -88,14 +93,37 @@ const DEFAULT_GOALS: Goal[] = [
   },
 ];
 
+const GUEST_DATA_KEY = 'streak_guest_data';
+
+function updateGuestGoalsNamespace(goals: Goal[]) {
+  try {
+    const raw = localStorage.getItem(GUEST_DATA_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      parsed.goals = goals;
+      parsed.updatedAt = new Date().toISOString();
+      localStorage.setItem(GUEST_DATA_KEY, JSON.stringify(parsed));
+    }
+  } catch {
+    // Ignore
+  }
+}
+
 export function readLocalGoals(): Goal[] {
   try {
     const raw = localStorage.getItem(LOCAL_GOALS_KEY);
-    if (!raw) {
-      saveLocalGoals(DEFAULT_GOALS);
-      return DEFAULT_GOALS;
+    if (raw) return JSON.parse(raw);
+
+    const guestRaw = localStorage.getItem(GUEST_DATA_KEY);
+    if (guestRaw) {
+      const parsed = JSON.parse(guestRaw);
+      if (Array.isArray(parsed.goals) && parsed.goals.length > 0) {
+        return parsed.goals;
+      }
     }
-    return JSON.parse(raw);
+
+    saveLocalGoals(DEFAULT_GOALS);
+    return DEFAULT_GOALS;
   } catch {
     return DEFAULT_GOALS;
   }
@@ -104,6 +132,7 @@ export function readLocalGoals(): Goal[] {
 export function saveLocalGoals(goals: Goal[]): void {
   try {
     localStorage.setItem(LOCAL_GOALS_KEY, JSON.stringify(goals));
+    updateGuestGoalsNamespace(goals);
   } catch {
     // Ignore storage issues
   }
@@ -198,9 +227,11 @@ export async function createGoal(
       saveLocalGoals(updatedLocal);
     } catch (err) {
       console.warn('Could not sync goal to Firestore:', err);
+      handleFirestoreError(err, OperationType.CREATE, 'goals');
     }
   }
 
+  trackGoalCreated(newGoal.category);
   return newGoal;
 }
 
@@ -222,6 +253,10 @@ export async function updateGoal(
   local[index] = updated;
   saveLocalGoals(local);
 
+  if (updates.status === 'completed') {
+    trackGoalCompleted(updated.category);
+  }
+
   if (userId && !goalId.startsWith('goal-seed_') && !goalId.startsWith('goal_')) {
     try {
       await updateDoc(doc(db, 'goals', goalId), {
@@ -230,6 +265,7 @@ export async function updateGoal(
       });
     } catch (err) {
       console.warn('Could not sync goal update to Firestore:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `goals/${goalId}`);
     }
   }
 
@@ -246,8 +282,96 @@ export async function deleteGoal(goalId: string, userId?: string): Promise<boole
       await deleteDoc(doc(db, 'goals', goalId));
     } catch (err) {
       console.warn('Could not delete goal in Firestore:', err);
+      handleFirestoreError(err, OperationType.DELETE, `goals/${goalId}`);
     }
   }
 
   return true;
+}
+
+export function subscribeToGoals(
+  userId: string | undefined,
+  callback: (goals: Goal[]) => void
+): () => void {
+  if (!userId || userId === 'local' || userId === 'default') {
+    callback(readLocalGoals());
+    return () => {};
+  }
+
+  const q = query(collection(db, 'goals'), where('userId', '==', userId));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const firestoreGoals = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          userId: data.userId,
+          title: data.title,
+          description: data.description,
+          category: data.category,
+          target: data.target,
+          currentProgress: data.currentProgress,
+          unit: data.unit,
+          targetDate: data.targetDate,
+          priority: data.priority,
+          milestones: data.milestones,
+          linkedHabitIds: data.linkedHabitIds,
+          status: data.status,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
+        } as Goal;
+      });
+
+      if (firestoreGoals.length > 0) {
+        saveLocalGoals(firestoreGoals);
+        callback(firestoreGoals);
+      } else {
+        callback(readLocalGoals());
+      }
+    },
+    (err) => {
+      console.warn('subscribeToGoals error fallback to local:', err);
+      callback(readLocalGoals());
+    }
+  );
+}
+
+export async function syncLocalGoalsToCloud(userId: string) {
+  if (!userId || userId === 'local' || userId === 'default') return;
+  const localGoals = readLocalGoals();
+  for (const goal of localGoals) {
+    if (!goal.userId || goal.userId === 'local' || goal.userId !== userId) {
+      goal.userId = userId;
+      const targetDocId = goal.id || 'goal_' + Date.now();
+      const targetDocRef = doc(db, 'goals', targetDocId);
+      try {
+        const snap = await getDoc(targetDocRef);
+        const goalPayload: Record<string, any> = {
+          userId,
+          title: goal.title || 'Goal',
+          updatedAt: serverTimestamp(),
+        };
+        if (goal.description) goalPayload.description = goal.description;
+        if (goal.category) goalPayload.category = goal.category;
+        if (goal.target !== undefined) goalPayload.target = Number(goal.target) || 0;
+        if (goal.currentProgress !== undefined) goalPayload.currentProgress = Number(goal.currentProgress) || 0;
+        if (goal.unit) goalPayload.unit = goal.unit;
+        if (goal.targetDate) goalPayload.targetDate = goal.targetDate;
+        if (goal.priority) goalPayload.priority = goal.priority;
+        if (goal.status) goalPayload.status = goal.status;
+        if (Array.isArray(goal.milestones)) goalPayload.milestones = goal.milestones;
+        if (Array.isArray(goal.linkedHabitIds)) goalPayload.linkedHabitIds = goal.linkedHabitIds;
+
+        if (!snap.exists()) {
+          goalPayload.createdAt = serverTimestamp();
+          await setDoc(targetDocRef, goalPayload);
+        } else {
+          await updateDoc(targetDocRef, goalPayload);
+        }
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `goals/${targetDocId}`);
+      }
+    }
+  }
 }

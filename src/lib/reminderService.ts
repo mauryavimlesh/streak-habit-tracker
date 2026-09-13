@@ -5,12 +5,17 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc, 
-  getDocs, 
+  getDocs,
+  getDoc, 
   query, 
   where, 
   orderBy, 
-  serverTimestamp 
+  serverTimestamp,
+  onSnapshot,
+  setDoc,
 } from 'firebase/firestore';
+import { trackReminderCreated, trackReminderTriggered } from './analyticsService';
+import { handleFirestoreError, OperationType } from './firestoreErrors';
 
 export type ReminderRepeat = 'once' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'custom' | 'monthly';
 export type ReminderCategory = 'habit' | 'task' | 'general' | 'morning' | 'night';
@@ -188,6 +193,7 @@ export async function createReminder(
       newId = docRef.id;
     } catch (err) {
       console.error('Failed to sync reminder creation:', err);
+      handleFirestoreError(err, OperationType.CREATE, 'reminders');
     }
   }
 
@@ -200,6 +206,7 @@ export async function createReminder(
   
   list.unshift(newReminder);
   saveLocalReminders(list);
+  trackReminderCreated(item.category, item.repeat);
   return newReminder;
 }
 
@@ -218,6 +225,7 @@ export async function updateReminder(
       await updateDoc(ref, updates);
     } catch (err) {
       console.error('Failed to sync reminder update:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `reminders/${id}`);
     }
   }
   return updated;
@@ -233,6 +241,7 @@ export async function deleteReminder(id: string, userId?: string): Promise<Remin
       await deleteDoc(doc(db, 'reminders', id));
     } catch (err) {
       console.error('Failed to sync reminder deletion:', err);
+      handleFirestoreError(err, OperationType.DELETE, `reminders/${id}`);
     }
   }
   return updated;
@@ -276,10 +285,88 @@ export async function sendSystemNotification(
         icon: '/favicon.ico',
         ...options,
       });
+      trackReminderTriggered();
       return true;
     } catch {
       return false;
     }
   }
   return false;
+}
+
+export function subscribeToReminders(
+  userId: string | undefined,
+  callback: (reminders: ReminderItem[]) => void
+): () => void {
+  if (!userId || userId === 'local' || userId === 'default') {
+    callback(readLocalReminders());
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, 'reminders'),
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc')
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const reminders = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as ReminderItem[];
+
+      if (reminders.length > 0) {
+        saveLocalReminders(reminders);
+        callback(reminders);
+      } else {
+        callback(readLocalReminders());
+      }
+    },
+    (err) => {
+      console.warn('subscribeToReminders error fallback to local:', err);
+      callback(readLocalReminders());
+    }
+  );
+}
+
+export async function syncLocalRemindersToCloud(userId: string) {
+  if (!userId || userId === 'local' || userId === 'default') return;
+  const localReminders = readLocalReminders();
+  for (const reminder of localReminders) {
+    if (!reminder.userId || reminder.userId === 'local' || reminder.userId !== userId) {
+      reminder.userId = userId;
+      const targetDocId = reminder.id || 'rem_' + Date.now();
+      const targetDocRef = doc(db, 'reminders', targetDocId);
+      try {
+        const snap = await getDoc(targetDocRef);
+        const reminderPayload: Record<string, any> = {
+          userId,
+          title: reminder.title,
+          time: reminder.time,
+          repeat: reminder.repeat,
+          enabled: Boolean(reminder.enabled),
+          notificationEnabled: Boolean(reminder.notificationEnabled),
+          category: reminder.category || 'General',
+          updatedAt: serverTimestamp(),
+        };
+        if (reminder.description) reminderPayload.description = reminder.description;
+        if (reminder.date) reminderPayload.date = reminder.date;
+        if (Array.isArray(reminder.days)) reminderPayload.days = reminder.days;
+        if (reminder.linkedHabitId) reminderPayload.linkedHabitId = reminder.linkedHabitId;
+        if (reminder.linkedEntityName) reminderPayload.linkedEntityName = reminder.linkedEntityName;
+        if (reminder.lastTriggeredAt) reminderPayload.lastTriggeredAt = reminder.lastTriggeredAt;
+
+        if (!snap.exists()) {
+          reminderPayload.createdAt = serverTimestamp();
+          await setDoc(targetDocRef, reminderPayload);
+        } else {
+          await updateDoc(targetDocRef, reminderPayload);
+        }
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `reminders/${targetDocId}`);
+      }
+    }
+  }
 }

@@ -31,18 +31,17 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   onClose,
   onSuccessToast,
 }) => {
-  const { user, profile, updateProfile, removeProfilePhoto } = useAuth();
+  const { user, profile, updateProfile, removeProfilePhoto, isGuest } = useAuth();
   const navigate = useNavigate();
 
   // Profile fields state
-  const initialName = profile?.userName || profile?.name || profile?.displayName || 'Vimlesh';
+  const initialName = profile?.displayName || profile?.userName || profile?.name || 'Guest Explorer';
   const [name, setName] = useState(initialName);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(profile?.avatarUrl || null);
   
   // UI states
   const [showPhotoOptions, setShowPhotoOptions] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
-  const [showAuthGateModal, setShowAuthGateModal] = useState(false);
   const [cropperRawImage, setCropperRawImage] = useState<string | null>(null);
   const [isCropperOpen, setIsCropperOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -54,11 +53,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setName(profile?.userName || profile?.name || profile?.displayName || 'Vimlesh');
+      setName(profile?.displayName || profile?.userName || profile?.name || 'Guest Explorer');
       setAvatarPreview(profile?.avatarUrl || null);
       setShowPhotoOptions(false);
       setShowRemoveConfirm(false);
-      setShowAuthGateModal(false);
       setStatusMessage(null);
     }
   }, [isOpen, profile]);
@@ -69,13 +67,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     if (!file) return;
 
     try {
-      // If user is guest, check auth requirement
-      if (!user) {
-        setShowAuthGateModal(true);
-        e.target.value = '';
-        return;
-      }
-
       const dataUrl = await readFileAsDataUrl(file);
       setCropperRawImage(dataUrl);
       setIsCropperOpen(true);
@@ -137,12 +128,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       return;
     }
 
-    if (!user) {
-      // Show auth requirement prompt
-      setShowAuthGateModal(true);
-      return;
-    }
-
     setIsSaving(true);
     triggerHaptic('completion');
     try {
@@ -169,7 +154,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     <>
       <AnimatePresence>
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md">
-          {/* Modal / Bottom Sheet */}
           <motion.div
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
@@ -183,7 +167,14 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-4 pb-3 border-b border-white/5">
               <div>
-                <h2 className="text-lg font-bold text-white tracking-tight">Edit Profile</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-white tracking-tight">Edit Profile</h2>
+                  {isGuest && (
+                    <span className="px-2 py-0.5 rounded-full bg-accent-primary/10 border border-accent-primary/20 text-[10px] font-semibold text-accent-primary">
+                      Guest
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-[#7d8495]">Manage your personal identity & photo</p>
               </div>
               <button
@@ -194,6 +185,28 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Guest session banner */}
+            {isGuest && (
+              <div className="mx-6 mt-4 p-3 rounded-2xl bg-accent-primary/10 border border-accent-primary/20 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 text-white">
+                  <span className="w-2 h-2 rounded-full bg-accent-primary animate-pulse" />
+                  <span className="font-semibold text-accent-primary">Guest Session</span>
+                  <span className="text-[#7d8495] hidden xs:inline">· Saved locally</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigate('/login');
+                  }}
+                  className="text-accent-primary hover:underline font-semibold text-[11px] flex items-center gap-1"
+                >
+                  <LogIn className="w-3 h-3" />
+                  <span>Sign In / Sync</span>
+                </button>
+              </div>
+            )}
 
             {/* Scrollable Body */}
             <div className="p-6 overflow-y-auto space-y-6">
@@ -307,15 +320,15 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 <div className="flex items-center justify-between pt-1">
                   <div>
                     <p className="text-sm font-medium text-white">
-                      {user?.email || 'No cloud account connected'}
+                      {user && !user.isAnonymous ? user.email : 'Guest Session'}
                     </p>
                     <p className="text-xs text-[#7d8495]">
-                      {user
+                      {user && !user.isAnonymous
                         ? 'Profile photos & streaks sync securely with Firebase'
-                        : 'Connect an account to preserve your profile permanently'}
+                        : 'Saved locally in streak_guest_data · Connect account anytime'}
                     </p>
                   </div>
-                  {!user && (
+                  {(!user || user.isAnonymous) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -492,67 +505,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-colors cursor-pointer shadow-md"
                 >
                   Remove
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Auth Gate Modal for Guest users */}
-      <AnimatePresence>
-        {showAuthGateModal && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.94 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.94 }}
-              className="w-full max-w-sm bg-[#181b23] border border-[#2e3547] rounded-3xl p-6 text-center space-y-4 shadow-2xl"
-            >
-              <div className="w-14 h-14 rounded-2xl bg-accent-primary/15 border border-accent-primary/30 text-accent-primary mx-auto flex items-center justify-center">
-                <LogIn className="w-7 h-7" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">
-                  Log in or Create an Account
-                </h3>
-                <p className="text-xs text-[#7d8495] mt-2 leading-relaxed">
-                  Log in or Create an Account to save your profile photo and sync your consistency streak across all devices.
-                </p>
-              </div>
-
-              <div className="space-y-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAuthGateModal(false);
-                    onClose();
-                    navigate('/login');
-                  }}
-                  className="w-full py-3 rounded-2xl bg-accent-primary hover:bg-[#9eff38] text-black font-semibold text-sm transition-all cursor-pointer shadow-[0_0_20px_rgba(140,238,40,0.3)] flex items-center justify-center gap-2"
-                >
-                  <LogIn className="w-4 h-4" />
-                  <span>Log in / Sign Up</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Allow local preview for guest
-                    setShowAuthGateModal(false);
-                    galleryInputRef.current?.click();
-                  }}
-                  className="w-full py-2.5 rounded-2xl bg-white/5 hover:bg-white/10 text-xs font-medium text-white/80 hover:text-white transition-colors cursor-pointer"
-                >
-                  Continue with Local Photo (Guest Mode)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowAuthGateModal(false)}
-                  className="w-full py-2 text-xs text-[#7d8495] hover:text-white cursor-pointer"
-                >
-                  Cancel
                 </button>
               </div>
             </motion.div>

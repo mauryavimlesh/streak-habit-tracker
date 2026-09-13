@@ -55,7 +55,6 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, profile, onboardingCompleted, loading } = useAuth();
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -64,7 +63,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-
+  if (!user && !profile?.isGuest) {
+    return <Navigate to="/login" replace />;
+  }
 
   const isCompleted = Boolean(
     onboardingCompleted ||

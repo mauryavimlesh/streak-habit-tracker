@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, linkWithPopup, linkWithCredential, EmailAuthProvider } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
-import { Navigate } from 'react-router';
+import { Navigate, useNavigate } from 'react-router';
 import { useAuth } from '../../lib/AuthContext';
 import { motion } from 'motion/react';
 
 export default function Login() {
+  const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const { user, continueAsGuest } = useAuth();
 
   if (user && !user.isAnonymous) {
     return <Navigate to="/" replace />;
@@ -61,7 +62,12 @@ export default function Login() {
     }
   };
 
-    const handleGoogleSignIn = async () => {
+    const handleGuestSignIn = () => {
+    continueAsGuest();
+    navigate('/');
+  };
+
+  const handleGoogleSignIn = async () => {
       setError('');
       setLoading(true);
       try {
@@ -144,6 +150,16 @@ export default function Login() {
                 <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
               </svg>
               Continue with Google
+            </button>
+            
+            <button 
+              type="button"
+              onClick={handleGuestSignIn}
+              disabled={loading}
+              className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-text-primary font-medium rounded-xl py-3 flex flex-col items-center justify-center transition-colors disabled:opacity-50 mt-4 cursor-pointer"
+            >
+              <span className="font-semibold text-white">Continue as Guest</span>
+              <span className="text-[11px] text-[#7d8495]">Explore without an account · Stored locally</span>
             </button>
             
             <div className="flex items-center gap-4 py-2 text-text-secondary text-sm">

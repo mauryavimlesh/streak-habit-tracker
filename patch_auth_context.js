@@ -1,14 +1,32 @@
 import fs from 'fs';
 let code = fs.readFileSync('src/lib/AuthContext.tsx', 'utf8');
 
-code = code.replace(
-  "import { User, onAuthStateChanged, signOut } from 'firebase/auth';",
-  "import { User, onAuthStateChanged, signOut, signInAnonymously } from 'firebase/auth';"
-);
+// Remove anonymous sign in completely
+const searchAnon = `      if (!currentUser && !isSigningIn) {
+        isSigningIn = true;
+        try {
+          await signInAnonymously(auth);
+          return;
+        } catch (e) {
+          console.error("Anonymous sign in failed:", e);
+          // Fall back to local mode immediately
+          setUser(null);
+          const localProfile = getStoredLocalProfile();
+          setProfile(localProfile);
+          setLoading(false);
+          isSigningIn = false;
+          return;
+        }
+      }`;
 
-const searchStr = `    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {`;
-const replaceStr = `    let isSigningIn = false;\n    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {\n      if (!currentUser && !isSigningIn) {\n        isSigningIn = true;\n        try {\n          await signInAnonymously(auth);\n        } catch (e) {\n          console.error("Anonymous sign in failed:", e);\n          setLoading(false);\n        }\n        return;\n      }\n      isSigningIn = false;`;
-
-code = code.replace(searchStr, replaceStr);
+const replaceAnon = `      if (!currentUser && !isSigningIn) {
+        // Unauthenticated visitor (could be Guest or new user)
+        setUser(null);
+        const localProfile = getStoredLocalProfile();
+        setProfile(localProfile);
+        setLoading(false);
+        return;
+      }`;
+code = code.replace(searchAnon, replaceAnon);
 
 fs.writeFileSync('src/lib/AuthContext.tsx', code);

@@ -57,11 +57,11 @@ const DEFAULT_HABITS: Habit[] = [
 ];
 
 export default function Home() {
-  const { profile, user } = useAuth();
+  const { profile, user, isGuest } = useAuth();
   const navigate = useNavigate();
 
-  // Prefer user's real name, falling back to Vimlesh (from user's email / screenshot)
-  const userName = profile?.name?.split(' ')[0] || profile?.userName?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Vimlesh';
+  // Prefer user's real or guest name
+  const userName = profile?.displayName?.split(' ')[0] || profile?.userName?.split(' ')[0] || profile?.name?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Guest';
   const userInitial = userName.charAt(0).toUpperCase();
 
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -235,34 +235,34 @@ export default function Home() {
       newStatus = 'missed';
     }
 
-    if (user) {
-      try {
-        await logHabit({
-          userId: user.uid,
-          habitId: habitId,
-          date: todayStr,
-          status: newStatus,
-          progressValue: nextVal,
-        });
-      } catch (err) {
-        console.error('Failed to log habit:', err);
-      }
+    try {
+      await logHabit({
+        userId: user?.uid || 'guest',
+        habitId: habitId,
+        date: todayStr,
+        status: newStatus,
+        progressValue: nextVal,
+      });
+    } catch (err) {
+      console.error('Failed to log habit:', err);
     }
   };
 
   const saveNote = async (habit: Habit, note: string) => {
-    if (!user) return;
     const current = localProgress[habit.id!] ?? 0;
     const target = habit.targetValue || 1;
     try {
       await logHabit({
-        userId: user.uid,
+        userId: user?.uid || 'guest',
         habitId: habit.id!,
         date: todayStr,
         status: current >= target ? 'completed' : 'missed',
         progressValue: current,
         note: note
       });
+      setHabitNotes((prev) => ({ ...prev, [habit.id!]: note }));
+      setSyncToastMessage('Note saved!');
+      setTimeout(() => setSyncToastMessage(null), 2200);
     } catch (err) {
       console.error('Failed to save note:', err);
     }
@@ -315,29 +315,27 @@ export default function Home() {
       }
     }
 
-    if (user) {
-      try {
-        const status = nextVal >= target ? 'completed' : 'missed';
-        await logHabit({
-          userId: user.uid,
-          habitId: habitId,
-          date: todayStr,
-          status,
-          progressValue: nextVal,
-          note: habitNotes[habitId] || undefined,
-        });
-        setLogs(prev => {
-          const idx = prev.findIndex(l => l.habitId === habitId && l.date === todayStr);
-          if (idx !== -1) {
-            const copy = [...prev];
-            copy[idx] = { ...copy[idx], status, progressValue: nextVal };
-            return copy;
-          }
-          return [...prev, { habitId, date: todayStr, status, progressValue: nextVal } as any];
-        });
-      } catch (err) {
-        console.error('Failed to log habit:', err);
-      }
+    try {
+      const status = nextVal >= target ? 'completed' : 'missed';
+      await logHabit({
+        userId: user?.uid || 'guest',
+        habitId: habitId,
+        date: todayStr,
+        status,
+        progressValue: nextVal,
+        note: habitNotes[habitId] || undefined,
+      });
+      setLogs(prev => {
+        const idx = prev.findIndex(l => l.habitId === habitId && l.date === todayStr);
+        if (idx !== -1) {
+          const copy = [...prev];
+          copy[idx] = { ...copy[idx], status, progressValue: nextVal };
+          return copy;
+        }
+        return [...prev, { habitId, date: todayStr, status, progressValue: nextVal } as any];
+      });
+    } catch (err) {
+      console.error('Failed to log habit:', err);
     }
   };
 
@@ -475,9 +473,17 @@ export default function Home() {
       {/* Header */}
       <header className="flex items-start justify-between pt-3">
         <div>
-          <p className="text-[14px] font-medium text-[#7d8495] tracking-tight mb-1">
-            {formattedDate}
-          </p>
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-[14px] font-medium text-[#7d8495] tracking-tight">
+              {formattedDate}
+            </p>
+            {isGuest && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-primary/10 border border-accent-primary/20 text-[10px] font-semibold text-accent-primary">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
+                Guest Session
+              </span>
+            )}
+          </div>
           <h1 className="text-[34px] leading-[1.12] font-bold text-white tracking-tight">
             {getGreeting()},<br />{userName}
           </h1>

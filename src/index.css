@@ -6,13 +6,13 @@
   
   --color-background: var(--app-bg);
   --color-surface-primary: var(--app-card-bg);
-  --color-surface-secondary: #1a1d25;
+  --color-surface-secondary: var(--app-surface-secondary, #1a1d25);
   --color-surface-card: var(--app-card-bg);
-  --color-surface-border: #1f232c;
+  --color-surface-border: var(--app-surface-border, #1f232c);
   
-  --color-text-primary: #FFFFFF;
-  --color-text-secondary: #7d8495;
-  --color-text-muted: #5c6272;
+  --color-text-primary: var(--app-text-primary, #FFFFFF);
+  --color-text-secondary: var(--app-text-secondary, #7d8495);
+  --color-text-muted: var(--app-text-muted, #5c6272);
   
   --color-accent-primary: var(--app-accent); /* Vibrant Apple Fitness Lime */
   --color-accent-lime: var(--app-accent);
@@ -26,6 +26,8 @@
   body {
     @apply bg-[var(--app-bg)] text-text-primary antialiased selection:bg-accent-primary/30 selection:text-white min-h-screen;
     background-color: var(--app-bg);
+    color: var(--app-text-primary, #FFFFFF);
+    transition: background-color 0.3s ease, color 0.3s ease;
     -webkit-tap-highlight-color: transparent;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }

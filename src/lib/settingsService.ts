@@ -84,7 +84,7 @@ export function exportAllData(): string {
   let feedback = [];
 
   try {
-    const rawProfile = localStorage.getItem('streak_local_profile_v1');
+    const rawProfile = localStorage.getItem('streak_guest_data') || localStorage.getItem('streak_local_profile_v1') || localStorage.getItem('streak_user_profile');
     if (rawProfile) profile = JSON.parse(rawProfile);
   } catch {
     // Ignore
@@ -156,6 +156,7 @@ export function importBackupData(jsonString: string): { success: boolean; error?
 
 export function clearAllLocalData(): void {
   try {
+    localStorage.removeItem('streak_guest_data');
     localStorage.removeItem('streak_habits_v1');
     localStorage.removeItem('streak_habit_logs_v1');
     localStorage.removeItem('streak_tasks_v1');
@@ -165,6 +166,7 @@ export function clearAllLocalData(): void {
     localStorage.removeItem('streak_appearance_v1');
     localStorage.removeItem('streak_app_settings_v1');
     localStorage.removeItem('streak_local_profile_v1');
+    localStorage.removeItem('streak_user_profile');
   } catch {
     // Ignore
   }

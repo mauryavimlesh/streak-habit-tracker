@@ -25,15 +25,11 @@ export default function CreateHabit() {
 
   const handleSave = async () => {
     if (!name.trim()) return;
-    if (!user) {
-      navigate('/login');
-      return;
-    }
     setLoading(true);
     
     try {
       await createHabit({
-        userId: user.uid,
+        userId: user?.uid || 'local',
         name: name.trim(),
         description: description.trim(),
         category: 'general', // Default for now

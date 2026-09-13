@@ -1,4 +1,4 @@
-export type ThemeMode = 'dark' | 'amoled' | 'emerald' | 'midnight';
+export type ThemeMode = 'system' | 'light' | 'dark' | 'amoled' | 'emerald' | 'midnight';
 export type AccentColor = 'lime' | 'cyan' | 'emerald' | 'violet' | 'amber';
 
 export interface AppearanceSettings {
@@ -19,7 +19,24 @@ export const ACCENT_COLOR_MAP: Record<AccentColor, { hex: string; name: string; 
   amber: { hex: '#f59e0b', name: 'Solar Gold', bgClass: 'bg-[#f59e0b]' },
 };
 
-export const THEME_MODE_MAP: Record<ThemeMode, { name: string; bg: string; cardBg: string; desc: string }> = {
+export const THEME_MODE_MAP: Record<ThemeMode, { name: string; bg: string; cardBg: string; desc: string; textPrimary?: string; textSecondary?: string; textMuted?: string; border?: string; surfaceSecondary?: string }> = {
+  system: {
+    name: 'System',
+    bg: '#0d0e12',
+    cardBg: '#13151b',
+    desc: 'Follows your device settings',
+  },
+  light: {
+    name: 'Clean Light',
+    bg: '#f8fafc',
+    cardBg: '#ffffff',
+    desc: 'High contrast light mode',
+    textPrimary: '#0f172a',
+    textSecondary: '#64748b',
+    textMuted: '#94a3b8',
+    border: '#e2e8f0',
+    surfaceSecondary: '#f1f5f9'
+  },
   dark: {
     name: 'Onyx Dark',
     bg: '#0d0e12',
@@ -93,4 +110,13 @@ export function applyAppearanceSettings(settings: AppearanceSettings): void {
   if (accentInfo) {
     root.style.setProperty('--app-accent', accentInfo.hex);
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+    const settings = readAppearanceSettings();
+    if (settings.theme === 'system') {
+      applyAppearanceSettings(settings);
+    }
+  });
 }

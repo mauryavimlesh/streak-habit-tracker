@@ -5,8 +5,19 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { clearAllLocalData } from './settingsService';
 import { saveAppearanceSettings, applyAppearanceSettings } from './themeService';
 import { syncLocalToCloud } from './habitService';
+import { syncLocalTasksToCloud } from './taskService';
+import { syncLocalJournalToCloud } from './journalService';
+import { syncLocalGoalsToCloud } from './goalService';
+import { syncLocalRemindersToCloud } from './reminderService';
+import { trackLogin, trackLogout, trackSignUp } from './analyticsService';
+import {
+  migrateGuestDataToFirestore,
+  hasGuestDataToMigrate,
+  MigrationResult,
+} from './guestMigrationService';
 
 export interface UserProfile {
+  isGuest?: boolean;
   name?: string;
   userName?: string;
   displayName?: string;
@@ -22,10 +33,39 @@ export interface UserProfile {
   updatedAt?: any;
 }
 
+export const STREAK_GUEST_DATA_KEY = 'streak_guest_data';
+
+export interface GuestData {
+  id: string;
+  isGuest: true;
+  displayName: string;
+  name: string;
+  userName: string;
+  avatarUrl?: string;
+  selectedGoals?: string[];
+  mainGoal?: string;
+  routinePreference?: string;
+  appearancePreference?: string;
+  onboardingCompleted?: boolean;
+  hasCompletedOnboarding?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  dataVersion?: number;
+  habits?: any[];
+  habitLogs?: any[];
+  tasks?: any[];
+  goals?: any[];
+  journal?: any[];
+  reminders?: any[];
+  settings?: Record<string, any>;
+}
+
 export interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   userProfile: UserProfile | null;
+  guestData: GuestData | null;
+  isGuest: boolean;
   onboardingCompleted: boolean;
   loading: boolean;
   logout: () => Promise<void>;
@@ -35,12 +75,136 @@ export interface AuthContextType {
   saveUserProfileToFirestore: (data: Partial<UserProfile>) => Promise<void>;
   setOnboardingCompleted: (completed: boolean) => Promise<void>;
   resetOnboarding: () => void;
+  continueAsGuest: (customName?: string) => GuestData;
+  resetGuestSession: () => GuestData;
+  migrateGuestData: () => Promise<MigrationResult | null>;
 }
 
 const LOCAL_STORAGE_PROFILE_KEY = 'streak_user_profile';
 const LOCAL_STORAGE_ONBOARDING_KEY = 'streak_onboarding_completed';
 
+const GUEST_ADJECTIVES = [
+  'Focus', 'Swift', 'Calm', 'Mindful', 'Rising', 'Brave', 
+  'Steady', 'Atomic', 'Zen', 'Bright', 'Nimble', 'Noble',
+  'Radiant', 'True', 'Serene', 'Vibrant'
+];
+
+const GUEST_ARCHETYPES = [
+  'Explorer', 'Pathfinder', 'Voyager', 'Builder', 'Striver', 
+  'Runner', 'Falcon', 'Phoenix', 'Warrior', 'Monk', 
+  'Nomad', 'Seeker', 'Spark', 'Champion', 'Pioneer', 'Ranger'
+];
+
+export const generateRandomGuestName = (): string => {
+  const adj = GUEST_ADJECTIVES[Math.floor(Math.random() * GUEST_ADJECTIVES.length)];
+  const arch = GUEST_ARCHETYPES[Math.floor(Math.random() * GUEST_ARCHETYPES.length)];
+  const num = Math.floor(10 + Math.random() * 89);
+  return `Guest ${adj} ${arch} ${num}`;
+};
+
+export const getStoredGuestData = (): GuestData | null => {
+  try {
+    const raw = localStorage.getItem(STREAK_GUEST_DATA_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          ...parsed,
+          isGuest: true,
+        };
+      }
+    }
+  } catch (e) {
+    console.error('Failed reading streak_guest_data:', e);
+  }
+  return null;
+};
+
+export const createDefaultGuestData = (customName?: string): GuestData => {
+  const displayName = customName || generateRandomGuestName();
+  const now = new Date().toISOString();
+  return {
+    id: `guest_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    isGuest: true,
+    displayName,
+    name: displayName,
+    userName: displayName,
+    avatarUrl: '',
+    selectedGoals: ['fitness', 'discipline'],
+    onboardingCompleted: true,
+    hasCompletedOnboarding: true,
+    createdAt: now,
+    updatedAt: now,
+    dataVersion: 1,
+  };
+};
+
+export const saveGuestData = (data: Partial<GuestData>): GuestData => {
+  try {
+    const current = getStoredGuestData() || createDefaultGuestData();
+    const resolvedName = data.displayName || data.userName || data.name || current.displayName;
+    const isCompleted = data.onboardingCompleted ?? data.hasCompletedOnboarding ?? current.onboardingCompleted ?? current.hasCompletedOnboarding ?? true;
+    const updated: GuestData = {
+      ...current,
+      ...data,
+      isGuest: true,
+      displayName: resolvedName,
+      name: resolvedName,
+      userName: resolvedName,
+      onboardingCompleted: Boolean(isCompleted),
+      hasCompletedOnboarding: Boolean(isCompleted),
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(STREAK_GUEST_DATA_KEY, JSON.stringify(updated));
+    localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(updated));
+    if (updated.onboardingCompleted) {
+      localStorage.setItem(LOCAL_STORAGE_ONBOARDING_KEY, 'true');
+    }
+    return updated;
+  } catch (e) {
+    console.error('Failed writing streak_guest_data:', e);
+    return createDefaultGuestData();
+  }
+};
+
+export const getOrInitGuestData = (): GuestData => {
+  const existing = getStoredGuestData();
+  if (existing) return existing;
+
+  // Fallback to legacy profile if present
+  try {
+    const legacyRaw = localStorage.getItem(LOCAL_STORAGE_PROFILE_KEY);
+    if (legacyRaw) {
+      const parsed = JSON.parse(legacyRaw);
+      const isDone = Boolean(parsed.onboardingCompleted ?? parsed.hasCompletedOnboarding);
+      const name = parsed.displayName || parsed.name || parsed.userName || generateRandomGuestName();
+      const guest: GuestData = {
+        id: `guest_${Date.now()}`,
+        isGuest: true,
+        displayName: name.startsWith('Guest') ? name : `Guest ${name}`,
+        name: name.startsWith('Guest') ? name : `Guest ${name}`,
+        userName: name.startsWith('Guest') ? name : `Guest ${name}`,
+        avatarUrl: parsed.avatarUrl || '',
+        selectedGoals: parsed.selectedGoals || ['fitness', 'discipline'],
+        onboardingCompleted: isDone || true,
+        hasCompletedOnboarding: isDone || true,
+        createdAt: parsed.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      saveGuestData(guest);
+      return guest;
+    }
+  } catch {}
+
+  const newGuest = createDefaultGuestData();
+  saveGuestData(newGuest);
+  return newGuest;
+};
+
 export const getStoredLocalProfile = (): UserProfile | null => {
+  const guest = getStoredGuestData();
+  if (guest) return guest;
+
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_PROFILE_KEY);
     const rawCompleted = localStorage.getItem(LOCAL_STORAGE_ONBOARDING_KEY) === 'true';
@@ -54,23 +218,20 @@ export const getStoredLocalProfile = (): UserProfile | null => {
       };
     }
     if (rawCompleted) {
-      return {
-        name: 'Vimlesh',
-        userName: 'Vimlesh',
-        hasCompletedOnboarding: true,
-        onboardingCompleted: true,
-      };
+      return getOrInitGuestData();
     }
   } catch (e) {
     console.error('Failed reading local profile:', e);
   }
-  return null;
+  return getOrInitGuestData();
 };
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   profile: null,
   userProfile: null,
+  guestData: null,
+  isGuest: true,
   onboardingCompleted: false,
   loading: true,
   logout: async () => {},
@@ -80,12 +241,17 @@ const AuthContext = createContext<AuthContextType>({
   saveUserProfileToFirestore: async () => {},
   setOnboardingCompleted: async () => {},
   resetOnboarding: () => {},
+  continueAsGuest: () => createDefaultGuestData(),
+  resetGuestSession: () => createDefaultGuestData(),
+  migrateGuestData: async () => null,
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(() => getStoredLocalProfile());
+  const [profile, setProfile] = useState<UserProfile | null>(() => getOrInitGuestData());
   const [loading, setLoading] = useState(true);
+
+  const isGuest = Boolean(!user || user.isAnonymous || profile?.isGuest);
 
   // Helper to persist profile fields safely to Firestore matching firestore.rules
   const saveUserProfileToFirestore = async (data: Partial<UserProfile>, targetUid?: string) => {
@@ -131,20 +297,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     let isSigningIn = false;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser && !isSigningIn) {
-        isSigningIn = true;
-        try {
-          await signInAnonymously(auth);
-          return;
-        } catch (e) {
-          console.error("Anonymous sign in failed:", e);
-          // Fall back to local mode immediately
-          setUser(null);
-          const localProfile = getStoredLocalProfile();
-          setProfile(localProfile);
-          setLoading(false);
-          isSigningIn = false;
-          return;
-        }
+        // Unauthenticated visitor (could be Guest or new user)
+        setUser(null);
+        const localProfile = getStoredLocalProfile();
+        setProfile(localProfile);
+        setLoading(false);
+        return;
       }
       isSigningIn = false;
       setUser(currentUser);
@@ -152,6 +310,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (currentUser) {
         try {
+          // If local browser storage contains unmigrated guest data ('streak_guest_data'),
+          // migrate all habits, logs, tasks, goals, and profile to Firestore.
+          // CRITICAL: Local guest data is cleared ONLY after successful confirmed write by Firestore.
+          if (!currentUser.isAnonymous && hasGuestDataToMigrate()) {
+            try {
+              const migrationOutcome = await migrateGuestDataToFirestore(
+                currentUser.uid,
+                currentUser.email || undefined
+              );
+              if (migrationOutcome.success) {
+                console.log('Guest session data successfully migrated to Firestore:', migrationOutcome);
+              } else {
+                console.warn(
+                  'Guest migration could not complete; preserving local guest data safely:',
+                  migrationOutcome.error
+                );
+              }
+            } catch (migErr) {
+              console.error('Migration failed; local guest storage preserved intact:', migErr);
+            }
+          }
+
           const userRef = doc(db, 'users', currentUser.uid);
           const userSnap = await getDoc(userRef);
           
@@ -173,9 +353,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 applyAppearanceSettings(parsedTheme);
               } catch (e) {}
             }
+            // Clear isGuest flag
+            if (localProfile?.isGuest) {
+              delete localProfile.isGuest;
+            }
             const merged: UserProfile = {
               ...localProfile,
               ...fsData,
+              isGuest: false,
               name: resolvedName,
               userName: resolvedName,
               displayName: resolvedName,
@@ -200,8 +385,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               // Ignore local storage error
             }
 
-            // Sync local habits to the cloud
+            // Sync local habits, tasks, journal, goals, and reminders to the cloud
             await syncLocalToCloud(currentUser.uid);
+            await syncLocalTasksToCloud(currentUser.uid);
+            await syncLocalJournalToCloud(currentUser.uid);
+            await syncLocalGoalsToCloud(currentUser.uid);
+            await syncLocalRemindersToCloud(currentUser.uid);
+            trackLogin('auth_state');
+            
+            // Clear local guest identity if migrating
+            if (localProfile?.isGuest) {
+              try {
+                localStorage.removeItem('streak_tasks');
+                localStorage.removeItem('streak_habits');
+                localStorage.removeItem('streak_habit_logs');
+                localStorage.removeItem('streak_journal');
+              } catch (e) {
+                // Ignore
+              }
+            }
             // If local session had onboarding completed or new goals not yet saved in Firestore, backfill Firestore
             if (isCompleted && (!fsData.onboardingCompleted || !fsData.hasCompletedOnboarding)) {
               await saveUserProfileToFirestore({
@@ -219,7 +421,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               localProfile?.onboardingCompleted === true ||
               localProfile?.hasCompletedOnboarding === true
             );
-            const initialName = localProfile?.name || currentUser.displayName || 'Vimlesh';
+            const initialName = (localProfile?.isGuest ? currentUser.displayName : localProfile?.name) || currentUser.displayName || 'Vimlesh';
             const newProfile: any = {
               email: currentUser.email || '',
               name: initialName,
@@ -252,6 +454,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             } catch {
               // Ignore
             }
+
+            // Sync any local / guest entities to the newly created Firestore user account
+            await syncLocalToCloud(currentUser.uid);
+            await syncLocalTasksToCloud(currentUser.uid);
+            await syncLocalJournalToCloud(currentUser.uid);
+            await syncLocalGoalsToCloud(currentUser.uid);
+            await syncLocalRemindersToCloud(currentUser.uid);
+            trackSignUp('user_created');
           }
         } catch (error) {
           console.error("Failed to fetch or create user profile:", error);
@@ -271,20 +481,39 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     try {
+      trackLogout();
       await signOut(auth);
     } catch (e) {
       console.error('Logout error:', e);
     } finally {
       clearAllLocalData();
       setUser(null);
-      setProfile(null);
-      setOnboardingCompleted(false);
+      const newGuest = createDefaultGuestData();
+      saveGuestData(newGuest);
+      setProfile(newGuest);
     }
   };
 
   const updateProfile = async (data: Partial<UserProfile>) => {
     const isCompleted = data.onboardingCompleted ?? data.hasCompletedOnboarding ?? profile?.onboardingCompleted ?? profile?.hasCompletedOnboarding ?? true;
     const nameVal = data.userName || data.name || data.displayName || profile?.userName || profile?.name || profile?.displayName || '';
+
+    // If in guest mode, persist strictly within the streak_guest_data namespace
+    if (isGuest || !user || user.isAnonymous) {
+      const updatedGuest = saveGuestData({
+        ...data,
+        displayName: nameVal || profile?.displayName || generateRandomGuestName(),
+        name: nameVal || profile?.name || generateRandomGuestName(),
+        userName: nameVal || profile?.userName || generateRandomGuestName(),
+        avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : (profile?.avatarUrl || ''),
+        hasCompletedOnboarding: Boolean(isCompleted),
+        onboardingCompleted: Boolean(isCompleted),
+        selectedGoals: data.selectedGoals ?? profile?.selectedGoals ?? [],
+      } as Partial<GuestData>);
+
+      setProfile(updatedGuest);
+      return;
+    }
     
     const updated: UserProfile = {
       ...profile,
@@ -326,14 +555,58 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
   };
 
+  const continueAsGuest = (customName?: string): GuestData => {
+    const newGuest = createDefaultGuestData(customName);
+    saveGuestData(newGuest);
+    setProfile(newGuest);
+    setUser(null);
+    return newGuest;
+  };
+
+  const resetGuestSession = (): GuestData => {
+    const newGuest = createDefaultGuestData();
+    saveGuestData(newGuest);
+    setProfile(newGuest);
+    return newGuest;
+  };
+
+  const migrateGuestData = async (): Promise<MigrationResult | null> => {
+    const uid = user?.uid || auth.currentUser?.uid;
+    if (!uid || (user && user.isAnonymous)) {
+      return null;
+    }
+    if (!hasGuestDataToMigrate()) {
+      return {
+        success: true,
+        migratedCounts: {
+          profile: false,
+          habits: 0,
+          habitLogs: 0,
+          tasks: 0,
+          goals: 0,
+          journal: 0,
+          reminders: 0,
+        },
+        clearedLocalStorage: false,
+      };
+    }
+    return await migrateGuestDataToFirestore(
+      uid,
+      user?.email || auth.currentUser?.email || undefined
+    );
+  };
+
   const resetOnboarding = () => {
     try {
       localStorage.removeItem(LOCAL_STORAGE_ONBOARDING_KEY);
       localStorage.removeItem(LOCAL_STORAGE_PROFILE_KEY);
+      localStorage.removeItem(STREAK_GUEST_DATA_KEY);
     } catch {
       // Ignore
     }
-    setProfile(null);
+    const freshGuest = createDefaultGuestData();
+    saveGuestData(freshGuest);
+    setProfile(freshGuest);
   };
 
   const onboardingCompleted = Boolean(profile?.onboardingCompleted || profile?.hasCompletedOnboarding);
@@ -343,6 +616,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       user,
       profile,
       userProfile: profile,
+      guestData: isGuest ? (profile as GuestData) : null,
+      isGuest,
       onboardingCompleted,
       loading,
       logout,
@@ -351,7 +626,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       removeProfilePhoto,
       saveUserProfileToFirestore,
       setOnboardingCompleted,
-      resetOnboarding
+      resetOnboarding,
+      continueAsGuest,
+      resetGuestSession,
+      migrateGuestData,
     }}>
       {children}
     </AuthContext.Provider>

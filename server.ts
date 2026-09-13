@@ -9,10 +9,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 
-// Initialize the Google Gen AI SDK
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
+// Lazy initialization of Google Gen AI SDK
+let aiClient: GoogleGenAI | null = null;
+function getAiClient(): GoogleGenAI | null {
+  if (!aiClient && process.env.GEMINI_API_KEY) {
+    aiClient = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+    });
+  }
+  return aiClient;
+}
 
 app.post('/api/ai/coach', async (req, res) => {
   try {
@@ -25,17 +31,22 @@ app.post('/api/ai/coach', async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
+    const ai = getAiClient();
+    if (!ai) {
+      return res.status(500).json({ error: 'AI client failed to initialize.' });
+    }
+
     const systemInstruction = `
       You are the STREAK AI Coach, an intelligent personal growth assistant.
       The user is interacting with the STREAK app, focused on small actions every day.
-      Your tone is calm, encouraging, and highly analytical.
-      Do not be overly enthusiastic. Be concise and actionable.
-      Analyze the user's habits if context is provided.
+      Your tone is calm, encouraging, concise, and highly actionable.
+      Do not be overly enthusiastic. Analyze the user's habits if context is provided.
       Current context: ${JSON.stringify(context || {})}
     `;
 
     let responseText = '';
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+    // Use supported modern models (gemini-3.6-flash, gemini-3.8-flash, gemini-flash-latest)
+    const candidateModels = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-flash-latest'];
     let lastError: any = null;
 
     for (const model of candidateModels) {

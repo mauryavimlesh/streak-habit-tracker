@@ -107,6 +107,23 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "date", "completed"]
+    },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "User reminders and timed prompts",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "time": { "type": "string" },
+        "repeat": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "notificationEnabled": { "type": "boolean" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "time", "repeat", "enabled", "notificationEnabled", "category"]
     }
   },
   "firestore": {
@@ -133,6 +150,10 @@
     "tasks/{taskId}": {
       "schema": { "$ref": "#/entities/Task" },
       "description": "User scheduled tasks and calendar items"
+    },
+    "reminders/{reminderId}": {
+      "schema": { "$ref": "#/entities/Reminder" },
+      "description": "User notifications and reminders"
     }
   }
 }

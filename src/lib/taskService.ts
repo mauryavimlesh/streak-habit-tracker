@@ -3,6 +3,8 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
+  getDoc,
   updateDoc,
   deleteDoc,
   getDocs,
@@ -11,6 +13,8 @@ import {
   serverTimestamp,
   onSnapshot,
 } from 'firebase/firestore';
+import { trackTaskCreated, trackTaskCompleted } from './analyticsService';
+import { handleFirestoreError, OperationType } from './firestoreErrors';
 
 export interface TaskItem {
   id: string;
@@ -144,20 +148,45 @@ export function getInitialSeedTasks(baseDateStr?: string): TaskItem[] {
   ];
 }
 
+const GUEST_DATA_KEY = 'streak_guest_data';
+
+function updateGuestTasksNamespace(tasks: TaskItem[]) {
+  try {
+    const raw = localStorage.getItem(GUEST_DATA_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      parsed.tasks = tasks;
+      parsed.updatedAt = new Date().toISOString();
+      localStorage.setItem(GUEST_DATA_KEY, JSON.stringify(parsed));
+    }
+  } catch {
+    // Ignore
+  }
+}
+
 // Local storage helpers
 export function readLocalTasks(): TaskItem[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!raw) {
-      const initial = getInitialSeedTasks();
-      saveLocalTasks(initial);
-      return initial;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
     }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
+
+    // Check inside streak_guest_data namespace
+    const guestRaw = localStorage.getItem(GUEST_DATA_KEY);
+    if (guestRaw) {
+      const parsed = JSON.parse(guestRaw);
+      if (Array.isArray(parsed.tasks) && parsed.tasks.length > 0) {
+        return parsed.tasks;
+      }
     }
-    return [];
+
+    const initial = getInitialSeedTasks();
+    saveLocalTasks(initial);
+    return initial;
   } catch (err) {
     console.error('Error reading local tasks:', err);
     return [];
@@ -167,6 +196,7 @@ export function readLocalTasks(): TaskItem[] {
 export function saveLocalTasks(tasks: TaskItem[]) {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tasks));
+    updateGuestTasksNamespace(tasks);
   } catch (err) {
     console.error('Error saving local tasks:', err);
   }
@@ -288,9 +318,11 @@ export async function createTask(
       saveLocalTasks(updatedLocal);
     } catch (err) {
       console.warn('Could not sync created task to Firestore:', err);
+      handleFirestoreError(err, OperationType.CREATE, 'tasks');
     }
   }
 
+  trackTaskCreated(newTask.category, newTask.priority);
   return newTask;
 }
 
@@ -332,6 +364,7 @@ export async function updateTask(
       await updateDoc(doc(db, 'tasks', taskId), firestoreUpdates);
     } catch (err) {
       console.warn('Could not sync updated task to Firestore:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `tasks/${taskId}`);
     }
   }
 
@@ -345,6 +378,9 @@ export async function toggleTaskComplete(taskId: string, userId?: string): Promi
   if (!task) return false;
 
   const nextCompleted = !task.completed;
+  if (nextCompleted) {
+    trackTaskCompleted(task.category);
+  }
   await updateTask(taskId, { completed: nextCompleted }, userId);
   return nextCompleted;
 }
@@ -426,8 +462,53 @@ export async function deleteTask(taskId: string, userId?: string): Promise<boole
       await deleteDoc(doc(db, 'tasks', taskId));
     } catch (err) {
       console.warn('Could not delete task in Firestore:', err);
+      handleFirestoreError(err, OperationType.DELETE, `tasks/${taskId}`);
     }
   }
 
   return true;
 }
+
+
+export const syncLocalTasksToCloud = async (userId: string) => {
+  if (!userId || userId === 'local' || userId === 'default') return;
+  const localTasks = readLocalTasks();
+  let syncCount = 0;
+  for (const task of localTasks) {
+    if (!task.userId || task.userId === 'local' || task.userId !== userId) {
+      task.userId = userId;
+      const targetDocId = task.id || 'task_' + Date.now();
+      const targetDocRef = doc(db, 'tasks', targetDocId);
+      try {
+        const snap = await getDoc(targetDocRef);
+        const taskPayload: Record<string, any> = {
+          userId,
+          title: task.title,
+          date: task.date,
+          completed: Boolean(task.completed),
+          updatedAt: serverTimestamp(),
+        };
+        if (task.description) taskPayload.description = task.description;
+        if (task.time) taskPayload.time = task.time;
+        if (task.timeEnd) taskPayload.timeEnd = task.timeEnd;
+        if (task.repeat) taskPayload.repeat = task.repeat;
+        if (task.category) taskPayload.category = task.category;
+        if (task.priority) taskPayload.priority = task.priority;
+        if (task.type) taskPayload.type = task.type;
+
+        if (!snap.exists()) {
+          taskPayload.createdAt = serverTimestamp();
+          await setDoc(targetDocRef, taskPayload);
+        } else {
+          await updateDoc(targetDocRef, taskPayload);
+        }
+        syncCount++;
+      } catch (e) {
+        handleFirestoreError(e, OperationType.WRITE, `tasks/${targetDocId}`);
+      }
+    }
+  }
+  if (syncCount > 0) {
+    saveLocalTasks([]); // clear local after migration
+  }
+};
