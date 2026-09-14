@@ -1,21 +1,20 @@
-import * as admin from 'firebase-admin';
+import { getApps, initializeApp, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
-if (!admin.apps.length) {
+if (!getApps().length) {
   try {
-    // In a real Vercel deployment, you'd parse FIREBASE_SERVICE_ACCOUNT from env
-    // For this environment, we'll try to initialize with just projectId for token verification
-    // Note: Firestore access might require full credentials depending on rules
     const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT 
       ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT) 
       : null;
 
     if (serviceAccount) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
+      initializeApp({
+        credential: cert(serviceAccount),
         projectId: 'gen-lang-client-0220339798'
       });
     } else {
-      admin.initializeApp({
+      initializeApp({
         projectId: 'gen-lang-client-0220339798'
       });
     }
@@ -24,5 +23,5 @@ if (!admin.apps.length) {
   }
 }
 
-export const adminAuth = admin.auth();
-export const adminDb = admin.firestore();
+export const adminAuth = getAuth();
+export const adminDb = getFirestore();

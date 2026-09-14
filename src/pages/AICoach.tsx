@@ -167,9 +167,17 @@ export default function AICoach() {
     const textToSend = promptToSend || input.trim();
     if (!textToSend || loading || isSendingRef.current) return;
 
-    if (configStatus?.status !== 'READY') {
+    if (configStatus?.status === 'SERVER ERROR') {
       setErrorState({
-        message: 'AI Coach configuration is incomplete. Please check the STREAK Configuration settings.',
+        message: 'Coach temporarily unavailable. Please try again later.',
+        failedPrompt: textToSend,
+      });
+      return;
+    }
+
+    if (configStatus?.status === 'CONFIGURATION REQUIRED') {
+      setErrorState({
+        message: 'AI Coach is not configured correctly.',
         failedPrompt: textToSend,
       });
       return;
@@ -334,13 +342,18 @@ export default function AICoach() {
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
                 ✓ AI Coach Ready
               </span>
+            ) : configStatus.status === 'SERVER ERROR' ? (
+              <span className="text-red-400 font-medium flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Server Offline
+              </span>
             ) : (
               <button
                 onClick={() => setShowConfig(true)}
                 className="text-amber-400 font-medium flex items-center gap-1 hover:text-amber-300 transition-colors"
               >
-                <AlertCircle className="w-3.5 h-3.5" />
-                ⚠ AI Coach Configuration Required
+                <AlertTriangle className="w-3.5 h-3.5" />
+                ⚠ Configuration Required
               </button>
             )}
             

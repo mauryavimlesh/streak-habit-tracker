@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Settings, Copy, Check, Eye, EyeOff, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { getSystemConfiguration, updateAiConfiguration, ConfigStatus } from '../../lib/configService';
-import { cn } from '../../lib/utils';
+import { Settings, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { getSystemConfiguration, ConfigStatus } from '../../lib/configService';
 
 interface ConfigurationDialogProps {
   isOpen: boolean;
@@ -10,14 +9,9 @@ interface ConfigurationDialogProps {
   onConfigApplied?: () => void;
 }
 
-export default function ConfigurationDialog({ isOpen, onClose, onConfigApplied }: ConfigurationDialogProps) {
+export default function ConfigurationDialog({ isOpen, onClose }: ConfigurationDialogProps) {
   const [config, setConfig] = useState<ConfigStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [geminiKey, setGeminiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [applySuccess, setApplySuccess] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -32,35 +26,6 @@ export default function ConfigurationDialog({ isOpen, onClose, onConfigApplied }
     setLoading(false);
   };
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText('GEMINI_API_KEY');
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy', err);
-    }
-  };
-
-  const handleApply = async () => {
-    if (!geminiKey.trim()) return;
-    
-    setApplying(true);
-    const success = await updateAiConfiguration(geminiKey.trim());
-    if (success) {
-      setApplySuccess(true);
-      await loadConfig();
-      if (onConfigApplied) {
-        onConfigApplied();
-      }
-      setTimeout(() => {
-        setApplySuccess(false);
-        setGeminiKey('');
-      }, 2000);
-    }
-    setApplying(false);
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -73,7 +38,6 @@ export default function ConfigurationDialog({ isOpen, onClose, onConfigApplied }
           onClick={onClose}
           className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         />
-
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -110,7 +74,6 @@ export default function ConfigurationDialog({ isOpen, onClose, onConfigApplied }
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">AI Coach</h3>
                   <div className="flex-1 h-px bg-[#232938] ml-4"></div>
                 </div>
-
                 <div className="bg-[#0b0c10] border border-[#232938] rounded-xl p-4">
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-white font-semibold">Gemini AI</span>
@@ -129,71 +92,14 @@ export default function ConfigurationDialog({ isOpen, onClose, onConfigApplied }
 
                   {!config?.isAiConfigured && (
                     <div className="space-y-4">
-                      <p className="text-xs text-[#7d8495]">
-                        Used by STREAK AI Coach to communicate with the AI service. Get this from your Gemini API configuration.
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                        <p className="text-xs text-amber-200 leading-relaxed font-medium">
+                          The AI Coach requires server-side configuration. The <code className="bg-black/30 px-1 py-0.5 rounded text-amber-100 font-mono text-[10px]">GEMINI_API_KEY</code> environment variable is missing on the deployment server.
+                        </p>
+                      </div>
+                      <p className="text-xs text-[#7d8495] leading-relaxed">
+                        To enable the AI Coach, the application administrator must add their Google Gemini API key to the server secrets. This key is processed securely on the backend and is never exposed to the client.
                       </p>
-
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-[#7d8495]">Variable (Required • Secret)</label>
-                        <div className="flex items-center gap-2">
-                          <code className="flex-1 bg-[#14161e] border border-[#232938] rounded-lg px-3 py-2.5 text-sm text-white font-mono">
-                            GEMINI_API_KEY
-                          </code>
-                          <button
-                            onClick={handleCopy}
-                            className="p-2.5 bg-[#14161e] border border-[#232938] rounded-lg text-[#7d8495] hover:text-white transition-colors"
-                            title="Copy variable name"
-                          >
-                            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-[#7d8495]">Value</label>
-                        <div className="relative">
-                          <input
-                            type={showKey ? 'text' : 'password'}
-                            value={geminiKey}
-                            onChange={(e) => setGeminiKey(e.target.value)}
-                            placeholder="Enter your API key"
-                            className="w-full bg-[#14161e] border border-[#232938] rounded-lg px-3 py-2.5 text-sm text-white placeholder-[#4b5563] focus:outline-none focus:border-indigo-500 pr-10"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowKey(!showKey)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7d8495] hover:text-white"
-                          >
-                            {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={handleApply}
-                        disabled={!geminiKey.trim() || applying}
-                        className="w-full py-2.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:bg-[#232938] disabled:text-[#7d8495] text-white font-medium text-sm transition-colors flex items-center justify-center gap-2 mt-2"
-                      >
-                        {applying ? (
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        ) : (
-                          'Apply Configuration'
-                        )}
-                      </button>
-
-                      <AnimatePresence>
-                        {applySuccess && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="text-xs text-emerald-400 flex items-center justify-center gap-1 mt-2"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Configuration saved successfully
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
                     </div>
                   )}
                 </div>
@@ -205,7 +111,6 @@ export default function ConfigurationDialog({ isOpen, onClose, onConfigApplied }
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">Firebase</h3>
                   <div className="flex-1 h-px bg-[#232938] ml-4"></div>
                 </div>
-
                 <div className="bg-[#0b0c10] border border-[#232938] rounded-xl p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex flex-col">

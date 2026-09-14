@@ -1,7 +1,10 @@
+import "dotenv/config";
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+import { adminAuth, adminDb } from './api/firebase-admin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,7 +52,37 @@ app.post('/api/ai-coach', async (req, res) => {
   try {
     const { message, messages, history, context } = req.body;
     
+    // Secure session validation using Firebase Admin
+    const authHeader = req.headers.authorization;
+    let userId = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const idToken = authHeader.split('Bearer ')[1];
+      try {
+        const decodedToken = await adminAuth.verifyIdToken(idToken);
+        userId = decodedToken.uid;
+      } catch (err) {
+        console.warn('Invalid ID token provided:', err);
+      }
+    }
+
+    let fetchedContext = context;
+    if (userId) {
+      try {
+        const habitsSnapshot = await adminDb.collection('users').doc(userId).collection('habits').get();
+        const habits = habitsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        fetchedContext = {
+          ...fetchedContext,
+          userId,
+          habits,
+          activeHabitCount: habits.length
+        };
+      } catch (err) {
+        console.warn('Failed to fetch user habits from Firestore (might require service account credentials):', err);
+      }
+    }
+
     if (!process.env.GEMINI_API_KEY) {
+      console.error('[AI Coach] Configuration missing: GEMINI_API_KEY is not set in the environment.');
       return res.status(500).json({
         error: 'AI Coach configuration is incomplete.',
       });
@@ -72,9 +105,9 @@ Core Principles:
 - Tone: Calm, encouraging, grounded, direct, and actionable. Never use hollow buzzwords or overly generic cheerleading.
 - Methodology: Focus on reducing starting friction, habit stacking, identity-based habits, and rebounding quickly after missed days ("Never miss twice").
 - Style: Provide crisp, practical guidance (2-4 paragraphs or concise bullet points). Format clearly for mobile viewing.
-${context ? `
+${fetchedContext ? `
 USER & HABIT CONTEXT:
-${typeof context === 'string' ? context : JSON.stringify(context, null, 2)}
+${typeof fetchedContext === 'string' ? fetchedContext : JSON.stringify(fetchedContext, null, 2)}
 Personalize your response by referencing their habits, streak count, or goals whenever relevant.` : ''}
 `.trim();
 
