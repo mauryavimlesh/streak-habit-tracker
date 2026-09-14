@@ -5,6 +5,7 @@ import {
   Send,
   RefreshCw,
   AlertCircle,
+  AlertTriangle,
   Trash2,
   Bot,
   User as UserIcon,
