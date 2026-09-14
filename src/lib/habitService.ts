@@ -287,14 +287,19 @@ export const getUserHabits = async (userId: string): Promise<Habit[]> => {
 export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
   const local = readLocalHabits();
   const index = local.findIndex(h => h.id === habitId);
+  let isCloudSynced = false;
+  let actualUserId = 'local';
   if (index !== -1) {
+    actualUserId = local[index].userId || 'local';
+    isCloudSynced = actualUserId !== 'local' && actualUserId !== 'default';
     local[index] = { ...local[index], ...updates, updatedAt: new Date().toISOString() };
     saveLocalHabits(local);
   }
 
-  if (!habitId.startsWith('temp_habit_') && !habitId.startsWith('default-')) {
+  if (isCloudSynced && !habitId.startsWith('temp_habit_')) {
     try {
-      const habitRef = doc(db, 'habits', habitId);
+      const targetDocId = habitId.startsWith('default-') ? `${actualUserId}_${habitId}` : habitId;
+      const habitRef = doc(db, 'habits', targetDocId);
       await updateDoc(habitRef, {
         ...updates,
         updatedAt: serverTimestamp(),
@@ -319,9 +324,10 @@ export const deleteHabit = async (habitId: string, userId?: string) => {
   const filteredLogs = localLogs.filter(l => l.habitId !== habitId);
   saveLocalLogs(filteredLogs);
 
-  if (!habitId.startsWith('temp_habit_') && !habitId.startsWith('default-')) {
+  if (userId && userId !== 'local' && userId !== 'default' && !habitId.startsWith('temp_habit_')) {
     try {
-      await deleteDoc(doc(db, 'habits', habitId));
+      const targetDocId = habitId.startsWith('default-') ? `${userId}_${habitId}` : habitId;
+      await deleteDoc(doc(db, 'habits', targetDocId));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `habits/${habitId}`);
     }
@@ -632,7 +638,10 @@ export const syncLocalToCloud = async (userId: string) => {
   for (const habit of localHabits) {
     if (!habit.userId || habit.userId === 'local' || habit.userId !== userId) {
       habit.userId = userId;
-      const targetDocId = habit.id || 'habit_' + Date.now();
+      let targetDocId = habit.id || 'habit_' + Date.now();
+      if (targetDocId.startsWith('default-')) {
+        targetDocId = `${userId}_${targetDocId}`;
+      }
       const targetDocRef = doc(db, 'habits', targetDocId);
       try {
         const snap = await getDoc(targetDocRef);
@@ -678,9 +687,10 @@ export const syncLocalToCloud = async (userId: string) => {
       const targetDocRef = doc(db, 'habit_logs', targetDocId);
       try {
         const snap = await getDoc(targetDocRef);
+        const mappedHabitId = log.habitId.startsWith('default-') ? `${userId}_${log.habitId}` : log.habitId;
         const logPayload: Record<string, any> = {
           userId,
-          habitId: log.habitId,
+          habitId: mappedHabitId,
           date: log.date,
           status: log.status,
           updatedAt: serverTimestamp(),

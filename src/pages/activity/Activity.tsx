@@ -33,7 +33,8 @@ export default function Activity() {
   const [targetDurationMs, setTargetDurationMs] = useState<number | null>(null);
   
   const [matchingHabit, setMatchingHabit] = useState<Habit | null>(null);
-  
+  const [showMatchModal, setShowMatchModal] = useState(false);
+
   const activeType = customType.trim() ? customType.trim() : selectedType;
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export default function Activity() {
       );
       if (match) {
         setMatchingHabit(match);
+        setShowMatchModal(true);
       }
     } catch (e) {
       console.error(e);
@@ -147,43 +149,76 @@ export default function Activity() {
           {formatTime(totalSeconds)}
         </div>
 
-        {matchingHabit ? (
-          <div className="bg-surface-card p-6 rounded-[28px] border border-[#1f232c] w-full max-w-sm mb-6 shadow-xl">
-            <p className="text-sm font-medium mb-5 text-center text-[#dbe0ea]">
-              Add this activity to your "{matchingHabit.name}" habit?
-            </p>
-            <div className="space-y-3">
-              <button 
-                onClick={handleAddToHabit}
-                className="w-full py-4 bg-accent-primary text-black font-bold rounded-2xl transition-all active:scale-95 shadow-[0_0_20px_rgba(165,255,54,0.15)] hover:bg-[#a5ff36]"
-              >
-                Save to Habit
-              </button>
-              <button 
-                onClick={handleSaveOnly}
-                className="w-full py-4 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-2xl transition-all active:scale-95 border border-white/5"
-              >
-                Save as Activity Only
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="w-full max-w-sm space-y-3">
-            <button 
-              onClick={handleSaveOnly}
-              className="w-full py-4 bg-accent-primary text-black font-bold rounded-2xl transition-all active:scale-95 shadow-[0_0_20px_rgba(165,255,54,0.15)] hover:bg-[#a5ff36]"
-            >
-              Save Activity
-            </button>
-          </div>
-        )}
+        <div className="w-full max-w-sm space-y-3 relative z-10">
+          <button 
+            onClick={() => {
+              if (matchingHabit) {
+                setShowMatchModal(true);
+              } else {
+                handleSaveOnly();
+              }
+            }}
+            className="w-full py-4 bg-accent-primary text-black font-bold rounded-2xl transition-all active:scale-95 shadow-[0_0_20px_rgba(165,255,54,0.15)] hover:bg-[#a5ff36]"
+          >
+            Save Activity
+          </button>
+        </div>
         
         <button 
           onClick={handleDiscard}
-          className="mt-6 text-sm font-semibold text-[#7d8495] hover:text-white transition-colors"
+          className="mt-6 text-sm font-semibold text-[#7d8495] hover:text-white transition-colors relative z-10"
         >
           Discard
         </button>
+
+        <AnimatePresence>
+          {showMatchModal && matchingHabit && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            >
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="bg-[#12141a] p-6 rounded-[28px] border border-[#1f232c] w-full max-w-sm shadow-2xl"
+              >
+                <div className="w-12 h-12 bg-accent-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 className="w-6 h-6 text-accent-primary" />
+                </div>
+                <h3 className="text-xl font-bold text-center mb-2">Matching Habit Found</h3>
+                <p className="text-sm font-medium mb-6 text-center text-[#7d8495] leading-relaxed">
+                  Would you like to log this <span className="text-white font-bold">{Math.floor(totalSeconds / 60) || 1} min</span> session to your <span className="text-white font-bold">"{matchingHabit.name}"</span> habit?
+                </p>
+                <div className="space-y-3">
+                  <button 
+                    onClick={handleAddToHabit}
+                    className="w-full py-3.5 bg-accent-primary text-black font-bold rounded-xl transition-all active:scale-95 hover:bg-[#a5ff36]"
+                  >
+                    Log to Habit
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setShowMatchModal(false);
+                      handleSaveOnly();
+                    }}
+                    className="w-full py-3.5 bg-[#1a1d25] hover:bg-[#262b36] text-white font-semibold rounded-xl transition-all active:scale-95 border border-[#2d323f]"
+                  >
+                    Save as Activity Only
+                  </button>
+                  <button 
+                    onClick={() => setShowMatchModal(false)}
+                    className="w-full py-2.5 text-[#7d8495] hover:text-white font-medium rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }

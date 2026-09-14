@@ -75,8 +75,6 @@ export default function Home() {
   const [logs, setLogs] = useState<HabitLog[]>([]);
   const [todayTasks, setTodayTasks] = useState<TaskItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [showAllHabits, setShowAllHabits] = useState(false);
-  const [showAllTasks, setShowAllTasks] = useState(false);
 
   // New state variables for Habit Notes and Sync Toast
   const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
@@ -218,8 +216,8 @@ export default function Home() {
     return 0;
   });
 
-  const visibleHabits = showAllHabits ? sortedHabits : sortedHabits.slice(0, 4);
-  const visibleTasks = showAllTasks ? sortedTasks : sortedTasks.slice(0, 4);
+  const visibleHabits = sortedHabits.slice(0, 4);
+  const visibleTasks = sortedTasks.slice(0, 4);
 
   const completedHabitsCount = displayedHabits.filter(isHabitCompleted).length;
   const totalCount = displayedHabits.length || 3;
@@ -930,20 +928,13 @@ export default function Home() {
             })}
 
             {displayedHabits.length > 4 && (
-              <div className="flex items-center justify-between pt-1 px-1">
-                <button
-                  type="button"
-                  onClick={() => setShowAllHabits(!showAllHabits)}
-                  className="text-[13px] font-semibold text-accent-primary hover:text-[#a5ff36] transition-colors cursor-pointer py-1"
-                >
-                  {showAllHabits ? 'Show Less' : `View All Habits (${displayedHabits.length})`}
-                </button>
+              <div className="flex items-center justify-center pt-1 px-1">
                 <button
                   type="button"
                   onClick={() => navigate('/habits')}
-                  className="text-[12px] font-medium text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+                  className="text-[13px] font-semibold text-accent-primary hover:text-[#a5ff36] transition-colors cursor-pointer py-1"
                 >
-                  Manage All
+                  View All Habits ({displayedHabits.length})
                 </button>
               </div>
             )}
@@ -1035,21 +1026,14 @@ export default function Home() {
               </div>
             ))}
 
-            {todayTasks.length > 3 && (
-              <div className="flex items-center justify-between pt-1 px-1">
-                <button
-                  type="button"
-                  onClick={() => setShowAllTasks(!showAllTasks)}
-                  className="text-[13px] font-semibold text-accent-primary hover:text-[#a5ff36] transition-colors cursor-pointer py-1"
-                >
-                  {showAllTasks ? 'Show Less' : `View All Tasks (${todayTasks.length})`}
-                </button>
+            {todayTasks.length > 4 && (
+              <div className="flex items-center justify-center pt-1 px-1">
                 <button
                   type="button"
                   onClick={() => navigate('/calendar')}
-                  className="text-[12px] font-medium text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+                  className="text-[13px] font-semibold text-accent-primary hover:text-[#a5ff36] transition-colors cursor-pointer py-1"
                 >
-                  Open Calendar
+                  View All Tasks ({todayTasks.length})
                 </button>
               </div>
             )}
