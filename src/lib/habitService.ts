@@ -54,6 +54,8 @@ export interface Habit {
   targetValue: number;
   targetUnit?: string;
   reminderTime?: string;
+  sleepBedtime?: string;
+  sleepWakeTime?: string;
   archived?: boolean;
   createdAt?: any;
   updatedAt?: any;
@@ -650,6 +652,8 @@ export const syncLocalToCloud = async (userId: string) => {
         if (habit.targetValue !== undefined) habitPayload.targetValue = Number(habit.targetValue) || 1;
         if (habit.targetUnit) habitPayload.targetUnit = habit.targetUnit;
         if (habit.reminderTime) habitPayload.reminderTime = habit.reminderTime;
+        if (habit.sleepBedtime) habitPayload.sleepBedtime = habit.sleepBedtime;
+        if (habit.sleepWakeTime) habitPayload.sleepWakeTime = habit.sleepWakeTime;
 
         if (!snap.exists()) {
           habitPayload.createdAt = serverTimestamp();
@@ -733,6 +737,8 @@ export const subscribeToHabits = (
           targetValue: data.targetValue,
           targetUnit: data.targetUnit,
           reminderTime: data.reminderTime,
+          sleepBedtime: data.sleepBedtime,
+          sleepWakeTime: data.sleepWakeTime,
           createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
           updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
         } as Habit;

@@ -26,15 +26,18 @@ import {
   deleteGoal,
 } from '../../lib/goalService';
 import { cn } from '../../lib/utils';
+import { ShareMilestoneModal } from '../../components/ui/ShareMilestoneModal';
+import { Share } from 'lucide-react';
 
 export default function Goals() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   const [goals, setGoals] = useState<Goal[]>([]);
   const [activeFilter, setActiveFilter] = useState<'all' | 'in_progress' | 'completed' | 'paused'>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Form states
   const [newTitle, setNewTitle] = useState('');
@@ -409,6 +412,14 @@ export default function Goals() {
               <div className="pt-2 flex items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => setIsShareModalOpen(true)}
+                  className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 cursor-pointer"
+                  title="Share Goal"
+                >
+                  <Share className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleTogglePause(selectedGoal)}
                   className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer"
                 >
@@ -600,6 +611,15 @@ export default function Goals() {
           </div>
         )}
       </AnimatePresence>
+
+      <ShareMilestoneModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        streak={selectedGoal ? selectedGoal.currentProgress : 0}
+        userName={profile?.userName?.split(' ')[0] || profile?.name?.split(' ')[0] || 'Vimlesh'}
+        totalHabits={selectedGoal ? selectedGoal.target : 0}
+        completedHabits={selectedGoal ? selectedGoal.currentProgress : 0}
+      />
     </div>
   );
 }

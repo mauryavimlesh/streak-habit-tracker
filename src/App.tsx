@@ -29,6 +29,10 @@ import BackupSync from './pages/sync/BackupSync';
 import Settings from './pages/settings/Settings';
 import HelpSupport from './pages/support/HelpSupport';
 import Feedback from './pages/support/Feedback';
+import Activity from './pages/activity/Activity';
+import ActivityHistory from './pages/activity/ActivityHistory';
+
+import { TimerProvider } from './lib/timer/TimerContext';
 
 function OnboardingGate({ children }: { children: React.ReactNode }) {
   const { profile, onboardingCompleted, loading } = useAuth();
@@ -84,6 +88,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <AuthProvider>
+      <TimerProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -161,6 +166,22 @@ export default function App() {
             }
           />
           <Route
+            path="/activity"
+            element={
+              <ProtectedRoute>
+                <Activity />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/activity/history"
+            element={
+              <ProtectedRoute>
+                <ActivityHistory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/support"
             element={
               <ProtectedRoute>
@@ -201,6 +222,7 @@ export default function App() {
         </Routes>
         <VercelAnalytics />
       </BrowserRouter>
+      </TimerProvider>
     </AuthProvider>
   );
 }

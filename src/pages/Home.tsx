@@ -2,13 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Clock, CheckCircle2, Calendar as CalendarIcon, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog } from '../lib/habitService';
-import { TaskItem, subscribeToTasks, toggleTaskComplete } from '../lib/taskService';
+import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog, deleteHabit } from '../lib/habitService';
+import { TaskItem, subscribeToTasks, toggleTaskComplete, deleteTask } from '../lib/taskService';
 import { DailyReflection } from '../components/ui/DailyReflection';
+import { DeleteConfirmModal } from '../components/ui/DeleteConfirmModal';
+import { SleepModal } from '../components/ui/SleepModal';
+import { ShareMilestoneModal } from '../components/ui/ShareMilestoneModal';
 import { cn } from '../lib/utils';
+import { Edit2, Trash2, Share } from 'lucide-react';
 import UserAvatar from '../components/profile/UserAvatar';
 import confetti from 'canvas-confetti';
 import { WeeklyProgressChart } from '../components/ui/WeeklyProgressChart';
+import { useTimer } from '../lib/timer/TimerContext';
+import { Play, Pause, Maximize2 } from 'lucide-react';
 
 // Reference authentic default habits matching the design reference
 const DEFAULT_HABITS: Habit[] = [
@@ -59,6 +65,7 @@ const DEFAULT_HABITS: Habit[] = [
 export default function Home() {
   const { profile, user, isGuest } = useAuth();
   const navigate = useNavigate();
+  const { state: timerState, elapsedMs: timerElapsed, isMinimized, maximizeTimer, pauseTimer, resumeTimer } = useTimer();
 
   // Prefer user's real or guest name
   const userName = profile?.displayName?.split(' ')[0] || profile?.userName?.split(' ')[0] || profile?.name?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Guest';
@@ -74,6 +81,15 @@ export default function Home() {
   // New state variables for Habit Notes and Sync Toast
   const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
   const [syncToastMessage, setSyncToastMessage] = useState<string | null>(null);
+
+  // Deletion states
+  const [deletingHabit, setDeletingHabit] = useState<Habit | null>(null);
+  const [deletingTask, setDeletingTask] = useState<TaskItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  
+  // Sleep tracking state
+  const [editingSleepHabit, setEditingSleepHabit] = useState<Habit | null>(null);
 
   // Local progress values for instant responsive Apple OS feedback
   const [localProgress, setLocalProgress] = useState<Record<string, number>>({
@@ -182,6 +198,9 @@ export default function Home() {
 
   const displayedHabits = !user ? (habits.length > 0 ? habits : DEFAULT_HABITS) : habits;
   
+  const habitNames = new Set(displayedHabits.map(h => h.name.trim().toLowerCase()));
+  const uniqueTasks = todayTasks.filter(t => !habitNames.has(t.title.trim().toLowerCase()));
+
   // Sort habits by relevance: incomplete/pending habits first, then completed
   const sortedHabits = [...displayedHabits].sort((a, b) => {
     const aDone = isHabitCompleted(a);
@@ -189,16 +208,17 @@ export default function Home() {
     if (aDone !== bDone) return aDone ? 1 : -1;
     return 0;
   });
-  const visibleHabits = showAllHabits ? sortedHabits : sortedHabits.slice(0, 4);
 
   // Sort tasks by relevance: incomplete first, high priority first, then by time
-  const sortedTasks = [...todayTasks].sort((a, b) => {
+  const sortedTasks = [...uniqueTasks].sort((a, b) => {
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
     if (a.priority === 'high' && b.priority !== 'high') return -1;
     if (b.priority === 'high' && a.priority !== 'high') return 1;
     if (a.time && b.time) return a.time.localeCompare(b.time);
     return 0;
   });
+
+  const visibleHabits = showAllHabits ? sortedHabits : sortedHabits.slice(0, 4);
   const visibleTasks = showAllTasks ? sortedTasks : sortedTasks.slice(0, 4);
 
   const completedHabitsCount = displayedHabits.filter(isHabitCompleted).length;
@@ -443,6 +463,23 @@ export default function Home() {
     
     return currentStreak;
   };
+  const handleConfirmDeleteHabit = async () => {
+    if (!deletingHabit) return;
+    setIsDeleting(true);
+    await deleteHabit(deletingHabit.id!, user?.uid);
+    setHabits(prev => prev.filter(h => h.id !== deletingHabit.id));
+    setDeletingHabit(null);
+    setIsDeleting(false);
+  };
+
+  const handleConfirmDeleteTask = async () => {
+    if (!deletingTask) return;
+    setIsDeleting(true);
+    await deleteTask(deletingTask.id!, user?.uid);
+    setDeletingTask(null);
+    setIsDeleting(false);
+  };
+
   const globalStreak = getGlobalStreak();
 
   const getGreeting = () => {
@@ -493,6 +530,20 @@ export default function Home() {
     month: 'long',
     day: 'numeric',
   });
+
+  const formatTimerDuration = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h > 0) return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const handleFocusClick = () => {
+    maximizeTimer();
+    navigate('/activity');
+  };
 
   return (
     <div className="p-5 max-w-md mx-auto space-y-6 select-none">
@@ -588,6 +639,15 @@ export default function Home() {
             <div className="bg-[#1a1d25] border border-[#262b36] text-[#9ca2b2] px-3.5 py-1.5 rounded-full text-xs font-semibold">
               Score {globalStreak * 10}
             </div>
+
+            {/* Share button */}
+            <button
+              onClick={() => setIsShareModalOpen(true)}
+              className="bg-white/5 border border-white/10 hover:bg-white/10 text-white px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <Share className="w-3.5 h-3.5" />
+              <span>Share</span>
+            </button>
           </div>
         </div>
       </div>
@@ -610,18 +670,101 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Focus Timer Section */}
+      {timerState.status !== 'idle' && timerState.status !== 'completed' ? (
+        <div className="glass-effect rounded-[28px] p-5 relative overflow-hidden group">
+          <div className="absolute inset-0 bg-accent-primary/5"></div>
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center gap-4 cursor-pointer flex-1" onClick={handleFocusClick}>
+              <div className="relative w-12 h-12 flex items-center justify-center">
+                <svg className="absolute inset-0 w-full h-full transform -rotate-90">
+                  <circle cx="24" cy="24" r="22" className="stroke-[#1f232c]" strokeWidth="4" fill="none" />
+                  <circle 
+                    cx="24" cy="24" r="22" 
+                    className={cn("stroke-accent-primary transition-all duration-1000", timerState.status === 'paused' ? 'opacity-50' : 'opacity-100')} 
+                    strokeWidth="4" 
+                    strokeLinecap="round"
+                    strokeDasharray="138"
+                    strokeDashoffset={timerState.mode === 'countdown' && timerState.targetDurationMs ? 138 - (Math.min(1, timerElapsed / timerState.targetDurationMs) * 138) : 138 - ((timerElapsed % 60000) / 60000) * 138}
+                    fill="none" 
+                  />
+                </svg>
+                {timerState.status === 'running' ? (
+                  <div className="w-3 h-3 rounded-full bg-accent-primary animate-pulse" />
+                ) : (
+                  <div className="w-3 h-3 rounded-sm bg-accent-primary/50" />
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[13px] font-semibold text-accent-primary uppercase tracking-wider mb-0.5">
+                  {timerState.activityName}
+                </span>
+                <span className="text-2xl font-mono font-bold text-white tabular-nums tracking-tighter leading-none">
+                  {formatTimerDuration(
+                    timerState.mode === 'countdown' && timerState.targetDurationMs
+                      ? Math.max(0, timerState.targetDurationMs - timerElapsed)
+                      : timerElapsed
+                  )}
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              {timerState.status === 'running' ? (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); pauseTimer(); }}
+                  className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors border border-white/10"
+                >
+                  <Pause className="w-4 h-4 fill-white text-white" />
+                </button>
+              ) : (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); resumeTimer(); }}
+                  className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center transition-transform hover:scale-105"
+                >
+                  <Play className="w-4 h-4 fill-black text-black ml-0.5" />
+                </button>
+              )}
+              <button 
+                onClick={handleFocusClick}
+                className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors text-[#7d8495] hover:text-white"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div 
+          onClick={handleFocusClick}
+          className="glass-effect-interactive rounded-[28px] p-5 flex items-center justify-between cursor-pointer group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-[#1a1d25] border border-[#262b36] flex items-center justify-center group-hover:border-accent-primary/30 transition-colors">
+              <Play className="w-5 h-5 fill-accent-primary text-accent-primary ml-1" />
+            </div>
+            <div>
+              <h3 className="text-[16px] font-bold text-white mb-0.5 group-hover:text-accent-primary transition-colors">Start Focus Session</h3>
+              <p className="text-[13px] font-medium text-[#7d8495]">Study, Workout, Reading & more</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Habits List Section */}
       <div>
         <div className="flex items-center justify-between px-1 mb-3">
           <h3 className="text-[14px] font-semibold text-[#828899] tracking-tight">
             Up next · {leftCount} left
           </h3>
-          <button
-            onClick={() => navigate('/habits/new')}
-            className="text-accent-primary hover:text-[#a5ff36] text-[14px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" /> Add
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/habits/new')}
+              className="text-accent-primary hover:text-[#a5ff36] text-[14px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Plus className="w-4 h-4 stroke-[3]" /> Add
+            </button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -646,10 +789,23 @@ export default function Home() {
               const step = getStep(habit);
               const progressRatio = Math.min(1, currentVal / target);
 
-              // Build subtitle
               let subtitle = '';
-              if (habit.reminderTime && habit.name.toLowerCase().includes('sleep')) {
-                subtitle = habit.reminderTime;
+              let badge: React.ReactNode = null;
+              
+              if (habit.name.toLowerCase().includes('sleep')) {
+                const sleepLog = logs.find(l => l.habitId === habit.id && l.date === new Date().toLocaleDateString('en-CA'));
+                const actualSleep = sleepLog?.progressValue || 0;
+                
+                if (actualSleep > 0) {
+                    subtitle = `${actualSleep} / ${target} hrs`;
+                    if (actualSleep < target) {
+                        badge = <span className="ml-2 text-[10px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full border border-amber-400/20">Partial ({Math.round((actualSleep / target) * 100)}%)</span>;
+                    }
+                } else if (habit.reminderTime) {
+                  subtitle = habit.reminderTime;
+                } else {
+                  subtitle = `Target: ${target} hrs`;
+                }
               } else {
                 subtitle = `${currentVal} / ${target} ${habit.targetUnit || 'times'}`;
               }
@@ -657,7 +813,13 @@ export default function Home() {
               return (
                 <div key={habit.id} className="flex flex-col gap-2">
                 <div
-                  onClick={() => handleToggleHabitComplete(habit)}
+                  onClick={() => {
+                    if (habit.name.toLowerCase().includes('sleep')) {
+                      setEditingSleepHabit(habit);
+                    } else {
+                      handleToggleHabitComplete(habit);
+                    }
+                  }}
                   className="h-[72px] rounded-full glass-effect-interactive px-3.5 flex items-center justify-between group cursor-pointer transition-all active:scale-[0.99]"
                 >
                   {/* Left Icon + Text */}
@@ -677,8 +839,9 @@ export default function Home() {
                       >
                         {habit.name}
                       </span>
-                      <span className="text-[13px] font-medium text-[#7d8495] mt-0.5">
+                      <span className="text-[13px] font-medium text-[#7d8495] mt-0.5 flex items-center">
                         {subtitle}
+                        {badge}
                       </span>
                     </div>
                   </div>
@@ -687,6 +850,10 @@ export default function Home() {
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (habit.name.toLowerCase().includes('sleep')) {
+                        setEditingSleepHabit(habit);
+                        return;
+                      }
                       if (target > 1 && !isCompleted) {
                         handleIncrement(e, habit);
                       } else {
@@ -726,7 +893,7 @@ export default function Home() {
                             progressRatio > 0 ? 'text-white' : 'text-[#7d8495] group-hover:text-white'
                           )}
                         >
-                          +{step}
+                          {habit.name.toLowerCase().includes('sleep') ? <Edit2 className="w-4 h-4" /> : `+${step}`}
                         </span>
                       </>
                     )}
@@ -744,11 +911,25 @@ export default function Home() {
                     />
                   </div>
                 )}
+                <div className="flex justify-end gap-2 px-4 pb-1">
+                  <button 
+                    onClick={() => navigate('/habits')}
+                    className="p-1 rounded-lg hover:bg-white/10 text-[#7d8495] hover:text-white transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button 
+                    onClick={() => setDeletingHabit(habit)}
+                    className="p-1 rounded-lg hover:bg-red-500/10 text-[#7d8495] hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 </div>
               );
             })}
 
-            {displayedHabits.length > 3 && (
+            {displayedHabits.length > 4 && (
               <div className="flex items-center justify-between pt-1 px-1">
                 <button
                   type="button"
@@ -790,8 +971,8 @@ export default function Home() {
 
           <div className="space-y-2.5">
             {visibleTasks.map((task) => (
+              <div key={task.id} className="flex flex-col gap-2">
               <div
-                key={task.id}
                 onClick={(e) => handleToggleTask(e, task.id)}
                 className="glass-effect-interactive rounded-[22px] px-4 py-3.5 flex items-center justify-between group cursor-pointer transition-all active:scale-[0.985]"
               >
@@ -837,6 +1018,21 @@ export default function Home() {
                   {task.completed ? 'Done' : task.type || 'Task'}
                 </span>
               </div>
+              <div className="flex justify-end gap-2 px-4 pb-1">
+                <button 
+                  onClick={() => navigate('/calendar')}
+                  className="p-1 rounded-lg hover:bg-white/10 text-[#7d8495] hover:text-white transition-colors"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+                <button 
+                  onClick={() => setDeletingTask(task)}
+                  className="p-1 rounded-lg hover:bg-red-500/10 text-[#7d8495] hover:text-red-400 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              </div>
             ))}
 
             {todayTasks.length > 3 && (
@@ -881,6 +1077,49 @@ export default function Home() {
             {syncToastMessage}
           </div>
         </div>
+      )}
+
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingHabit)}
+        onClose={() => setDeletingHabit(null)}
+        onConfirm={handleConfirmDeleteHabit}
+        title={deletingHabit?.name || 'Habit'}
+        itemType="habit"
+        isDeleting={isDeleting}
+      />
+      
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingTask)}
+        onClose={() => setDeletingTask(null)}
+        onConfirm={handleConfirmDeleteTask}
+        title={deletingTask?.title || 'Task'}
+        itemType="task"
+        isDeleting={isDeleting}
+      />
+
+      <ShareMilestoneModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        streak={globalStreak}
+        userName={userName}
+        totalHabits={totalCount}
+        completedHabits={completedHabitsCount}
+      />
+
+      {editingSleepHabit && (
+        <SleepModal
+          isOpen={true}
+          onClose={() => setEditingSleepHabit(null)}
+          habit={editingSleepHabit}
+          currentLog={logs.find(l => l.habitId === editingSleepHabit.id && l.date === new Date().toLocaleDateString('en-CA'))}
+          onSaved={() => {
+            // Re-fetch or rely on subscribeToHabitLogs doing it.
+            // The subscription handles the state update!
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+              navigator.vibrate([40, 60, 40]);
+            }
+          }}
+        />
       )}
     </div>
   );

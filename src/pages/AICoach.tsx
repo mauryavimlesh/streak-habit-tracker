@@ -11,6 +11,7 @@ import {
   User as UserIcon,
   Flame,
   Check,
+  Bug,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
@@ -78,6 +79,45 @@ export default function AICoach() {
   const [configStatus, setConfigStatus] = useState<ConfigStatus | null>(null);
   const [showConfig, setShowConfig] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [isRunningDiag, setIsRunningDiag] = useState(false);
+
+  const addLog = (msg: string) => {
+    setDebugLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  };
+
+  const runDiagnostics = async () => {
+    setIsRunningDiag(true);
+    setDebugLogs([]);
+    addLog('Starting AI Coach Diagnostics...');
+    
+    try {
+      addLog('GET /api/ai-status');
+      const statusRes = await fetch('/api/ai-status', { headers: { 'Accept': 'application/json' }});
+      addLog(`Status code: ${statusRes.status}`);
+      const statusText = await statusRes.text();
+      addLog(`Raw response: ${statusText}`);
+      
+      addLog('POST /api/ai-coach (Test ping)');
+      const coachRes = await fetch('/api/ai-coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'ping' })
+      });
+      addLog(`Status code: ${coachRes.status}`);
+      const coachText = await coachRes.text();
+      addLog(`Raw response: ${coachText.substring(0, 200)}${coachText.length > 200 ? '...' : ''}`);
+      
+      addLog('Diagnostics complete.');
+    } catch (err: any) {
+      addLog(`NETWORK ERROR: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsRunningDiag(false);
+    }
+  };
+
 
   const isSendingRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -322,60 +362,54 @@ export default function AICoach() {
     <div className="flex flex-col h-screen bg-background text-white max-w-lg mx-auto select-none">
       {/* Header */}
       <header className="flex items-center justify-between px-5 py-4 border-b border-[#1f232c] bg-background/95 backdrop-blur-md sticky top-0 z-10">
-        <button
-          id="ai-coach-back-btn"
-          onClick={() => navigate(-1)}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-card border border-[#1f232c] hover:bg-white/10 transition-colors cursor-pointer"
-          aria-label="Go back"
-        >
-          <ChevronLeft className="w-5 h-5 text-[#7d8495]" />
-        </button>
+        
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowDebug(!showDebug)}
+            title="Toggle Debug Console"
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-card border border-[#1f232c] hover:bg-white/10 text-[#7d8495] hover:text-amber-400 transition-colors cursor-pointer"
+            aria-label="Toggle Debug"
+          >
+            <Bug className="w-4 h-4" />
+          </button>
+          <button
+            id="ai-coach-clear-btn"
+            onClick={handleClearChat}
+            title="Clear conversation"
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-card border border-[#1f232c] hover:bg-white/10 text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+            aria-label="Clear chat"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
 
-        <div className="text-center">
-          <h1 className="text-base font-semibold flex items-center gap-1.5 justify-center text-white">
-            AI Coach <Sparkles className="w-4 h-4 text-[#a78bfa]" />
-          </h1>
-          <div className="flex items-center justify-center gap-1.5 text-xs">
-            {!configStatus ? (
-              <span className="text-[#7d8495] font-medium flex items-center gap-1">Checking...</span>
-            ) : configStatus.status === 'READY' ? (
-              <span className="text-accent-primary font-medium flex items-center gap-1">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
-                ✓ AI Coach Ready
-              </span>
-            ) : configStatus.status === 'SERVER ERROR' ? (
-              <span className="text-red-400 font-medium flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5" />
-                Server Offline
-              </span>
+      </header>
+
+      
+      {/* Debug Console */}
+      {showDebug && (
+        <div className="bg-black border-b border-[#1f232c] p-4 text-xs font-mono text-green-400 max-h-48 overflow-y-auto">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-bold">Diagnostic Console</span>
+            <button 
+              onClick={runDiagnostics}
+              disabled={isRunningDiag}
+              className="px-2 py-1 bg-green-900/30 border border-green-800 rounded text-green-300 hover:bg-green-900/50 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              {isRunningDiag ? 'Running...' : 'Run Diagnostics'}
+            </button>
+          </div>
+          <div className="space-y-1">
+            {debugLogs.length === 0 ? (
+              <span className="text-green-800">Click 'Run Diagnostics' to test backend connection...</span>
             ) : (
-              <button
-                onClick={() => setShowConfig(true)}
-                className="text-amber-400 font-medium flex items-center gap-1 hover:text-amber-300 transition-colors"
-              >
-                <AlertTriangle className="w-3.5 h-3.5" />
-                ⚠ Configuration Required
-              </button>
-            )}
-            
-            {habits.length > 0 && (
-              <span className="text-[#7d8495] flex items-center gap-0.5">
-                • <Flame className="w-3 h-3 text-amber-500" /> {habits.length} habits
-              </span>
+              debugLogs.map((log, i) => (
+                <div key={i} className="break-all">{log}</div>
+              ))
             )}
           </div>
         </div>
-
-        <button
-          id="ai-coach-clear-btn"
-          onClick={handleClearChat}
-          title="Clear conversation"
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-card border border-[#1f232c] hover:bg-white/10 text-[#7d8495] hover:text-white transition-colors cursor-pointer"
-          aria-label="Clear chat"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </header>
+      )}
 
       {/* Messages List */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
