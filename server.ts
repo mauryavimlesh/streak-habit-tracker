@@ -104,7 +104,7 @@ Personalize your response by referencing their habits, streak count, or goals wh
     }
 
     let responseText = '';
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
+    const candidateModels = ['gemini-3.1-pro-preview', 'gemini-3.8-flash', 'gemini-flash-latest'];
     let lastError: any = null;
 
     for (const model of candidateModels) {
