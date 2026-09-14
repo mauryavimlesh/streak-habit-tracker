@@ -156,7 +156,7 @@ export default function Journal() {
     if (!text.trim()) return;
     setIsAiLoading(true);
     try {
-      const res = await fetch('/api/ai/coach', {
+      const res = await fetch('/api/ai-coach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

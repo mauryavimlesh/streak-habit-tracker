@@ -1,3 +1,5 @@
+import { auth } from './firebase';
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'ai';
@@ -33,7 +35,7 @@ export interface CoachApiResponse {
  */
 export async function getAiCoachStatus(): Promise<{ configured: boolean; model: string }> {
   try {
-    const res = await fetch('/api/ai/status', {
+    const res = await fetch('/api/ai-status', {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
     });
@@ -73,12 +75,22 @@ export async function sendCoachMessage(
       text: msg.text,
     }));
 
+  let token = '';
+  try {
+    if (auth.currentUser) {
+      token = await auth.currentUser.getIdToken();
+    }
+  } catch (err) {
+    console.warn('Unable to get auth token:', err);
+  }
+
   let response: Response;
   try {
-    response = await fetch('/api/ai/coach', {
+    response = await fetch('/api/ai-coach', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       },
       body: JSON.stringify({
         message: trimmed,

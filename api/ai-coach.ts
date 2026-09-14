@@ -1,16 +1,9 @@
-import express from 'express';
+import { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { adminAuth, adminDb } from './firebase-admin';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const app = express();
-app.use(express.json());
-
-// Lazy initialization of Google Gen AI SDK
 let aiClient: GoogleGenAI | null = null;
+
 function getAiClient(): GoogleGenAI | null {
   if (!aiClient && process.env.GEMINI_API_KEY) {
     aiClient = new GoogleGenAI({
@@ -25,31 +18,45 @@ function getAiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
-// Configuration endpoint for development preview
-app.post('/api/config', (req, res) => {
-  const { geminiApiKey } = req.body;
-  if (geminiApiKey) {
-    process.env.GEMINI_API_KEY = geminiApiKey;
-    // Reset the aiClient so it re-initializes with the new key
-    aiClient = null;
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
-  res.json({ success: true, configured: Boolean(process.env.GEMINI_API_KEY) });
-});
 
-// Status endpoint for AI Coach availability
-app.get('/api/ai-status', (req, res) => {
-  res.json({
-    status: 'ok',
-    configured: Boolean(process.env.GEMINI_API_KEY),
-    model: 'gemini-3.8-flash',
-  });
-});
-
-app.post('/api/ai-coach', async (req, res) => {
   try {
     const { message, messages, history, context } = req.body;
     
+    // Secure session validation using Firebase Admin
+    const authHeader = req.headers.authorization;
+    let userId = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const idToken = authHeader.split('Bearer ')[1];
+      try {
+        const decodedToken = await adminAuth.verifyIdToken(idToken);
+        userId = decodedToken.uid;
+      } catch (err) {
+        console.warn('Invalid ID token provided:', err);
+      }
+    }
+
+    let fetchedContext = context;
+    if (userId) {
+      try {
+        const habitsSnapshot = await adminDb.collection('users').doc(userId).collection('habits').get();
+        const habits = habitsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        fetchedContext = {
+          ...fetchedContext,
+          userId,
+          habits,
+          activeHabitCount: habits.length
+        };
+      } catch (err) {
+        console.warn('Failed to fetch user habits from Firestore (might require service account credentials):', err);
+      }
+    }
+
     if (!process.env.GEMINI_API_KEY) {
+      console.error('[AI Coach] Configuration missing: GEMINI_API_KEY is not set in the environment.');
       return res.status(500).json({
         error: 'AI Coach configuration is incomplete.',
       });
@@ -64,24 +71,22 @@ app.post('/api/ai-coach', async (req, res) => {
       return res.status(500).json({ error: 'AI client failed to initialize.' });
     }
 
-    const systemInstruction = `
-You are the STREAK AI Coach, a master habit strategist and empathetic personal performance mentor.
+    const systemInstruction = `You are the STREAK AI Coach, a master habit strategist and empathetic personal performance mentor.
 STREAK's core philosophy is "Small actions. Every day." grounded in atomic habits, behavioral momentum, and Stoic mindfulness.
 
 Core Principles:
 - Tone: Calm, encouraging, grounded, direct, and actionable. Never use hollow buzzwords or overly generic cheerleading.
 - Methodology: Focus on reducing starting friction, habit stacking, identity-based habits, and rebounding quickly after missed days ("Never miss twice").
 - Style: Provide crisp, practical guidance (2-4 paragraphs or concise bullet points). Format clearly for mobile viewing.
-${context ? `
-USER & HABIT CONTEXT:
-${typeof context === 'string' ? context : JSON.stringify(context, null, 2)}
-Personalize your response by referencing their habits, streak count, or goals whenever relevant.` : ''}
-`.trim();
+
+${fetchedContext ? `USER & HABIT CONTEXT:
+${typeof fetchedContext === 'string' ? fetchedContext : JSON.stringify(fetchedContext, null, 2)}
+Personalize your response by referencing their habits, streak count, or goals whenever relevant.` : ''}`.trim();
 
     // Prepare contents: support multi-turn history or single message
     let contents: any;
     const conversationList = Array.isArray(messages) ? messages : Array.isArray(history) ? history : null;
-
+    
     if (conversationList && conversationList.length > 0) {
       contents = conversationList.map((item: any) => {
         const role = (item.role === 'ai' || item.role === 'assistant' || item.role === 'model') ? 'model' : 'user';
@@ -117,7 +122,7 @@ Personalize your response by referencing their habits, streak count, or goals wh
             temperature: 0.7,
           },
         });
-
+        
         if (response?.text) {
           responseText = response.text.trim();
           break;
@@ -132,7 +137,7 @@ Personalize your response by referencing their habits, streak count, or goals wh
       throw lastError || new Error('No response from AI model');
     }
 
-    res.json({
+    return res.status(200).json({
       text: responseText,
       reply: responseText,
     });
@@ -153,25 +158,6 @@ Personalize your response by referencing their habits, streak count, or goals wh
       return res.status(502).json({ error: 'AI Coach received an invalid response.' });
     }
     
-    res.status(500).json({ error: 'AI Coach server error. Please try again.' });
+    return res.status(500).json({ error: 'AI Coach server error. Please try again.' });
   }
-});
-
-// Serve static files in production
-const isProd = process.env.NODE_ENV === 'production';
-if (isProd) {
-  app.use(express.static(path.join(__dirname, 'dist')));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-  });
 }
-
-const PORT = process.env.PORT || 3000;
-if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
-}
-
-export default app;
-

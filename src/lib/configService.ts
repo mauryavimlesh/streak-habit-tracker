@@ -14,7 +14,7 @@ export async function getSystemConfiguration(): Promise<ConfigStatus> {
   let serverReachable = true;
 
   try {
-    const res = await fetch('/api/ai/status', {
+    const res = await fetch('/api/ai-status', {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
     });

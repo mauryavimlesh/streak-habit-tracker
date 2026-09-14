@@ -78,6 +78,7 @@ export default function AICoach() {
   const [showConfig, setShowConfig] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const isSendingRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -162,9 +163,9 @@ export default function AICoach() {
   }, [messages, loading, errorState]);
 
   // Send message handler
-  const handleSendMessage = async (promptToSend?: string) => {
+  const handleSendMessage = async (promptToSend?: string, isRetry: boolean = false) => {
     const textToSend = promptToSend || input.trim();
-    if (!textToSend || loading) return;
+    if (!textToSend || loading || isSendingRef.current) return;
 
     if (configStatus?.status !== 'READY') {
       setErrorState({
@@ -174,18 +175,24 @@ export default function AICoach() {
       return;
     }
 
+    isSendingRef.current = true;
     setErrorState(null);
     setInput('');
 
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      role: 'user',
-      text: textToSend,
-      timestamp: Date.now(),
-    };
-
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
+    let updatedMessages = [...messages];
+    
+    // Only append user message if it's not a retry
+    if (!isRetry) {
+      const userMessage: ChatMessage = {
+        id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        role: 'user',
+        text: textToSend,
+        timestamp: Date.now(),
+      };
+      updatedMessages = [...messages, userMessage];
+      setMessages(updatedMessages);
+    }
+    
     setLoading(true);
     trackAICoachMessageSent();
 
@@ -211,6 +218,7 @@ export default function AICoach() {
       trackAICoachError(errorMsg);
     } finally {
       setLoading(false);
+      isSendingRef.current = false;
     }
   };
 
@@ -220,7 +228,7 @@ export default function AICoach() {
     trackAICoachRetry();
     const prompt = errorState.failedPrompt;
     setErrorState(null);
-    handleSendMessage(prompt);
+    handleSendMessage(prompt, true);
   };
 
   // Clear chat history
