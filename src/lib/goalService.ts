@@ -13,7 +13,7 @@ import {
   onSnapshot,
   setDoc,
 } from 'firebase/firestore';
-import { trackGoalCreated, trackGoalCompleted } from './analyticsService';
+import { trackGoalCreated, trackGoalCompleted, trackGoalUpdated, trackGoalDeleted } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
 
 export interface Milestone {
@@ -317,6 +317,8 @@ export async function updateGoal(
 
   if (updates.status === 'completed') {
     trackGoalCompleted(updated.category);
+  } else if (Object.keys(updates).length > 0) {
+    trackGoalUpdated(updated.category);
   }
 
   if (userId && userId !== 'local' && userId !== 'default' && !goalId.startsWith('temp_goal_')) {
@@ -336,6 +338,7 @@ export async function updateGoal(
 
 export async function deleteGoal(goalId: string, userId?: string): Promise<boolean> {
   const local = readLocalGoals();
+  const goal = local.find(g => g.id === goalId);
   const filtered = local.filter((g) => g.id !== goalId);
   saveLocalGoals(filtered);
 
@@ -348,6 +351,7 @@ export async function deleteGoal(goalId: string, userId?: string): Promise<boole
     }
   }
 
+  trackGoalDeleted();
   return true;
 }
 

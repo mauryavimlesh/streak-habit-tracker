@@ -14,7 +14,13 @@ import {
   Timestamp,
   onSnapshot,
 } from 'firebase/firestore';
-import { trackHabitCreated, trackHabitCompleted, trackHabitDeleted } from './analyticsService';
+import { 
+  trackHabitCreated, 
+  trackHabitCompleted, 
+  trackHabitDeleted,
+  trackHabitEdited,
+  trackHabitUncompleted
+} from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
 
 export type HabitFrequency = 'daily' | 'selected_days' | 'weekly' | 'custom';
@@ -161,9 +167,27 @@ export function saveLocalLogs(logs: HabitLog[]): void {
 
 // Habit CRUD
 export const createHabit = async (habitData: Omit<Habit, 'id' | 'createdAt' | 'updatedAt'>) => {
-  const tempId = 'habit_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  const trimmedName = (habitData.name || '').trim();
+  if (!trimmedName) {
+    throw new Error('Habit title is required.');
+  }
+
+  // Prevent duplicate creation if an identical habit name already exists
+  const existingHabits = readLocalHabits();
+  const duplicate = existingHabits.find(
+    (h) => h.name && h.name.trim().toLowerCase() === trimmedName.toLowerCase()
+  );
+  if (duplicate && duplicate.id) {
+    return duplicate.id;
+  }
+
+  const tempId = typeof crypto !== 'undefined' && crypto.randomUUID 
+    ? `habit_${crypto.randomUUID()}` 
+    : `habit_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${Math.random().toString(36).substring(2, 9)}`;
+
   const newHabit: Habit = {
     ...habitData,
+    name: trimmedName,
     id: tempId,
     archived: false,
     createdAt: new Date().toISOString(),
@@ -179,6 +203,7 @@ export const createHabit = async (habitData: Omit<Habit, 'id' | 'createdAt' | 'u
     try {
       const docRef = await addDoc(collection(db, 'habits'), {
         ...habitData,
+        name: trimmedName,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -276,6 +301,10 @@ export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
       handleFirestoreError(error, OperationType.UPDATE, `habits/${habitId}`);
     }
   }
+  
+  if (updates.name || updates.category || updates.frequencyType) {
+    trackHabitEdited(updates.category);
+  }
 };
 
 export const deleteHabit = async (habitId: string, userId?: string) => {
@@ -345,6 +374,10 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
     const habits = readLocalHabits();
     const habit = habits.find((h) => h.id === logData.habitId);
     trackHabitCompleted(habit?.category);
+  } else if (existingIdx !== -1 && localLogs[existingIdx].status === 'completed') {
+    const habits = readLocalHabits();
+    const habit = habits.find((h) => h.id === logData.habitId);
+    trackHabitUncompleted(habit?.category);
   }
 
   if (logData.userId && logData.userId !== 'local' && logData.userId !== 'default') {

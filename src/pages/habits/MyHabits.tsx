@@ -27,8 +27,10 @@ import {
   readLocalLogs,
   logHabit,
 } from '../../lib/habitService';
+import { permanentlyDeleteRecord } from '../../lib/deletionService';
 import { HABIT_ICONS, HABIT_COLORS } from '../../lib/constants';
 import { cn } from '../../lib/utils';
+import { DeleteConfirmModal } from '../../components/ui/DeleteConfirmModal';
 
 export default function MyHabits() {
   const navigate = useNavigate();
@@ -38,6 +40,8 @@ export default function MyHabits() {
   const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  const [deletingHabit, setDeletingHabit] = useState<Habit | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [todayLogs, setTodayLogs] = useState<Record<string, boolean>>({});
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -102,11 +106,29 @@ export default function MyHabits() {
     if (editingHabit) setEditingHabit(null);
   };
 
-  const handleDelete = async (habitId: string) => {
-    if (confirm('Are you sure you want to delete this habit?')) {
-      await deleteHabit(habitId);
-      loadHabits();
-      if (editingHabit) setEditingHabit(null);
+  const promptDeleteHabit = (habit: Habit) => {
+    setDeletingHabit(habit);
+  };
+
+  const handleConfirmDeleteHabit = async () => {
+    if (!deletingHabit?.id) return;
+    setIsDeleting(true);
+    try {
+      await permanentlyDeleteRecord({
+        id: deletingHabit.id,
+        type: 'habit',
+        title: deletingHabit.name,
+        userId: user?.uid || 'local',
+      });
+      if (editingHabit?.id === deletingHabit.id) {
+        setEditingHabit(null);
+      }
+      setDeletingHabit(null);
+      await loadHabits();
+    } catch (err) {
+      console.error('Failed deleting habit:', err);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -292,7 +314,7 @@ export default function MyHabits() {
                     </div>
                   </div>
 
-                  {/* Actions (Edit / Archive) */}
+                  {/* Actions (Edit / Archive / Delete) */}
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
@@ -309,6 +331,14 @@ export default function MyHabits() {
                       title={habit.archived ? 'Unarchive Habit' : 'Archive Habit'}
                     >
                       <Archive className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => promptDeleteHabit(habit)}
+                      className="p-2 rounded-xl text-[#7d8495] hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      title="Delete Habit"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </motion.div>
@@ -406,7 +436,7 @@ export default function MyHabits() {
               <div className="pt-2 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => handleDelete(editingHabit.id!)}
+                  onClick={() => promptDeleteHabit(editingHabit)}
                   className="p-2.5 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 text-xs font-semibold flex items-center justify-center cursor-pointer"
                   title="Delete Habit"
                 >
@@ -424,6 +454,16 @@ export default function MyHabits() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Consistent Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingHabit)}
+        onClose={() => setDeletingHabit(null)}
+        onConfirm={handleConfirmDeleteHabit}
+        title={deletingHabit?.name || 'Habit'}
+        itemType="habit"
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

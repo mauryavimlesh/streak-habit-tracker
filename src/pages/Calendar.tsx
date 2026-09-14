@@ -19,6 +19,7 @@ import { AddActionMenu } from '../components/calendar/AddActionMenu';
 import { DeleteConfirmModal } from '../components/calendar/DeleteConfirmModal';
 import { Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { trackCalendarOpened, trackCalendarDateSelected } from '../lib/analyticsService';
 
 export default function Calendar() {
   const { user } = useAuth();
@@ -29,6 +30,10 @@ export default function Calendar() {
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    trackCalendarOpened();
+  }, []);
 
   // Modals
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
@@ -58,6 +63,7 @@ export default function Calendar() {
   // Keep viewMonthDate in sync when user selects a date from another month
   const handleSelectDate = (date: Date) => {
     setSelectedDate(date);
+    trackCalendarDateSelected();
     if (
       date.getMonth() !== viewMonthDate.getMonth() ||
       date.getFullYear() !== viewMonthDate.getFullYear()

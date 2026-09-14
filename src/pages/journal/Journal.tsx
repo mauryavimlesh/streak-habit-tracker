@@ -30,6 +30,8 @@ import {
   createJournalEntry,
   deleteJournalEntry,
 } from '../../lib/journalService';
+import { permanentlyDeleteRecord } from '../../lib/deletionService';
+import { DeleteConfirmModal } from '../../components/ui/DeleteConfirmModal';
 import { cn } from '../../lib/utils';
 
 const MOODS: { id: JournalMood; label: string; icon: any; color: string }[] = [
@@ -64,6 +66,8 @@ export default function Journal() {
   const [tagInput, setTagInput] = useState('Focus, Health');
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [viewingGallery, setViewingGallery] = useState<{ images: string[]; index: number } | null>(null);
+  const [deletingEntry, setDeletingEntry] = useState<JournalEntry | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
 
@@ -125,10 +129,26 @@ export default function Journal() {
     loadEntries();
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Delete this journal reflection?')) {
-      await deleteJournalEntry(id, user?.uid || 'local');
-      loadEntries();
+  const promptDeleteEntry = (entry: JournalEntry) => {
+    setDeletingEntry(entry);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingEntry?.id) return;
+    setIsDeleting(true);
+    try {
+      await permanentlyDeleteRecord({
+        id: deletingEntry.id,
+        type: 'journal',
+        title: deletingEntry.title || 'Journal Reflection',
+        userId: user?.uid || 'local',
+      });
+      setDeletingEntry(null);
+      await loadEntries();
+    } catch (err) {
+      console.error('Failed to delete journal entry:', err);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -269,7 +289,7 @@ export default function Journal() {
 
                     <button
                       type="button"
-                      onClick={() => handleDelete(entry.id)}
+                      onClick={() => promptDeleteEntry(entry)}
                       className="text-[#7d8495] hover:text-red-400 p-1 transition-colors cursor-pointer"
                       title="Delete Entry"
                     >
@@ -595,6 +615,16 @@ export default function Journal() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Consistent Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingEntry)}
+        onClose={() => setDeletingEntry(null)}
+        onConfirm={handleConfirmDelete}
+        title={deletingEntry?.title || 'Journal reflection'}
+        itemType="journal reflection"
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

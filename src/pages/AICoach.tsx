@@ -18,9 +18,16 @@ import {
   ChatMessage,
   CoachContext,
   HabitSummary,
-  getAiCoachStatus,
   sendCoachMessage,
 } from '../lib/aiCoachService';
+import { getSystemConfiguration, ConfigStatus } from '../lib/configService';
+import { 
+  trackAICoachMessageSent, 
+  trackAICoachResponseReceived, 
+  trackAICoachError, 
+  trackAICoachRetry 
+} from '../lib/analyticsService';
+import ConfigurationDialog from '../components/ui/ConfigurationDialog';
 
 const LOCAL_STORAGE_CHAT_KEY = 'streak_ai_coach_messages_v1';
 
@@ -67,7 +74,8 @@ export default function AICoach() {
   const [loading, setLoading] = useState(false);
   const [errorState, setErrorState] = useState<{ message: string; failedPrompt?: string } | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
+  const [configStatus, setConfigStatus] = useState<ConfigStatus | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -82,14 +90,17 @@ export default function AICoach() {
     }
   }, [messages]);
 
+  const loadConfigStatus = async () => {
+    const status = await getSystemConfiguration();
+    setConfigStatus(status);
+  };
+
   // Check backend AI availability status
   useEffect(() => {
     let mounted = true;
-    getAiCoachStatus().then((status) => {
-      if (mounted) {
-        setIsConfigured(status.configured);
-      }
-    });
+    if (mounted) {
+      loadConfigStatus();
+    }
     return () => {
       mounted = false;
     };
@@ -155,6 +166,14 @@ export default function AICoach() {
     const textToSend = promptToSend || input.trim();
     if (!textToSend || loading) return;
 
+    if (configStatus?.status !== 'READY') {
+      setErrorState({
+        message: 'AI Coach configuration is incomplete. Please check the STREAK Configuration settings.',
+        failedPrompt: textToSend,
+      });
+      return;
+    }
+
     setErrorState(null);
     setInput('');
 
@@ -168,6 +187,7 @@ export default function AICoach() {
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setLoading(true);
+    trackAICoachMessageSent();
 
     try {
       const reply = await sendCoachMessage(textToSend, updatedMessages, coachContext);
@@ -180,12 +200,15 @@ export default function AICoach() {
       };
 
       setMessages((prev) => [...prev, aiMessage]);
+      trackAICoachResponseReceived('success');
     } catch (err: any) {
       console.error('AICoach Error:', err);
+      const errorMsg = err.message || 'Unable to get a response. Please try again.';
       setErrorState({
-        message: err.message || 'Unable to get a response. Please try again.',
+        message: errorMsg,
         failedPrompt: textToSend,
       });
+      trackAICoachError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -194,6 +217,7 @@ export default function AICoach() {
   // Retry failed prompt
   const handleRetry = () => {
     if (!errorState?.failedPrompt) return;
+    trackAICoachRetry();
     const prompt = errorState.failedPrompt;
     setErrorState(null);
     handleSendMessage(prompt);
@@ -295,14 +319,23 @@ export default function AICoach() {
             AI Coach <Sparkles className="w-4 h-4 text-[#a78bfa]" />
           </h1>
           <div className="flex items-center justify-center gap-1.5 text-xs">
-            {isConfigured === false ? (
-              <span className="text-amber-400 font-medium">● Config Required</span>
-            ) : (
+            {!configStatus ? (
+              <span className="text-[#7d8495] font-medium flex items-center gap-1">Checking...</span>
+            ) : configStatus.status === 'READY' ? (
               <span className="text-accent-primary font-medium flex items-center gap-1">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
-                Online
+                ✓ AI Coach Ready
               </span>
+            ) : (
+              <button
+                onClick={() => setShowConfig(true)}
+                className="text-amber-400 font-medium flex items-center gap-1 hover:text-amber-300 transition-colors"
+              >
+                <AlertCircle className="w-3.5 h-3.5" />
+                ⚠ AI Coach Configuration Required
+              </button>
             )}
+            
             {habits.length > 0 && (
               <span className="text-[#7d8495] flex items-center gap-0.5">
                 • <Flame className="w-3 h-3 text-amber-500" /> {habits.length} habits
@@ -466,6 +499,13 @@ export default function AICoach() {
           </button>
         </form>
       </div>
+      
+      {/* Configuration Modal */}
+      <ConfigurationDialog 
+        isOpen={showConfig} 
+        onClose={() => setShowConfig(false)}
+        onConfigApplied={loadConfigStatus} 
+      />
     </div>
   );
 }

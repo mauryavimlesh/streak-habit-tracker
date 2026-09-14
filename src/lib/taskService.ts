@@ -331,9 +331,34 @@ export async function createTask(
   taskData: Omit<TaskItem, 'id' | 'createdAt' | 'updatedAt'>,
   userId?: string
 ): Promise<TaskItem> {
-  const tempId = 'temp_task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  const cleanTitle = (taskData.title || '').trim();
+  if (!cleanTitle) {
+    throw new Error('Task title cannot be empty.');
+  }
+
+  const cleanDate = taskData.date || new Date().toISOString().split('T')[0];
+
+  // Prevent duplicate creation if an identical task already exists for this date and time
+  const local = readLocalTasks();
+  const duplicate = local.find(
+    (t) =>
+      t.title.trim().toLowerCase() === cleanTitle.toLowerCase() &&
+      t.date === cleanDate &&
+      (t.time || '').trim() === (taskData.time || '').trim() &&
+      (t.type || 'task') === (taskData.type || 'task')
+  );
+  if (duplicate) {
+    return duplicate;
+  }
+
+  const tempId = typeof crypto !== 'undefined' && crypto.randomUUID 
+    ? `task_${crypto.randomUUID()}` 
+    : `temp_task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${Math.random().toString(36).substring(2, 9)}`;
+
   const newTask: TaskItem = {
     ...taskData,
+    title: cleanTitle,
+    date: cleanDate,
     id: tempId,
     userId,
     createdAt: new Date().toISOString(),
@@ -341,7 +366,6 @@ export async function createTask(
   };
 
   // 1. Immediately save locally for instantaneous UI update
-  const local = readLocalTasks();
   local.unshift(newTask);
   saveLocalTasks(local);
 

@@ -9,7 +9,7 @@ import { syncLocalTasksToCloud } from './taskService';
 import { syncLocalJournalToCloud } from './journalService';
 import { syncLocalGoalsToCloud } from './goalService';
 import { syncLocalRemindersToCloud } from './reminderService';
-import { trackLogin, trackLogout, trackSignUp } from './analyticsService';
+import { trackLogin, trackLogout, trackSignUp, identifyUser } from './analyticsService';
 import {
   migrateGuestDataToFirestore,
   hasGuestDataToMigrate,
@@ -296,6 +296,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     let isSigningIn = false;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      identifyUser(currentUser?.uid || null);
       if (!currentUser && !isSigningIn) {
         // Unauthenticated visitor (could be Guest or new user)
         setUser(null);

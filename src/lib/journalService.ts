@@ -13,7 +13,7 @@ import {
   serverTimestamp,
   onSnapshot,
 } from 'firebase/firestore';
-import { trackJournalCreated } from './analyticsService';
+import { trackJournalEntryCreated, trackJournalEntryEdited, trackJournalEntryDeleted } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
 
 export type JournalMood = 'great' | 'good' | 'neutral' | 'tired' | 'stressed';
@@ -230,7 +230,7 @@ export async function createJournalEntry(
     }
   }
 
-  trackJournalCreated(newEntry.mood);
+  trackJournalEntryCreated(newEntry.mood);
   return newEntry;
 }
 
@@ -264,6 +264,7 @@ export async function updateJournalEntry(
     }
   }
 
+  trackJournalEntryEdited(updated.mood);
   return updated;
 }
 
@@ -281,6 +282,7 @@ export async function deleteJournalEntry(entryId: string, userId?: string): Prom
     }
   }
 
+  trackJournalEntryDeleted();
   return true;
 }
 

@@ -167,10 +167,6 @@ export default function Home() {
     loadData();
   }, [user]);
 
-  const displayedHabits = !user ? (habits.length > 0 ? habits : DEFAULT_HABITS) : habits;
-  const visibleHabits = showAllHabits ? displayedHabits : displayedHabits.slice(0, 3);
-  const visibleTasks = showAllTasks ? todayTasks : todayTasks.slice(0, 3);
-
   // Determine step size for incrementing
   const getStep = (habit: Habit) => {
     if (habit.targetUnit === 'min') return 5;
@@ -183,6 +179,27 @@ export default function Home() {
     const target = habit.targetValue || 1;
     return currentVal >= target;
   };
+
+  const displayedHabits = !user ? (habits.length > 0 ? habits : DEFAULT_HABITS) : habits;
+  
+  // Sort habits by relevance: incomplete/pending habits first, then completed
+  const sortedHabits = [...displayedHabits].sort((a, b) => {
+    const aDone = isHabitCompleted(a);
+    const bDone = isHabitCompleted(b);
+    if (aDone !== bDone) return aDone ? 1 : -1;
+    return 0;
+  });
+  const visibleHabits = showAllHabits ? sortedHabits : sortedHabits.slice(0, 4);
+
+  // Sort tasks by relevance: incomplete first, high priority first, then by time
+  const sortedTasks = [...todayTasks].sort((a, b) => {
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    if (a.priority === 'high' && b.priority !== 'high') return -1;
+    if (b.priority === 'high' && a.priority !== 'high') return 1;
+    if (a.time && b.time) return a.time.localeCompare(b.time);
+    return 0;
+  });
+  const visibleTasks = showAllTasks ? sortedTasks : sortedTasks.slice(0, 4);
 
   const completedHabitsCount = displayedHabits.filter(isHabitCompleted).length;
   const totalCount = displayedHabits.length || 3;

@@ -25,6 +25,17 @@ function getAiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
+// Configuration endpoint for development preview
+app.post('/api/config', (req, res) => {
+  const { geminiApiKey } = req.body;
+  if (geminiApiKey) {
+    process.env.GEMINI_API_KEY = geminiApiKey;
+    // Reset the aiClient so it re-initializes with the new key
+    aiClient = null;
+  }
+  res.json({ success: true, configured: Boolean(process.env.GEMINI_API_KEY) });
+});
+
 // Status endpoint for AI Coach availability
 app.get('/api/ai/status', (req, res) => {
   res.json({
@@ -40,7 +51,7 @@ app.post('/api/ai/coach', async (req, res) => {
     
     if (!process.env.GEMINI_API_KEY) {
       return res.status(500).json({
-        error: 'AI Coach is not configured. Missing GEMINI_API_KEY environment variable in server environment.',
+        error: 'AI Coach configuration is incomplete.',
       });
     }
 
@@ -93,7 +104,7 @@ Personalize your response by referencing their habits, streak count, or goals wh
     }
 
     let responseText = '';
-    const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+    const candidateModels = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
     let lastError: any = null;
 
     for (const model of candidateModels) {
@@ -128,26 +139,21 @@ Personalize your response by referencing their habits, streak count, or goals wh
   } catch (error: any) {
     console.error('AI Coach Error:', error);
     const msg = error?.message?.toLowerCase() || '';
-    if (
-      msg.includes('resource_exhausted') || 
-      msg.includes('quota') || 
-      msg.includes('429') || 
-      msg.includes('503') || 
-      msg.includes('high demand') ||
-      msg.includes('unavailable')
-    ) {
-      return res.status(503).json({
-        error: 'The AI Coach is experiencing high demand right now. Please wait a few seconds and try again.',
-      });
+    
+    if (msg.includes('resource_exhausted') || msg.includes('quota') || msg.includes('429') || msg.includes('503')) {
+      return res.status(503).json({ error: 'AI service is temporarily rate-limited. Please try again shortly.' });
     }
-    if (msg.includes('api_key') || msg.includes('unauthorized') || msg.includes('permission')) {
-      return res.status(500).json({
-        error: 'AI authorization error. Please ensure the GEMINI_API_KEY is configured properly in Secrets.',
-      });
+    if (msg.includes('api_key') || msg.includes('unauthorized') || msg.includes('authentication') || msg.includes('forbidden')) {
+      return res.status(401).json({ error: 'AI service authentication failed.' });
     }
-    res.status(500).json({
-      error: 'Unable to reach the AI Coach right now. Please try again.',
-    });
+    if (msg.includes('fetch') || msg.includes('network') || msg.includes('timeout')) {
+      return res.status(502).json({ error: 'Unable to connect to AI Coach.' });
+    }
+    if (msg.includes('no response') || msg.includes('invalid') || msg.includes('parse')) {
+      return res.status(502).json({ error: 'AI Coach received an invalid response.' });
+    }
+    
+    res.status(500).json({ error: 'AI Coach server error. Please try again.' });
   }
 });
 
