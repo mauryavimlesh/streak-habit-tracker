@@ -1,6 +1,8 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
-import { adminAuth, adminDb } from './firebase-admin.js';
+import { getAdminAuth, getAdminDb } from './firebase-admin';
+
+export const maxDuration = 60; // Max timeout for Vercel Hobby/Pro
 
 let aiClient: GoogleGenAI | null = null;
 function getAiClient(): GoogleGenAI | null {
@@ -68,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
       const idToken = authHeader.split('Bearer ')[1];
       try {
-        const decodedToken = await adminAuth.verifyIdToken(idToken);
+        const decodedToken = await getAdminAuth().verifyIdToken(idToken);
         userId = decodedToken.uid;
         addLog('Authentication: User verified');
       } catch (err) {
@@ -79,7 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let fetchedContext = context;
     if (userId) {
       try {
-        const habitsSnapshot = await adminDb.collection('users').doc(userId).collection('habits').get();
+        const habitsSnapshot = await getAdminDb().collection('users').doc(userId).collection('habits').get();
         const habits = habitsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
         fetchedContext = {
           ...fetchedContext,

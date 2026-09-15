@@ -5,7 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 import path from 'path';
 
 
-import { adminAuth, adminDb } from './api/firebase-admin.js';
+import { getAdminAuth, getAdminDb } from './api/firebase-admin.js';
 
 
 
@@ -59,7 +59,7 @@ app.post('/api/ai-coach', async (req, res) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const idToken = authHeader.split('Bearer ')[1];
       try {
-        const decodedToken = await adminAuth.verifyIdToken(idToken);
+        const decodedToken = await getAdminAuth().verifyIdToken(idToken);
         userId = decodedToken.uid;
       } catch (err) {
         console.warn('Invalid ID token provided:', err);
@@ -69,7 +69,7 @@ app.post('/api/ai-coach', async (req, res) => {
     let fetchedContext = context;
     if (userId) {
       try {
-        const habitsSnapshot = await adminDb.collection('users').doc(userId).collection('habits').get();
+        const habitsSnapshot = await getAdminDb().collection('users').doc(userId).collection('habits').get();
         const habits = habitsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         fetchedContext = {
           ...fetchedContext,

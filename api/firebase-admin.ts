@@ -20,8 +20,17 @@ if (!getApps().length) {
     }
   } catch (error) {
     console.error('Firebase admin initialization error', error);
+    // Fallback initialize to prevent getAuth() crashing the module on load
+    initializeApp({
+      projectId: 'gen-lang-client-0220339798'
+    });
   }
 }
 
-export const adminAuth = getAuth();
-export const adminDb = getFirestore();
+export function getAdminAuth() {
+  return getAuth();
+}
+
+export function getAdminDb() {
+  return getFirestore();
+}

@@ -33,6 +33,8 @@ import Activity from './pages/activity/Activity';
 import ActivityHistory from './pages/activity/ActivityHistory';
 
 import { TimerProvider } from './lib/timer/TimerContext';
+import { HabitNotificationEngine } from './components/HabitNotificationEngine';
+
 
 function OnboardingGate({ children }: { children: React.ReactNode }) {
   const { profile, onboardingCompleted, loading } = useAuth();
@@ -55,7 +57,12 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
     return <Navigate to="/onboarding" replace />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <HabitNotificationEngine />
+      {children}
+    </>
+  );
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
