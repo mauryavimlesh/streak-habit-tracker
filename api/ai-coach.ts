@@ -19,6 +19,19 @@ function getAiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
+function verifyEnvironmentVariables(addLog: (msg: string) => void) {
+  const expectedVars = ['GEMINI_API_KEY', 'FIREBASE_SERVICE_ACCOUNT'];
+  for (const envVar of expectedVars) {
+    if (!process.env[envVar]) {
+      const msg = `Environment Check: Warning - Missing expected variable ${envVar}`;
+      addLog(msg);
+      console.warn(`[Env Check] ${msg}`);
+    } else {
+      addLog(`Environment Check: ${envVar} is securely configured (length: ${process.env[envVar]?.length})`);
+    }
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const logs: string[] = [];
   const addLog = (msg: string) => {
@@ -29,6 +42,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     addLog('Lifecycle: Request received');
+    
+    // Run the runtime environment check
+    verifyEnvironmentVariables(addLog);
     
     if (req.method !== 'POST') {
       addLog(`Validation failed: Invalid method ${req.method}`);
