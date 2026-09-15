@@ -33,7 +33,7 @@ export function StudySessionShareCard({
   return (
     <div 
       className={cn(
-        "relative rounded-3xl overflow-hidden shadow-2xl flex flex-col bg-gradient-to-br from-[#121820] to-[#0a0c10] border border-[#2a303c]",
+        "share-card relative rounded-3xl overflow-hidden shadow-2xl flex flex-col bg-gradient-to-br from-[#121820] to-[#0a0c10] border border-[#2a303c]",
         isSquare ? "w-[320px] min-h-[320px]" : "w-[280px] min-h-[480px] pb-6"
       )}
       style={{ padding: '24px' }}

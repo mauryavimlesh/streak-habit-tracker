@@ -75,3 +75,21 @@
   }
 }
 
+
+/* QR Code Rendering Optimizations */
+.share-card img[alt="STREAK QR Code"] {
+  /* Prevent scaling distortions and maintain sharp edges */
+  image-rendering: -moz-crisp-edges;
+  image-rendering: -o-crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  
+  /* Add padding to create a secure quiet zone for mobile scanners */
+  padding: 4px;
+  background-color: #ffffff;
+  border-radius: 8px;
+  
+  /* Ensure the image doesn't skew or distort */
+  object-fit: contain;
+}
