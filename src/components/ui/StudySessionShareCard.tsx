@@ -34,7 +34,7 @@ export function StudySessionShareCard({
     <div 
       className={cn(
         "relative rounded-3xl overflow-hidden shadow-2xl flex flex-col bg-gradient-to-br from-[#121820] to-[#0a0c10] border border-[#2a303c]",
-        isSquare ? "w-[300px] h-[300px]" : "w-[260px] h-[462px]"
+        isSquare ? "w-[320px] min-h-[320px]" : "w-[280px] min-h-[480px] pb-6"
       )}
       style={{ padding: '24px' }}
     >
@@ -42,7 +42,7 @@ export function StudySessionShareCard({
       <div className="absolute bottom-0 left-0 w-32 h-32 bg-accent-primary/10 blur-[60px] rounded-full translate-y-1/2 -translate-x-1/2"></div>
       
       <div className="flex-1 flex flex-col z-10">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4">
           <span className="font-bold tracking-tight text-white flex items-center gap-1.5 text-sm">
             <span className="w-2 h-2 rounded-full bg-accent-primary"></span>
             STREAK
@@ -91,6 +91,17 @@ export function StudySessionShareCard({
             )}
           </div>
         )}
+        
+        {/* Footer with QR and Brand */}
+        <div className={cn("flex items-center justify-center gap-3", isSquare ? "mt-4" : "mt-5")}>
+          <div className="bg-white p-1 rounded-xl shadow-lg">
+            <img src="/streakloop_qr.png" alt="STREAK QR Code" className="w-14 h-14 object-contain" crossOrigin="anonymous" />
+          </div>
+          <div className="flex flex-col justify-center">
+            <span className="text-white font-black tracking-tighter text-xl leading-none mb-0.5">STREAK</span>
+            <span className="text-[#a1a8b9] text-[11px] font-semibold tracking-wide">streakloop.vercel.com</span>
+          </div>
+        </div>
       </div>
     </div>
   );

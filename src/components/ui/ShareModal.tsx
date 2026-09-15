@@ -84,7 +84,7 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
             await navigator.share({
               files: [file],
               title: 'STREAK',
-              text: 'Check out my progress on STREAK! 🔥',
+              text: 'Check out my progress on STREAK! 🔥\nstreakloop.vercel.com',
             });
           } catch (e) {
             // User likely cancelled
@@ -107,7 +107,7 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
     setShowFallback(false);
   };
 
-  const shareText = encodeURIComponent('Check out my progress on STREAK! 🔥 ' + window.location.href);
+  const shareText = encodeURIComponent('Check out my progress on STREAK! 🔥 \nstreakloop.vercel.com');
 
   if (!isOpen) return null;
 
@@ -218,7 +218,7 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
                 <MessageCircle className="w-5 h-5 text-[#25D366]" /> WhatsApp
               </a>
               <a
-                href={`https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=Check out my progress on STREAK! 🔥`}
+                href={`https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${shareText}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setShowFallback(false)}
