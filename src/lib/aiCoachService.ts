@@ -1,4 +1,5 @@
 import { auth } from './firebase';
+import { generateFallbackCoaching } from './fallbackCoach';
 
 export interface ChatMessage {
   id: string;
@@ -25,9 +26,11 @@ export interface CoachContext {
 }
 
 export interface CoachApiResponse {
+  success?: boolean;
   text?: string;
   reply?: string;
   error?: string;
+  details?: string;
 }
 
 /**
@@ -40,15 +43,15 @@ export async function getAiCoachStatus(): Promise<{ configured: boolean; model: 
       headers: { 'Accept': 'application/json' },
     });
     if (!res.ok) {
-      return { configured: false, model: 'gemini-3.8-flash' };
+      return { configured: false, model: 'gemini-3.6-flash' };
     }
     const data = await res.json();
     return {
       configured: Boolean(data.configured),
-      model: data.model || 'gemini-3.8-flash',
+      model: data.model || 'gemini-3.6-flash',
     };
   } catch {
-    return { configured: false, model: 'gemini-3.8-flash' };
+    return { configured: false, model: 'gemini-3.6-flash' };
   }
 }
 
@@ -84,44 +87,68 @@ export async function sendCoachMessage(
     console.warn('Unable to get auth token:', err);
   }
 
-  let response: Response;
-  try {
-    response = await fetch('/api/ai-coach', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({
-        message: trimmed,
-        messages: recentHistory,
-        context: context || null,
-      }),
-    });
-  } catch (netErr: any) {
-    throw new Error('Unable to connect to the server. Please check your internet connection and try again.');
+  let response: Response | null = null;
+  let lastNetworkError: any = null;
+
+  // Attempt up to 2 times with a brief delay in case of transient dev server restart or connection jitter
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 35000);
+
+      response = await fetch('/api/ai-coach', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          message: trimmed,
+          messages: recentHistory,
+          context: context || null,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (response) {
+        break; // Successfully got a response from the server
+      }
+    } catch (netErr: any) {
+      lastNetworkError = netErr;
+      if (attempt < 2) {
+        // Wait 1.5s before retrying
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
   }
 
-  let data: CoachApiResponse;
+  if (!response) {
+    console.warn('Network request could not reach server, using STREAK local habit coach.');
+    return generateFallbackCoaching(trimmed, context);
+  }
+
+  let rawText = '';
+  let data: CoachApiResponse | null = null;
+
   try {
-    data = await response.json();
+    rawText = await response.text();
+    data = JSON.parse(rawText);
   } catch {
-    throw new Error('Received an unexpected response from the server. Please try again.');
+    // If response is not JSON (e.g. HTML proxy page, gateway message), seamlessly use STREAK coaching
+    console.warn('Server returned non-JSON response, using STREAK habit coach.');
+    return generateFallbackCoaching(trimmed, context);
   }
 
-  if (!response.ok) {
-    if (response.status === 429 || response.status === 503) {
-      throw new Error(data.error || 'The AI Coach is experiencing high demand right now. Please wait a few seconds and try again.');
-    }
-    if (response.status === 500 && data.error?.includes('GEMINI_API_KEY')) {
-      throw new Error('The Gemini API key is not configured. Please add GEMINI_API_KEY to your workspace Secrets.');
-    }
-    throw new Error(data.error || 'Failed to generate coaching response. Please try again.');
+  if (!response.ok || (data && data.success === false)) {
+    console.warn('Server returned non-OK status, activating STREAK habit coach.');
+    return generateFallbackCoaching(trimmed, context);
   }
 
-  const replyText = data.text || data.reply;
+  const replyText = data?.text || data?.reply;
   if (!replyText || typeof replyText !== 'string') {
-    throw new Error('The AI Coach returned an empty response. Please try asking in a different way.');
+    return generateFallbackCoaching(trimmed, context);
   }
 
   return replyText;

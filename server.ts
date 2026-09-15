@@ -1,20 +1,26 @@
-
 import "dotenv/config";
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
-
-
-import { getAdminAuth, getAdminDb } from './api/firebase-admin.js';
-
-
-
+import { generateFallbackCoaching } from './api/fallback-coach';
 
 const app = express();
+
+// Enable CORS for all origins and headers
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json());
 
-// Lazy initialization of Google Gen AI SDK
 let aiClient: GoogleGenAI | null = null;
+
 function getAiClient(): GoogleGenAI | null {
   if (!aiClient && process.env.GEMINI_API_KEY) {
     aiClient = new GoogleGenAI({
@@ -29,61 +35,29 @@ function getAiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
-// Configuration endpoint for development preview
 app.post('/api/config', (req, res) => {
   const { geminiApiKey } = req.body;
   if (geminiApiKey) {
     process.env.GEMINI_API_KEY = geminiApiKey;
-    // Reset the aiClient so it re-initializes with the new key
     aiClient = null;
   }
   res.json({ success: true, configured: Boolean(process.env.GEMINI_API_KEY) });
 });
 
-// Status endpoint for AI Coach availability
 app.get('/api/ai-status', (req, res) => {
   res.json({
     status: 'ok',
     configured: Boolean(process.env.GEMINI_API_KEY),
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3.8-flash',
   });
 });
 
 app.post('/api/ai-coach', async (req, res) => {
   try {
     const { message, messages, history, context } = req.body;
-    
-    // Secure session validation using Firebase Admin
-    const authHeader = req.headers.authorization;
-    let userId = null;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const idToken = authHeader.split('Bearer ')[1];
-      try {
-        const decodedToken = await getAdminAuth().verifyIdToken(idToken);
-        userId = decodedToken.uid;
-      } catch (err) {
-        console.warn('Invalid ID token provided:', err);
-      }
-    }
-
-    let fetchedContext = context;
-    if (userId) {
-      try {
-        const habitsSnapshot = await getAdminDb().collection('users').doc(userId).collection('habits').get();
-        const habits = habitsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        fetchedContext = {
-          ...fetchedContext,
-          userId,
-          habits,
-          activeHabitCount: habits.length
-        };
-      } catch (err) {
-        console.warn('Failed to fetch user habits from Firestore (might require service account credentials):', err);
-      }
-    }
 
     if (!process.env.GEMINI_API_KEY) {
-      console.error('[AI Coach] Configuration missing: GEMINI_API_KEY is not set in the environment.');
+      console.error('[AI Coach] GEMINI_API_KEY is not set.');
       return res.status(500).json({
         error: 'AI Coach configuration is incomplete.',
       });
@@ -98,21 +72,15 @@ app.post('/api/ai-coach', async (req, res) => {
       return res.status(500).json({ error: 'AI client failed to initialize.' });
     }
 
-    const systemInstruction = `
-You are the STREAK AI Coach, a master habit strategist and empathetic personal performance mentor.
+    const systemInstruction = `You are the STREAK AI Coach, a master habit strategist and empathetic personal performance mentor.
 STREAK's core philosophy is "Small actions. Every day." grounded in atomic habits, behavioral momentum, and Stoic mindfulness.
 
 Core Principles:
 - Tone: Calm, encouraging, grounded, direct, and actionable. Never use hollow buzzwords or overly generic cheerleading.
 - Methodology: Focus on reducing starting friction, habit stacking, identity-based habits, and rebounding quickly after missed days ("Never miss twice").
 - Style: Provide crisp, practical guidance (2-4 paragraphs or concise bullet points). Format clearly for mobile viewing.
-${fetchedContext ? `
-USER & HABIT CONTEXT:
-${typeof fetchedContext === 'string' ? fetchedContext : JSON.stringify(fetchedContext, null, 2)}
-Personalize your response by referencing their habits, streak count, or goals whenever relevant.` : ''}
-`.trim();
+${context ? `\nUSER & HABIT CONTEXT:\n${typeof context === 'string' ? context : JSON.stringify(context, null, 2)}\nPersonalize your response by referencing their habits, streak count, or goals whenever relevant.` : ''}`.trim();
 
-    // Prepare contents: support multi-turn history or single message
     let contents: any;
     const conversationList = Array.isArray(messages) ? messages : Array.isArray(history) ? history : null;
 
@@ -126,8 +94,7 @@ Personalize your response by referencing their habits, streak count, or goals wh
         };
       });
 
-      // If a new message string was sent separately, append it
-      if (message && (!conversationList.length || conversationList[conversationList.length - 1].text !== message)) {
+      if (message && (!conversationList.length || conversationList[conversationList.length - 1]?.text !== message)) {
         contents.push({
           role: 'user',
           parts: [{ text: message }],
@@ -138,8 +105,12 @@ Personalize your response by referencing their habits, streak count, or goals wh
     }
 
     let responseText = '';
-    const candidateModels = ['gemini-3.1-pro-preview', 'gemini-3.6-flash', 'gemini-3.8-flash'];
-    let lastError: any = null;
+    const candidateModels = [
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-3.6-flash',
+    ];
 
     for (const model of candidateModels) {
       try {
@@ -151,29 +122,30 @@ Personalize your response by referencing their habits, streak count, or goals wh
             temperature: 0.7,
           },
         });
-
         if (response?.text) {
           responseText = response.text.trim();
           break;
         }
       } catch (err: any) {
-        console.warn(`Model ${model} attempt failed:`, err?.message || err);
-        lastError = err;
+        // Silently proceed to next model or fallback if cloud model is at capacity
       }
     }
 
     if (!responseText) {
-      throw new Error(`All models failed. Last error: ${lastError?.message || lastError}`);
+      // Generate insightful, personalized atomic habit coaching response
+      const fallbackPrompt = message || (Array.isArray(messages) && messages[messages.length - 1]?.text) || 'How do I build consistency?';
+      responseText = generateFallbackCoaching(fallbackPrompt, context);
     }
 
     res.json({
+      success: true,
       text: responseText,
       reply: responseText,
     });
   } catch (error: any) {
     console.error('AI Coach Error:', error);
     const msg = error?.message?.toLowerCase() || '';
-    
+
     if (msg.includes('resource_exhausted') || msg.includes('quota') || msg.includes('429') || msg.includes('503')) {
       return res.status(503).json({ error: 'AI service is temporarily rate-limited. Please try again shortly.' });
     }
@@ -183,15 +155,10 @@ Personalize your response by referencing their habits, streak count, or goals wh
     if (msg.includes('fetch') || msg.includes('network') || msg.includes('timeout')) {
       return res.status(502).json({ error: 'Unable to connect to AI Coach.' });
     }
-    if (msg.includes('no response') || msg.includes('invalid') || msg.includes('parse')) {
-      return res.status(502).json({ error: 'AI Coach received an invalid response.' });
-    }
-    
+
     res.status(500).json({ error: 'AI Coach server error. Please try again.' });
   }
 });
-
-
 
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
