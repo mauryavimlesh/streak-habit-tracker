@@ -132,7 +132,15 @@ service cloud.firestore {
         && (!('date' in data) || (data.date is string && data.date.size() <= 20))
         && (!('lastTriggeredAt' in data) || (data.lastTriggeredAt is string && data.lastTriggeredAt.size() <= 50))
         && (!('linkedHabitId' in data) || (data.linkedHabitId is string && data.linkedHabitId.size() <= 128))
-        && (!('linkedEntityName' in data) || (data.linkedEntityName is string && data.linkedEntityName.size() <= 200));
+        && (!('linkedEntityName' in data) || (data.linkedEntityName is string && data.linkedEntityName.size() <= 200))
+        && (!('soundTone' in data) || (data.soundTone is string && data.soundTone.size() <= 50))
+        && (!('customAudioId' in data) || (data.customAudioId is string && data.customAudioId.size() <= 100))
+        && (!('customAudioName' in data) || (data.customAudioName is string && data.customAudioName.size() <= 200))
+        && (!('vibrate' in data) || data.vibrate is bool)
+        && (!('volume' in data) || data.volume is number)
+        && (!('snoozeEnabled' in data) || data.snoozeEnabled is bool)
+        && (!('snoozeMinutes' in data) || data.snoozeMinutes is number)
+        && (!('snoozeUntil' in data) || (data.snoozeUntil is string && data.snoozeUntil.size() <= 50));
     }
 
     // 4. Collection Rules
@@ -254,6 +262,16 @@ service cloud.firestore {
         && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt || isValidTimestamp(incoming().createdAt))
         && (!('updatedAt' in incoming()) || isValidTimestamp(incoming().updatedAt));
       allow delete: if isOwner(existing().userId);
+    }
+
+    // Feedback & Support Submissions
+    match /feedback/{feedbackId} {
+      allow get: if request.auth != null && (resource == null || isOwner(resource.data.userId));
+      allow list: if request.auth != null && isOwner(resource.data.userId);
+      allow create: if incoming().subject is string && incoming().subject.size() > 0 && incoming().subject.size() <= 300
+        && incoming().message is string && incoming().message.size() > 0 && incoming().message.size() <= 50000
+        && (!('userId' in incoming()) || incoming().userId == null || (request.auth != null && incoming().userId == request.auth.uid));
+      allow update, delete: if false;
     }
   }
 }

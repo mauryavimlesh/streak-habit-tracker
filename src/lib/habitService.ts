@@ -140,6 +140,55 @@ export function saveLocalHabits(habits: Habit[]): void {
   }
 }
 
+function generateDefaultSeedLogs(): HabitLog[] {
+  const seedLogs: HabitLog[] = [];
+  const defaultHabitsConfig = [
+    { id: 'default-1', target: 30, completionChance: 0.83 }, // Morning Workout
+    { id: 'default-2', target: 8, completionChance: 0.88 },  // Drink Water
+    { id: 'default-3', target: 8, completionChance: 0.77 },  // Sleep 8 Hours
+  ];
+
+  const now = new Date();
+  for (let i = 29; i >= 1; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const dateStr = d.toLocaleDateString('en-CA');
+    const dayOfWeek = d.getDay();
+
+    defaultHabitsConfig.forEach((cfg, idx) => {
+      const factor = ((d.getDate() * 19 + d.getMonth() * 37 + idx * 29 + (dayOfWeek === 0 || dayOfWeek === 6 ? 7 : 13)) % 100) / 100;
+      const isCompleted = factor < cfg.completionChance;
+      const isPartial = !isCompleted && factor < (cfg.completionChance + 0.1);
+
+      let progressVal = 0;
+      let status: HabitLog['status'] = 'missed';
+
+      if (isCompleted) {
+        progressVal = cfg.target;
+        status = 'completed';
+      } else if (isPartial) {
+        progressVal = Math.max(1, Math.round(cfg.target * 0.6));
+        status = 'partial';
+      }
+
+      if (progressVal > 0 || status === 'completed') {
+        seedLogs.push({
+          id: `seed_log_${cfg.id}_${dateStr}`,
+          habitId: cfg.id,
+          userId: 'default',
+          date: dateStr,
+          status,
+          progressValue: progressVal,
+          createdAt: d.toISOString(),
+          updatedAt: d.toISOString(),
+        });
+      }
+    });
+  }
+
+  return seedLogs;
+}
+
 export function readLocalLogs(): HabitLog[] {
   try {
     const raw = localStorage.getItem(LOCAL_LOGS_KEY);
@@ -152,7 +201,11 @@ export function readLocalLogs(): HabitLog[] {
         return parsed.habitLogs;
       }
     }
-    return [];
+
+    // Auto-seed initial 30-day baseline logs for default habits
+    const initialSeed = generateDefaultSeedLogs();
+    saveLocalLogs(initialSeed);
+    return initialSeed;
   } catch {
     return [];
   }

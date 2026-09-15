@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { trackReminderCreated, trackReminderTriggered } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
+import { VibrationPatternType } from './alarmAudio';
 
 export type ReminderRepeat = 'once' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'custom' | 'monthly';
 export type ReminderCategory = 'habit' | 'task' | 'general' | 'morning' | 'night';
@@ -36,6 +37,196 @@ export interface ReminderItem {
   linkedEntityName?: string;
   createdAt: string;
   lastTriggeredAt?: string;
+  // Alarm & Sound extensions
+  soundTone?: string; // built-in tone id e.g. 'streak-pulse' | 'atomic-focus' | 'zen-bell' | 'gentle-sunrise' | 'digital-beep' | 'vibrant-marimba' | 'custom'
+  customAudioId?: string; // id in local IndexedDB
+  customAudioName?: string; // original filename e.g. "zen_birds.mp3"
+  volume?: number; // 0.0 to 1.0 (default 0.85)
+  vibrate?: boolean; // default true
+  vibrationPattern?: VibrationPatternType; // 'default' | 'double-pulse' | 'long-persistent' | 'off'
+  snoozeEnabled?: boolean; // default true
+  snoozeMinutes?: number; // 5, 10, 15, or custom (default 10)
+  snoozeUntil?: string; // ISO string if currently snoozed
+  snoozeCount?: number; // tracks number of snoozes for smart adaptive intervals
+}
+
+export interface SmartSnoozeResult {
+  nextMinutes: number;
+  reason: string;
+  snoozeCount: number;
+  patternTag: string;
+}
+
+/**
+ * Intelligently calculates the next snooze interval based on user interaction patterns.
+ * e.g., suggesting a longer interval if the user has snoozed multiple times already.
+ */
+export function calculateSmartSnooze(
+  baseMinutes: number = 10,
+  snoozeCount: number = 0
+): SmartSnoozeResult {
+  if (snoozeCount === 0) {
+    // First snooze: quick crisp nudge (min 5m or base)
+    const nextMinutes = Math.max(5, Math.min(baseMinutes, 10));
+    return {
+      nextMinutes,
+      reason: 'Quick buffer to prepare and begin habit',
+      snoozeCount: 0,
+      patternTag: 'Quick Nudge',
+    };
+  }
+
+  if (snoozeCount === 1) {
+    // Second snooze: standard buffer
+    const nextMinutes = Math.max(10, baseMinutes);
+    return {
+      nextMinutes,
+      reason: 'Standard focus buffer (snoozed 1x)',
+      snoozeCount: 1,
+      patternTag: 'Focus Buffer',
+    };
+  }
+
+  if (snoozeCount === 2) {
+    // Third snooze: escalating to 15m
+    const nextMinutes = Math.max(15, baseMinutes + 5);
+    return {
+      nextMinutes,
+      reason: 'Extended break (snoozed 2x already)',
+      snoozeCount: 2,
+      patternTag: 'Extended Window',
+    };
+  }
+
+  // 3 or more snoozes: deeper restorative interval (20-30 mins)
+  const nextMinutes = Math.min(30, 20 + (snoozeCount - 3) * 5);
+  return {
+    nextMinutes,
+    reason: `Adaptive recovery (${snoozeCount}x snoozed, auto-extended)`,
+    snoozeCount,
+    patternTag: 'Smart Recovery',
+  };
+}
+
+/**
+ * Normalizes time string to 12-hour format e.g. "07:30 AM"
+ */
+export function formatTimeDisplay(timeStr: string): string {
+  if (!timeStr) return '08:00 AM';
+  const clean = timeStr.trim();
+  if (/am|pm/i.test(clean)) {
+    return clean.toUpperCase();
+  }
+  const parts = clean.split(':');
+  if (parts.length >= 2) {
+    let hour = parseInt(parts[0], 10);
+    const minute = parts[1].slice(0, 2);
+    if (isNaN(hour)) return clean;
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
+    const padHour = hour < 10 ? `0${hour}` : `${hour}`;
+    return `${padHour}:${minute} ${ampm}`;
+  }
+  return clean;
+}
+
+/**
+ * Converts 12h/24h time to 24h "HH:MM" for <input type="time">
+ */
+export function toInputTimeValue(timeStr: string): string {
+  if (!timeStr) return '08:00';
+  const clean = timeStr.trim();
+  const match = clean.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+  if (!match) return clean.slice(0, 5);
+
+  let hour = parseInt(match[1], 10);
+  const minute = match[2];
+  const ampm = match[3] ? match[3].toUpperCase() : null;
+
+  if (ampm) {
+    if (ampm === 'PM' && hour < 12) hour += 12;
+    if (ampm === 'AM' && hour === 12) hour = 0;
+  }
+  const padHour = hour < 10 ? `0${hour}` : `${hour}`;
+  return `${padHour}:${minute}`;
+}
+
+/**
+ * Parses time string to 24-hour hour & minute numbers
+ */
+export function parseHourMinute(timeStr: string): { hour: number; minute: number } {
+  const clean = timeStr.trim();
+  const match = clean.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+  if (!match) return { hour: 8, minute: 0 };
+
+  let hour = parseInt(match[1], 10);
+  const minute = parseInt(match[2], 10) || 0;
+  const ampm = match[3] ? match[3].toUpperCase() : null;
+
+  if (ampm) {
+    if (ampm === 'PM' && hour < 12) hour += 12;
+    if (ampm === 'AM' && hour === 12) hour = 0;
+  }
+  return { hour, minute };
+}
+
+/**
+ * Checks if a reminder should trigger at a given Date
+ */
+export function shouldReminderTriggerNow(reminder: ReminderItem, now: Date): boolean {
+  if (!reminder.enabled) return false;
+
+  // If snoozed, check if snooze window has arrived
+  if (reminder.snoozeUntil) {
+    const snoozeDate = new Date(reminder.snoozeUntil);
+    if (!isNaN(snoozeDate.getTime()) && now.getTime() >= snoozeDate.getTime()) {
+      return true;
+    }
+    // If still in future snooze, do not fire regular schedule yet
+    if (!isNaN(snoozeDate.getTime()) && now.getTime() < snoozeDate.getTime()) {
+      return false;
+    }
+  }
+
+  // Check matching hour & minute
+  const { hour, minute } = parseHourMinute(reminder.time);
+  if (now.getHours() !== hour || now.getMinutes() !== minute) {
+    return false;
+  }
+
+  // Day abbreviation: Sun, Mon, Tue, Wed, Thu, Fri, Sat
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const currentDayName = dayNames[now.getDay()];
+  const isWeekend = currentDayName === 'Sat' || currentDayName === 'Sun';
+
+  switch (reminder.repeat) {
+    case 'once': {
+      if (reminder.date) {
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        return reminder.date === todayStr;
+      }
+      return true;
+    }
+    case 'daily':
+      return true;
+    case 'weekdays':
+      return !isWeekend;
+    case 'weekends':
+      return isWeekend;
+    case 'weekly':
+    case 'custom': {
+      if (Array.isArray(reminder.days) && reminder.days.length > 0) {
+        return reminder.days.includes(currentDayName);
+      }
+      return true;
+    }
+    case 'monthly': {
+      return reminder.date ? new Date(reminder.date).getDate() === now.getDate() : now.getDate() === 1;
+    }
+    default:
+      return true;
+  }
 }
 
 const LOCAL_REMINDERS_KEY = 'streak_reminders_v1';
@@ -125,6 +316,13 @@ export function readLocalReminders(): ReminderItem[] {
           ...item,
           repeat: item.repeat || (item.days?.length === 7 ? 'daily' : item.days?.length === 5 ? 'weekdays' : 'custom'),
           notificationEnabled: item.notificationEnabled ?? true,
+          soundTone: item.soundTone || 'streak-pulse',
+          volume: typeof item.volume === 'number' ? item.volume : 0.85,
+          vibrate: item.vibrate ?? true,
+          vibrationPattern: item.vibrationPattern || (item.vibrate === false ? 'off' : 'default'),
+          snoozeEnabled: item.snoozeEnabled ?? true,
+          snoozeMinutes: typeof item.snoozeMinutes === 'number' ? item.snoozeMinutes : 10,
+          snoozeCount: typeof item.snoozeCount === 'number' ? item.snoozeCount : 0,
         })));
       }
     }
@@ -140,6 +338,86 @@ export function readLocalReminders(): ReminderItem[] {
   } catch {
     return deduplicateReminders(DEFAULT_REMINDERS);
   }
+}
+
+/**
+ * Returns all active or configured reminders linked to a specific habit.
+ */
+export function getRemindersForHabit(habitId: string): ReminderItem[] {
+  if (!habitId) return [];
+  const list = readLocalReminders();
+  return list.filter((r) => r.linkedHabitId === habitId);
+}
+
+const SNOOZE_HISTORY_KEY = 'streak_snooze_interaction_history';
+
+export function recordSnoozeInteraction(id: string, minutes: number): void {
+  try {
+    const raw = localStorage.getItem(SNOOZE_HISTORY_KEY);
+    const history = raw ? JSON.parse(raw) : {};
+    const count = (history[id]?.count || 0) + 1;
+    history[id] = {
+      count,
+      lastMinutes: minutes,
+      timestamp: new Date().toISOString(),
+    };
+    localStorage.setItem(SNOOZE_HISTORY_KEY, JSON.stringify(history));
+  } catch (e) {
+    console.warn('Failed to record snooze interaction:', e);
+  }
+}
+
+export function getSnoozeHistoryCount(id: string): number {
+  try {
+    const raw = localStorage.getItem(SNOOZE_HISTORY_KEY);
+    if (!raw) return 0;
+    const history = JSON.parse(raw);
+    return history[id]?.count || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Snoozes a reminder for a given number of minutes and updates its snooze count.
+ */
+export async function snoozeReminder(
+  id: string,
+  minutes: number = 10,
+  userId?: string,
+  currentCount?: number
+): Promise<ReminderItem[]> {
+  const snoozeDate = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+  recordSnoozeInteraction(id, minutes);
+  const nextCount = typeof currentCount === 'number' ? currentCount + 1 : getSnoozeHistoryCount(id);
+
+  return updateReminder(
+    id, 
+    { 
+      snoozeUntil: snoozeDate,
+      snoozeCount: nextCount,
+    }, 
+    userId
+  );
+}
+
+/**
+ * Dismisses an active reminder alarm and clears its snooze & snooze count.
+ */
+export async function dismissReminderAlarm(
+  id: string,
+  userId?: string
+): Promise<ReminderItem[]> {
+  const nowIso = new Date().toISOString();
+  return updateReminder(
+    id,
+    {
+      lastTriggeredAt: nowIso,
+      snoozeUntil: undefined,
+      snoozeCount: 0,
+    },
+    userId
+  );
 }
 
 export function saveLocalReminders(reminders: ReminderItem[]): void {
@@ -323,15 +601,23 @@ export async function sendSystemNotification(
   
   if (Notification.permission === 'granted') {
     try {
-      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        const reg = await navigator.serviceWorker.ready;
-        if (reg?.showNotification) {
-          await reg.showNotification(title, {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.ready.catch(() => null);
+        if (reg && reg.showNotification) {
+          const swOptions = {
             body: options?.body || 'Stay consistent with your daily goals on STREAK.',
             icon: '/favicon.ico',
             badge: '/favicon.ico',
+            tag: options?.tag || 'streak-reminder',
+            requireInteraction: true,
+            actions: [
+              { action: 'snooze', title: 'Snooze' },
+              { action: 'dismiss', title: 'Dismiss' }
+            ],
             ...options,
-          });
+          };
+          await reg.showNotification(title, swOptions as any);
+          trackReminderTriggered();
           return true;
         }
       }
@@ -348,6 +634,19 @@ export async function sendSystemNotification(
     }
   }
   return false;
+}
+
+/**
+ * Registers STREAK PWA service worker for background reminder notifications.
+ */
+export async function registerStreakServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null;
+  try {
+    return await navigator.serviceWorker.register('/sw.js');
+  } catch (err) {
+    console.warn('STREAK ServiceWorker registration notice:', err);
+    return null;
+  }
 }
 
 export function subscribeToReminders(
@@ -413,6 +712,14 @@ export async function syncLocalRemindersToCloud(userId: string) {
         if (reminder.linkedHabitId) reminderPayload.linkedHabitId = reminder.linkedHabitId;
         if (reminder.linkedEntityName) reminderPayload.linkedEntityName = reminder.linkedEntityName;
         if (reminder.lastTriggeredAt) reminderPayload.lastTriggeredAt = reminder.lastTriggeredAt;
+        if (reminder.soundTone) reminderPayload.soundTone = reminder.soundTone;
+        if (reminder.customAudioId) reminderPayload.customAudioId = reminder.customAudioId;
+        if (reminder.customAudioName) reminderPayload.customAudioName = reminder.customAudioName;
+        if (typeof reminder.volume === 'number') reminderPayload.volume = reminder.volume;
+        if (typeof reminder.vibrate === 'boolean') reminderPayload.vibrate = reminder.vibrate;
+        if (typeof reminder.snoozeEnabled === 'boolean') reminderPayload.snoozeEnabled = reminder.snoozeEnabled;
+        if (typeof reminder.snoozeMinutes === 'number') reminderPayload.snoozeMinutes = reminder.snoozeMinutes;
+        if (reminder.snoozeUntil) reminderPayload.snoozeUntil = reminder.snoozeUntil;
 
         if (!snap.exists()) {
           reminderPayload.createdAt = serverTimestamp();

@@ -96,7 +96,8 @@ export default function App() {
   return (
     <AuthProvider>
       <TimerProvider>
-      <BrowserRouter>
+        <HabitNotificationEngine />
+        <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/onboarding" element={<Onboarding />} />

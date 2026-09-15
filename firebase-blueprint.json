@@ -121,6 +121,14 @@
         "notificationEnabled": { "type": "boolean" },
         "category": { "type": "string" },
         "description": { "type": "string" },
+        "soundTone": { "type": "string" },
+        "customAudioId": { "type": "string" },
+        "customAudioName": { "type": "string" },
+        "volume": { "type": "number" },
+        "vibrate": { "type": "boolean" },
+        "snoozeEnabled": { "type": "boolean" },
+        "snoozeMinutes": { "type": "number" },
+        "snoozeUntil": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "title", "time", "repeat", "enabled", "notificationEnabled", "category"]

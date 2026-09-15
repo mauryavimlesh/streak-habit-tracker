@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Clock, CheckCircle2, Calendar as CalendarIcon, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog, deleteHabit } from '../lib/habitService';
+import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog, deleteHabit, readLocalHabits, readLocalLogs } from '../lib/habitService';
 import { TaskItem, subscribeToTasks, toggleTaskComplete, deleteTask } from '../lib/taskService';
 import { getUserActivities, Activity as FocusActivity } from '../lib/activityService';
 import { getUserGoals, Goal } from '../lib/goalService';
@@ -15,7 +15,7 @@ import { cn } from '../lib/utils';
 import { Edit2, Trash2, Share } from 'lucide-react';
 import UserAvatar from '../components/profile/UserAvatar';
 import confetti from 'canvas-confetti';
-import { WeeklyProgressChart } from '../components/ui/WeeklyProgressChart';
+import { HabitConsistencyHeatmap } from '../components/ui/HabitConsistencyHeatmap';
 import { useTimer } from '../lib/timer/TimerContext';
 import { Play, Pause, Maximize2 } from 'lucide-react';
 
@@ -155,7 +155,20 @@ export default function Home() {
   useEffect(() => {
     async function loadData() {
       if (!user) {
-        setHabits(DEFAULT_HABITS);
+        const localHabits = readLocalHabits();
+        const habitsToUse = localHabits.length > 0 ? localHabits : DEFAULT_HABITS;
+        setHabits(habitsToUse);
+        const localLogs = readLocalLogs();
+        setLogs(localLogs);
+
+        const progressMap: Record<string, number> = {};
+        const todayString = new Date().toLocaleDateString('en-CA');
+        localLogs.forEach((l) => {
+          if (l.date === todayString) {
+            progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
+          }
+        });
+        setLocalProgress((prev) => ({ ...prev, ...progressMap }));
         setIsLoading(false);
         return;
       }
@@ -980,8 +993,12 @@ export default function Home() {
         )}
       </div>
       
-      {/* Weekly Progress Chart Component */}
-      <WeeklyProgressChart logs={logs} habits={displayedHabits} />
+      {/* Habit Consistency Heatmap Component (Last 30 Days Recharts Visualization) */}
+      <HabitConsistencyHeatmap
+        habits={displayedHabits}
+        logs={logs}
+        localProgress={localProgress}
+      />
 
       {/* Today's Tasks Section with tactile vibration feedback */}
       {todayTasks.length > 0 && (

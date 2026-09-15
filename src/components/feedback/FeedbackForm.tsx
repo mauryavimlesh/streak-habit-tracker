@@ -51,24 +51,49 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || isSubmitting) return;
+    if (isSubmitting) return;
+
+    const trimmedSubject = subject.trim();
+    const trimmedMessage = message.trim();
+    const trimmedEmail = email.trim();
+
+    if (!trimmedSubject) {
+      setErrorMessage('Please enter a subject for your feedback.');
+      triggerHaptic('error');
+      return;
+    }
+
+    if (!trimmedMessage) {
+      setErrorMessage('Please enter your message or details.');
+      triggerHaptic('error');
+      return;
+    }
+
+    if (trimmedEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        setErrorMessage('Please enter a valid email address, or leave it blank.');
+        triggerHaptic('error');
+        return;
+      }
+    }
 
     setIsSubmitting(true);
     setErrorMessage(null);
     triggerHaptic('selection');
 
-    const success = await submitFeedback({
+    const result = await submitFeedback({
       category,
-      subject: subject.trim() || 'General Feedback',
-      message: message.trim(),
+      subject: trimmedSubject,
+      message: trimmedMessage,
       images: attachedImages,
-      email: email.trim() || undefined,
+      email: trimmedEmail || undefined,
       userId: user?.uid,
     });
 
     setIsSubmitting(false);
 
-    if (success) {
+    if (result.success) {
       setSubmitted(true);
       triggerHaptic('completion');
       setSubject('');
@@ -76,9 +101,10 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       setEmail('');
       setAttachedImages([]);
       if (onSuccess) onSuccess();
-      setTimeout(() => setSubmitted(false), 6000);
+      setTimeout(() => setSubmitted(false), 8000);
     } else {
-      setErrorMessage('Could not send feedback. Please try again.');
+      setErrorMessage(result.error || 'Could not send feedback. Please try again.');
+      triggerHaptic('error');
     }
   };
 
