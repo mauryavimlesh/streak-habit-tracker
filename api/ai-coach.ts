@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI } from '@google/genai';
-import { adminAuth, adminDb } from './firebase-admin';
+import { adminAuth, adminDb } from './firebase-admin.js';
 
 let aiClient: GoogleGenAI | null = null;
 function getAiClient(): GoogleGenAI | null {
@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   try {
-    addLog('Request received');
+    addLog('Lifecycle: Request received');
     
     if (req.method !== 'POST') {
       addLog(`Validation failed: Invalid method ${req.method}`);
@@ -34,8 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const hasApiKey = Boolean(process.env.GEMINI_API_KEY);
-    addLog(`API key exists: ${hasApiKey}`);
-
+    addLog(`Validation: API key exists: ${hasApiKey}`);
     if (!hasApiKey) {
       addLog('Validation failed: Missing API key');
       return res.status(500).json({
@@ -50,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         bodyData = JSON.parse(req.body);
       } catch (e) {
-        addLog('Failed to parse request body as JSON');
+        addLog('Validation failed: Failed to parse request body as JSON');
         return res.status(400).json({ success: false, error: 'Invalid JSON body' });
       }
     }
@@ -61,7 +60,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       addLog('Validation failed: A message is required');
       return res.status(400).json({ success: false, error: 'A message is required.' });
     }
-    addLog('Request validation result: Passed');
+    
+    addLog('Lifecycle: Request validation passed');
 
     const authHeader = req.headers.authorization || req.headers.Authorization;
     let userId = null;
@@ -70,9 +70,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const decodedToken = await adminAuth.verifyIdToken(idToken);
         userId = decodedToken.uid;
-        addLog('User authentication verified');
+        addLog('Authentication: User verified');
       } catch (err) {
-        addLog('User authentication warning: Invalid ID token');
+        addLog('Authentication: Invalid ID token');
       }
     }
 
@@ -87,15 +87,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           habits,
           activeHabitCount: habits.length
         };
-        addLog('Fetched user context from Firestore');
+        addLog('Context: Fetched user habits from Firestore');
       } catch (err) {
-        addLog('Warning: Failed to fetch user habits from Firestore');
+        addLog('Context: Warning - Failed to fetch user habits from Firestore');
       }
     }
 
     const ai = getAiClient();
     if (!ai) {
-      addLog('Failed to initialize AI client');
+      addLog('Lifecycle: Failed to initialize AI client');
       return res.status(500).json({ success: false, error: 'AI client failed to initialize.' });
     }
 
@@ -130,14 +130,14 @@ ${fetchedContext ? `USER & HABIT CONTEXT:\n${typeof fetchedContext === 'string' 
     }
 
     let responseText = '';
-    const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+    const candidateModels = ['gemini-3.1-pro-preview', 'gemini-3.6-flash', 'gemini-3.8-flash'];
     let lastError: any = null;
     let selectedModel = '';
 
-    addLog('Gemini request started');
+    addLog('Lifecycle: Model selection and API call started');
     
     for (const model of candidateModels) {
-      addLog(`Attempting model: ${model}`);
+      addLog(`Lifecycle: Attempting model: ${model}`);
       selectedModel = model;
       try {
         const response = await ai.models.generateContent({
@@ -149,29 +149,33 @@ ${fetchedContext ? `USER & HABIT CONTEXT:\n${typeof fetchedContext === 'string' 
           },
         });
         
-        addLog(`Gemini request completed with model: ${model}`);
+        addLog(`Lifecycle: API call completed with model: ${model}`);
         
-        addLog('Response parsing started');
+        addLog('Lifecycle: Parsing started');
         if (response && response.text) {
           responseText = response.text.trim();
-          addLog('Response parsing completed');
+          addLog('Lifecycle: Parsing completed successfully');
           break;
         } else {
-          addLog('Response parsing warning: No text returned');
+          addLog('Lifecycle: Parsing warning - No text returned');
         }
       } catch (err: any) {
         const errorMsg = err?.message || String(err);
-        addLog(`Model ${model} attempt failed: ${errorMsg}`);
+        addLog(`API Call: Model ${model} attempt failed: ${errorMsg}`);
         lastError = err;
+        if (errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
+          addLog('API Call: Quota exhausted, propagating error directly');
+          throw err;
+        }
       }
     }
 
     if (!responseText) {
-      addLog('All models failed to return a valid response');
+      addLog('Lifecycle: All models failed to return a valid response');
       throw lastError || new Error('No response from AI model after exhausting candidates');
     }
 
-    addLog(`Final response status: 200 (Success)`);
+    addLog(`Lifecycle: Status 200 (Success)`);
     return res.status(200).json({
       success: true,
       text: responseText,
@@ -182,11 +186,18 @@ ${fetchedContext ? `USER & HABIT CONTEXT:\n${typeof fetchedContext === 'string' 
   } catch (error: any) {
     const errName = error?.name || 'UnknownError';
     const errMessage = error?.message || String(error);
-    addLog(`Exact caught error name: ${errName}, message: ${errMessage}`);
+    addLog(`Error caught: name=${errName}, message=${errMessage}`);
     
     const safeErrorMsg = errMessage.replace(/key=[^&\s]+/gi, 'key=HIDDEN');
-
-    addLog(`Final response status: 500 (Catch Block Fallback)`);
+    addLog(`Lifecycle: Status Error (Catch Block Fallback)`);
+    
+    if (safeErrorMsg.includes('resource_exhausted') || safeErrorMsg.includes('quota') || safeErrorMsg.includes('429') || safeErrorMsg.includes('503')) {
+      return res.status(503).json({ success: false, error: 'AI service is temporarily rate-limited. Please try again shortly.' });
+    }
+    if (safeErrorMsg.includes('api_key') || safeErrorMsg.includes('unauthorized') || safeErrorMsg.includes('authentication') || safeErrorMsg.includes('forbidden')) {
+      return res.status(401).json({ success: false, error: 'AI service authentication failed.' });
+    }
+    
     return res.status(500).json({
       success: false,
       error: 'AI Coach request failed',

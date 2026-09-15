@@ -1,13 +1,14 @@
+
 import "dotenv/config";
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
-import { fileURLToPath } from 'url';
+
 
 import { adminAuth, adminDb } from './api/firebase-admin.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+
+
 
 const app = express();
 app.use(express.json());
@@ -44,7 +45,7 @@ app.get('/api/ai-status', (req, res) => {
   res.json({
     status: 'ok',
     configured: Boolean(process.env.GEMINI_API_KEY),
-    model: 'gemini-3.8-flash',
+    model: 'gemini-2.5-flash',
   });
 });
 
@@ -137,7 +138,7 @@ Personalize your response by referencing their habits, streak count, or goals wh
     }
 
     let responseText = '';
-    const candidateModels = ['gemini-3.1-pro-preview', 'gemini-3.8-flash', 'gemini-flash-latest'];
+    const candidateModels = ['gemini-3.1-pro-preview', 'gemini-3.6-flash', 'gemini-3.8-flash'];
     let lastError: any = null;
 
     for (const model of candidateModels) {
@@ -162,7 +163,7 @@ Personalize your response by referencing their habits, streak count, or goals wh
     }
 
     if (!responseText) {
-      throw lastError || new Error('No response from AI model');
+      throw new Error(`All models failed. Last error: ${lastError?.message || lastError}`);
     }
 
     res.json({
@@ -190,21 +191,33 @@ Personalize your response by referencing their habits, streak count, or goals wh
   }
 });
 
-// Serve static files in production
-const isProd = process.env.NODE_ENV === 'production';
-if (isProd) {
-  app.use(express.static(path.join(__dirname, 'dist')));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-  });
+
+
+async function startServer() {
+  if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.join(process.cwd(), 'dist')));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+    });
+  }
+
+  const PORT = 3000;
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
+    });
+  }
 }
 
-const PORT = process.env.PORT || 3000;
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
+  startServer();
 }
 
 export default app;
-
