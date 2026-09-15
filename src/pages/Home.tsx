@@ -912,7 +912,7 @@ export default function Home() {
                 )}
                 <div className="flex justify-end gap-2 px-4 pb-1">
                   <button 
-                    onClick={() => navigate('/habits')}
+                    onClick={() => navigate(`/habits/new?edit=${habit.id}`)}
                     className="p-1 rounded-lg hover:bg-white/10 text-[#7d8495] hover:text-white transition-colors"
                   >
                     <Edit2 className="w-3.5 h-3.5" />

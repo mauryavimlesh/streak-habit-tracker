@@ -20,6 +20,10 @@ import { DeleteConfirmModal } from '../components/calendar/DeleteConfirmModal';
 import { Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { trackCalendarOpened, trackCalendarDateSelected } from '../lib/analyticsService';
+import { getHabitLogs, getUserHabits, Habit, HabitLog } from '../lib/habitService';
+import { getUserActivities, Activity } from '../lib/activityService';
+import { getUserGoals, Goal } from '../lib/goalService';
+import { getUserJournal, JournalEntry } from '../lib/journalService';
 
 export default function Calendar() {
   const { user } = useAuth();
@@ -29,6 +33,11 @@ export default function Calendar() {
   const [viewMonthDate, setViewMonthDate] = useState<Date>(() => new Date());
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [logs, setLogs] = useState<HabitLog[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [journals, setJournals] = useState<JournalEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

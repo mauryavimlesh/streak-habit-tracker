@@ -16,10 +16,22 @@ import {
   Sparkles,
   ArrowUpRight,
   Clock,
+  CheckCircle2,
+  Book,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+import { Habit, HabitLog } from '../../lib/habitService';
+import { Activity } from '../../lib/activityService';
+import { Goal } from '../../lib/goalService';
+import { JournalEntry } from '../../lib/journalService';
+
 interface DayScheduleProps {
+  habits?: Habit[];
+  logs?: HabitLog[];
+  activities?: Activity[];
+  goals?: Goal[];
+  journals?: JournalEntry[];
   selectedDate: Date;
   tasks: TaskItem[];
   onToggleTask: (taskId: string) => void;
@@ -30,6 +42,11 @@ interface DayScheduleProps {
 }
 
 export function DaySchedule({
+  habits = [],
+  logs = [],
+  activities = [],
+  goals = [],
+  journals = [],
   selectedDate,
   tasks,
   onToggleTask,
@@ -47,6 +64,13 @@ export function DaySchedule({
   const standardTaskCount = tasks.filter((t) => !t.type || t.type === 'task' || t.type === 'reminder').length;
   const completedCount = tasks.filter((t) => t.completed).length;
 
+  const selectedDateStr = selectedDate.toLocaleDateString('en-CA');
+  
+  // Aggregate all events for the selected date
+  const dayLogs = logs.filter(l => l.date === selectedDateStr && l.status === 'completed');
+  const dayActivities = activities.filter(a => a.date === selectedDateStr);
+  const dayJournals = journals.filter(j => j.date === selectedDateStr);
+  
   const filteredTasks = tasks.filter((t) => {
     if (filterType === 'all') return true;
     if (filterType === 'task') return !t.type || t.type === 'task' || t.type === 'reminder';
@@ -235,22 +259,74 @@ export function DaySchedule({
           ))}
         </div>
 
-        {/* Task Cards List */}
-        {filteredTasks.length > 0 ? (
-          <div className="space-y-2.5">
-            <AnimatePresence mode="popLayout">
-              {filteredTasks.map((task) => (
-                <TaskItemCard
-                  key={task.id}
-                  task={task}
-                  onToggle={onToggleTask}
-                  onEdit={onEditTask}
-                  onDelete={onDeleteTask}
-                />
-              ))}
-            </AnimatePresence>
+        {/* Task Cards List & Other Events */}
+        {dayLogs.length > 0 && (
+          <div className="space-y-2 mb-4">
+            <h4 className="text-xs font-bold text-[#7d8495] uppercase tracking-wider">Completed Habits</h4>
+            {dayLogs.map(log => {
+              const habit = habits.find(h => h.id === log.habitId);
+              return (
+                <div key={log.id} className="p-3 rounded-2xl bg-surface-card border border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-accent-primary/20 flex items-center justify-center text-accent-primary"><CheckCircle2 className="w-4 h-4" /></div>
+                    <span className="text-sm font-semibold text-white">{habit?.name || 'Habit'}</span>
+                  </div>
+                  <span className="text-xs text-[#7d8495]">Done</span>
+                </div>
+              );
+            })}
           </div>
-        ) : (
+        )}
+        
+        {dayActivities.length > 0 && (
+          <div className="space-y-2 mb-4">
+            <h4 className="text-xs font-bold text-[#7d8495] uppercase tracking-wider">Focus Sessions</h4>
+            {dayActivities.map(act => (
+              <div key={act.id} className="p-3 rounded-2xl bg-surface-card border border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400"><Clock className="w-4 h-4" /></div>
+                  <span className="text-sm font-semibold text-white">{act.name}</span>
+                </div>
+                <span className="text-xs font-semibold text-blue-400">{act.durationMinutes}m {act.durationSeconds}s</span>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {dayJournals.length > 0 && (
+          <div className="space-y-2 mb-4">
+            <h4 className="text-xs font-bold text-[#7d8495] uppercase tracking-wider">Journal Entries</h4>
+            {dayJournals.map(j => (
+              <div key={j.id} className="p-3 rounded-2xl bg-surface-card border border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400"><Book className="w-4 h-4" /></div>
+                  <span className="text-sm font-semibold text-white line-clamp-1 flex-1">{j.text}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {filteredTasks.length > 0 && (
+          <div className="space-y-2 mb-4">
+            <h4 className="text-xs font-bold text-[#7d8495] uppercase tracking-wider">Tasks</h4>
+            <div className="space-y-2.5">
+              <AnimatePresence mode="popLayout">
+                {filteredTasks.map((task) => (
+                  <TaskItemCard
+                    key={task.id}
+                    task={task}
+                    onToggle={onToggleTask}
+                    onEdit={onEditTask}
+                    onDelete={onDeleteTask}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
+        )}
+        
+        {filteredTasks.length === 0 && dayLogs.length === 0 && dayActivities.length === 0 && dayJournals.length === 0 && (
           /* Empty State for the Day */
           <div className="py-8 px-4 rounded-[24px] bg-[#12141c] border border-dashed border-[#242a38] text-center">
             <div className="w-12 h-12 rounded-full bg-[#1b202c] border border-[#2b3345] flex items-center justify-center text-[#7d8495] mx-auto mb-3">

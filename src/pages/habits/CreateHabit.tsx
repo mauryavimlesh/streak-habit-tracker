@@ -1,14 +1,38 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router';
 import { ChevronLeft } from 'lucide-react';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { useAuth } from '../../lib/AuthContext';
-import { createHabit, HabitFrequency, TargetType } from '../../lib/habitService';
+import { createHabit, updateHabit, getUserHabits, HabitFrequency, TargetType } from '../../lib/habitService';
 import { HABIT_ICONS, HABIT_COLORS } from '../../lib/constants';
 
 export default function CreateHabit() {
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const editId = searchParams.get('edit');
+  const [initialLoading, setInitialLoading] = useState(!!editId);
   const navigate = useNavigate();
   const { user } = useAuth();
+  
+  useEffect(() => {
+    if (editId && user) {
+      getUserHabits(user.uid).then(habits => {
+        const habit = habits.find(h => h.id === editId);
+        if (habit) {
+          setName(habit.name || '');
+          setDescription(habit.description || '');
+          setSelectedIcon(habit.icon || 'star');
+          setSelectedColor(habit.color || 'blue');
+          setTargetType(habit.targetType || 'binary');
+          setTargetValue(habit.targetValue || 1);
+          setTargetUnit(habit.targetUnit || '');
+          setFrequencyType(habit.frequencyType || 'daily');
+          setReminderTime(habit.reminderTime || '');
+        }
+        setInitialLoading(false);
+      });
+    }
+  }, [editId, user]);
   
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -28,29 +52,48 @@ export default function CreateHabit() {
     setLoading(true);
     
     try {
-      await createHabit({
-        userId: user?.uid || 'local',
-        name: name.trim(),
-        description: description.trim(),
-        category: 'general', // Default for now
-        icon: selectedIcon,
-        color: selectedColor,
-        frequencyType,
-        frequencyValue: [], // Used for specific days
-        targetType,
-        targetValue,
-        targetUnit,
-        reminderTime,
-      });
+      if (editId) {
+        await updateHabit(editId, {
+          name: name.trim(),
+          description: description.trim(),
+          category: 'general',
+          icon: selectedIcon,
+          color: selectedColor,
+          frequencyType,
+          frequencyValue: [],
+          targetType,
+          targetValue,
+          targetUnit,
+          reminderTime,
+        });
+      } else {
+        await createHabit({
+          userId: user?.uid || 'local',
+          name: name.trim(),
+          description: description.trim(),
+          category: 'general',
+          icon: selectedIcon,
+          color: selectedColor,
+          frequencyType,
+          frequencyValue: [],
+          targetType,
+          targetValue,
+          targetUnit,
+          reminderTime,
+        });
+      }
       
       navigate(-1);
     } catch (err) {
-      console.error('Failed to create habit:', err);
-      // Handle error gracefully if needed
+      console.error('Failed to save habit:', err);
     } finally {
       setLoading(false);
     }
   };
+
+  if (initialLoading) {
+    return <div className="min-h-screen bg-background flex items-center justify-center"><div className="w-8 h-8 border-t-2 border-accent-primary rounded-full animate-spin"></div></div>;
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-white">
@@ -61,7 +104,7 @@ export default function CreateHabit() {
         >
           Cancel
         </button>
-        <h1 className="text-base font-semibold text-white">New Habit</h1>
+        <h1 className="text-base font-semibold text-white">{editId ? 'Edit Habit' : 'New Habit'}</h1>
         <button 
           onClick={handleSave}
           disabled={!name.trim() || loading}

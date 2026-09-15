@@ -1,4 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+const fs = require('fs');
+
+const content = `import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -73,7 +75,7 @@ export default function Analytics() {
   const totalCompletions = logs.filter(l => l.status === 'completed').length;
   
   // Basic streak calculation for the whole app
-  const uniqueDates = [...new Set<string>(logs.filter(l => l.status === 'completed').map(l => l.date))].sort();
+  const uniqueDates = [...new Set(logs.filter(l => l.status === 'completed').map(l => l.date))].sort();
   let currentStreak = 0;
   let bestStreak = 0;
   let tempStreak = 0;
@@ -250,7 +252,7 @@ export default function Analytics() {
                         let hBest = 0;
                         let hTemp = 0;
                         let hPrev = null;
-                        const uDates = [...new Set<string>(habitLogs.map(l => l.date))].sort();
+                        const uDates = [...new Set(habitLogs.map(l => l.date))].sort();
                         
                         for (const d of uDates) {
                           if (!hPrev) hTemp = 1;
@@ -327,7 +329,7 @@ export default function Analytics() {
                               <span className="text-[10px] text-[#7d8495]">Started {createdDaysAgo} days ago</span>
                             </div>
                             <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden">
-                              <div className="h-full bg-accent-primary" style={{ width: `${Math.min(100, progress)}%` }} />
+                              <div className="h-full bg-accent-primary" style={{ width: \`\${Math.min(100, progress)}%\` }} />
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-[10px]">
                               <div>
@@ -427,7 +429,7 @@ export default function Analytics() {
                             <span className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">{new Date(j.date).toLocaleDateString()}</span>
                             <span className="text-[10px] px-2 py-1 bg-white/5 rounded-md text-white capitalize">{j.mood}</span>
                           </div>
-                          <p className="text-sm text-white line-clamp-2">{j.text}</p>
+                          <p className="text-sm text-white line-clamp-2">{j.content}</p>
                         </div>
                       ))
                     )}
@@ -441,3 +443,6 @@ export default function Analytics() {
     </div>
   );
 }
+`
+
+fs.writeFileSync('src/pages/analytics/Analytics.tsx', content);
