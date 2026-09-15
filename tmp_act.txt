@@ -413,6 +413,7 @@ export default function Activity() {
             itemType="session"
             description="Are you sure you want to discard this active session? All progress will be lost."
           />
+        </div>
       </div>
     );
   }

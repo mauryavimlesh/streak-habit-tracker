@@ -9,6 +9,8 @@ export interface Activity {
   durationSeconds: number;
   date: string;
   time: string;
+  startTime?: string;
+  endTime?: string;
   linkedHabitId?: string;
   createdAt?: any;
 }

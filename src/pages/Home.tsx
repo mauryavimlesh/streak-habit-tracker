@@ -7,7 +7,8 @@ import { TaskItem, subscribeToTasks, toggleTaskComplete, deleteTask } from '../l
 import { DailyReflection } from '../components/ui/DailyReflection';
 import { DeleteConfirmModal } from '../components/ui/DeleteConfirmModal';
 import { SleepModal } from '../components/ui/SleepModal';
-import { ShareMilestoneModal } from '../components/ui/ShareMilestoneModal';
+import { ShareModal } from '../components/ui/ShareModal';
+import { StreakShareCard } from '../components/ui/StreakShareCard';
 import { cn } from '../lib/utils';
 import { Edit2, Trash2, Share } from 'lucide-react';
 import UserAvatar from '../components/profile/UserAvatar';
@@ -1081,14 +1082,21 @@ export default function Home() {
         isDeleting={isDeleting}
       />
 
-      <ShareMilestoneModal
+      <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        streak={globalStreak}
-        userName={userName}
-        totalHabits={totalCount}
-        completedHabits={completedHabitsCount}
-      />
+        fileName={`streak-${globalStreak}-days`}
+      >
+        {(format) => (
+          <StreakShareCard
+            streak={globalStreak}
+            userName={userName}
+            totalHabits={totalCount}
+            completedHabits={completedHabitsCount}
+            format={format}
+          />
+        )}
+      </ShareModal>
 
       {editingSleepHabit && (
         <SleepModal

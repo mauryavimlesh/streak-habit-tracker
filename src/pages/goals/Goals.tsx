@@ -26,7 +26,8 @@ import {
   deleteGoal,
 } from '../../lib/goalService';
 import { cn } from '../../lib/utils';
-import { ShareMilestoneModal } from '../../components/ui/ShareMilestoneModal';
+import { ShareModal } from '../../components/ui/ShareModal';
+import { StreakShareCard } from '../../components/ui/StreakShareCard';
 import { Share } from 'lucide-react';
 
 export default function Goals() {
@@ -612,14 +613,22 @@ export default function Goals() {
         )}
       </AnimatePresence>
 
-      <ShareMilestoneModal
+      <ShareModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        streak={selectedGoal ? selectedGoal.currentProgress : 0}
-        userName={profile?.userName?.split(' ')[0] || profile?.name?.split(' ')[0] || 'Vimlesh'}
-        totalHabits={selectedGoal ? selectedGoal.target : 0}
-        completedHabits={selectedGoal ? selectedGoal.currentProgress : 0}
-      />
+        fileName={`goal-${selectedGoal?.title?.replace(/\s+/g, '-').toLowerCase() || 'progress'}`}
+      >
+        {(format) => (
+          <StreakShareCard
+            streak={selectedGoal ? selectedGoal.currentProgress : 0}
+            userName={profile?.userName?.split(' ')[0] || profile?.name?.split(' ')[0] || 'Vimlesh'}
+            totalHabits={selectedGoal ? selectedGoal.target : 0}
+            completedHabits={selectedGoal ? selectedGoal.currentProgress : 0}
+            goalTitle={selectedGoal?.title}
+            format={format}
+          />
+        )}
+      </ShareModal>
     </div>
   );
 }
