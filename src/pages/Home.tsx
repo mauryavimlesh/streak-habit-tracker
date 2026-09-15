@@ -4,6 +4,8 @@ import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Cloc
 import { useNavigate } from 'react-router';
 import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog, deleteHabit } from '../lib/habitService';
 import { TaskItem, subscribeToTasks, toggleTaskComplete, deleteTask } from '../lib/taskService';
+import { getUserActivities, Activity as FocusActivity } from '../lib/activityService';
+import { getUserGoals, Goal } from '../lib/goalService';
 import { DailyReflection } from '../components/ui/DailyReflection';
 import { DeleteConfirmModal } from '../components/ui/DeleteConfirmModal';
 import { SleepModal } from '../components/ui/SleepModal';
@@ -75,6 +77,9 @@ export default function Home() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<HabitLog[]>([]);
   const [todayTasks, setTodayTasks] = useState<TaskItem[]>([]);
+  const [allTasks, setAllTasks] = useState<TaskItem[]>([]);
+  const [activities, setActivities] = useState<FocusActivity[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // New state variables for Habit Notes and Sync Toast
@@ -101,8 +106,9 @@ export default function Home() {
 
   // Real-time task synchronization
   useEffect(() => {
-    const unsubscribe = subscribeToTasks(user?.uid, (allTasks) => {
-      const filtered = allTasks.filter((t) => t.date === todayStr);
+    const unsubscribe = subscribeToTasks(user?.uid, (tasksData) => {
+      setAllTasks(tasksData);
+      const filtered = tasksData.filter((t) => t.date === todayStr);
       setTodayTasks(filtered);
     });
     return () => unsubscribe();
@@ -1094,6 +1100,12 @@ export default function Home() {
             totalHabits={totalCount}
             completedHabits={completedHabitsCount}
             format={format}
+            studyHours={shareStudyHours}
+            studyMinutes={shareStudyMinutes}
+            completedTasks={completedTasksCountShare}
+            totalTasks={totalTasksCountShare}
+            activeGoals={activeGoalsShare}
+            completedGoals={completedGoalsShare}
           />
         )}
       </ShareModal>
