@@ -1,40 +1,18 @@
-import { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI } from '@google/genai';
-import { adminAuth, adminDb } from './firebase-admin';
+const fs = require('fs');
+let code = fs.readFileSync('server.ts', 'utf8');
 
-let aiClient: GoogleGenAI | null = null;
-function getAiClient(): GoogleGenAI | null {
-  if (!aiClient && process.env.GEMINI_API_KEY) {
-    aiClient = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    });
-  }
-  return aiClient;
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const logs: string[] = [];
-  const addLog = (msg: string) => {
+const newEndpoint = `app.post('/api/ai-coach', async (req, res) => {
+  const logs = [];
+  const addLog = (msg) => {
     const timestamp = new Date().toISOString();
-    console.log(`[AI-COACH ${timestamp}] ${msg}`);
+    console.log(\`[AI-COACH \${timestamp}] \${msg}\`);
     logs.push(msg);
   };
 
   try {
     addLog('Request received');
-    
-    if (req.method !== 'POST') {
-      addLog(`Validation failed: Invalid method ${req.method}`);
-      return res.status(405).json({ success: false, error: 'Method Not Allowed' });
-    }
-
     const hasApiKey = Boolean(process.env.GEMINI_API_KEY);
-    addLog(`API key exists: ${hasApiKey}`);
+    addLog(\`API key exists: \${hasApiKey}\`);
 
     if (!hasApiKey) {
       addLog('Validation failed: Missing API key');
@@ -80,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (userId) {
       try {
         const habitsSnapshot = await adminDb.collection('users').doc(userId).collection('habits').get();
-        const habits = habitsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+        const habits = habitsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         fetchedContext = {
           ...fetchedContext,
           userId,
@@ -99,19 +77,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ success: false, error: 'AI client failed to initialize.' });
     }
 
-    const systemInstruction = `You are the STREAK AI Coach, a master habit strategist and empathetic personal performance mentor.
+    const systemInstruction = \`You are the STREAK AI Coach, a master habit strategist and empathetic personal performance mentor.
 STREAK's core philosophy is "Small actions. Every day." grounded in atomic habits, behavioral momentum, and Stoic mindfulness.
 Core Principles:
 - Tone: Calm, encouraging, grounded, direct, and actionable. Never use hollow buzzwords or overly generic cheerleading.
 - Methodology: Focus on reducing starting friction, habit stacking, identity-based habits, and rebounding quickly after missed days ("Never miss twice").
 - Style: Provide crisp, practical guidance (2-4 paragraphs or concise bullet points). Format clearly for mobile viewing.
-${fetchedContext ? `USER & HABIT CONTEXT:\n${typeof fetchedContext === 'string' ? fetchedContext : JSON.stringify(fetchedContext, null, 2)}\nPersonalize your response by referencing their habits, streak count, or goals whenever relevant.` : ''}`.trim();
+\${fetchedContext ? \`USER & HABIT CONTEXT:\\n\${typeof fetchedContext === 'string' ? fetchedContext : JSON.stringify(fetchedContext, null, 2)}\\nPersonalize your response by referencing their habits, streak count, or goals whenever relevant.\` : ''}\`.trim();
 
-    let contents: any;
+    let contents;
     const conversationList = Array.isArray(messages) ? messages : Array.isArray(history) ? history : null;
     
     if (conversationList && conversationList.length > 0) {
-      contents = conversationList.map((item: any) => {
+      contents = conversationList.map((item) => {
         const role = (item.role === 'ai' || item.role === 'assistant' || item.role === 'model') ? 'model' : 'user';
         const text = item.text || item.content || '';
         return {
@@ -131,13 +109,13 @@ ${fetchedContext ? `USER & HABIT CONTEXT:\n${typeof fetchedContext === 'string' 
 
     let responseText = '';
     const candidateModels = ['gemini-2.5-flash', 'gemini-1.5-flash'];
-    let lastError: any = null;
+    let lastError = null;
     let selectedModel = '';
 
     addLog('Gemini request started');
     
     for (const model of candidateModels) {
-      addLog(`Attempting model: ${model}`);
+      addLog(\`Attempting model: \${model}\`);
       selectedModel = model;
       try {
         const response = await ai.models.generateContent({
@@ -149,7 +127,7 @@ ${fetchedContext ? `USER & HABIT CONTEXT:\n${typeof fetchedContext === 'string' 
           },
         });
         
-        addLog(`Gemini request completed with model: ${model}`);
+        addLog(\`Gemini request completed with model: \${model}\`);
         
         addLog('Response parsing started');
         if (response && response.text) {
@@ -159,9 +137,9 @@ ${fetchedContext ? `USER & HABIT CONTEXT:\n${typeof fetchedContext === 'string' 
         } else {
           addLog('Response parsing warning: No text returned');
         }
-      } catch (err: any) {
+      } catch (err) {
         const errorMsg = err?.message || String(err);
-        addLog(`Model ${model} attempt failed: ${errorMsg}`);
+        addLog(\`Model \${model} attempt failed: \${errorMsg}\`);
         lastError = err;
       }
     }
@@ -171,7 +149,7 @@ ${fetchedContext ? `USER & HABIT CONTEXT:\n${typeof fetchedContext === 'string' 
       throw lastError || new Error('No response from AI model after exhausting candidates');
     }
 
-    addLog(`Final response status: 200 (Success)`);
+    addLog(\`Final response status: 200 (Success)\`);
     return res.status(200).json({
       success: true,
       text: responseText,
@@ -179,18 +157,31 @@ ${fetchedContext ? `USER & HABIT CONTEXT:\n${typeof fetchedContext === 'string' 
       model_used: selectedModel
     });
 
-  } catch (error: any) {
+  } catch (error) {
     const errName = error?.name || 'UnknownError';
     const errMessage = error?.message || String(error);
-    addLog(`Exact caught error name: ${errName}, message: ${errMessage}`);
+    addLog(\`Exact caught error name: \${errName}, message: \${errMessage}\`);
     
-    const safeErrorMsg = errMessage.replace(/key=[^&\s]+/gi, 'key=HIDDEN');
+    const safeErrorMsg = errMessage.replace(/key=[^&\\s]+/gi, 'key=HIDDEN');
 
-    addLog(`Final response status: 500 (Catch Block Fallback)`);
+    addLog(\`Final response status: 500 (Catch Block Fallback)\`);
     return res.status(500).json({
       success: false,
       error: 'AI Coach request failed',
       details: safeErrorMsg || 'An unexpected runtime error occurred'
     });
   }
+});`;
+
+// Find the start of the app.post('/api/ai-coach' function
+const startIndex = code.indexOf("app.post('/api/ai-coach', async (req, res) => {");
+if (startIndex !== -1) {
+  // Find the end of it (the next app.use or listen, or the end)
+  const appListenIndex = code.indexOf("if (process.env.NODE_ENV !== 'production')", startIndex);
+  if (appListenIndex !== -1) {
+    code = code.substring(0, startIndex) + newEndpoint + '\n\n  ' + code.substring(appListenIndex);
+    fs.writeFileSync('server.ts', code);
+    console.log('Successfully patched server.ts');
+  }
 }
+

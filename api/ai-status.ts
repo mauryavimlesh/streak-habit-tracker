@@ -14,6 +14,6 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({
     status: 'ok',
     configured: isConfigured,
-    model: 'gemini-3.8-flash',
+    model: 'gemini-2.5-flash',
   });
 }

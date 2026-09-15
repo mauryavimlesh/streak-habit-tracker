@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import {
-  ChevronLeft,
+import {  ChevronLeft,
   Sparkles,
   Send,
   RefreshCw,
@@ -13,6 +12,7 @@ import {
   Check,
   Bug,
 } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../lib/AuthContext';
 import { Habit, getUserHabits, readLocalHabits } from '../lib/habitService';
@@ -462,19 +462,40 @@ export default function AICoach() {
 
         {/* Loading Indicator State */}
         {loading && (
-          <div className="flex flex-col items-start space-y-1">
+          <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-start space-y-1"
+          >
             <div className="p-4 bg-surface-card border border-[#1f232c] rounded-2xl rounded-bl-xs">
               <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-[#1f232c]/50">
                 <Bot className="w-3.5 h-3.5 text-[#a78bfa] animate-pulse" />
-                <span className="text-xs font-medium text-[#a78bfa]">STREAK Coach is thinking...</span>
+                <span className="text-xs font-medium text-[#a78bfa]">STREAK Coach is thinking</span>
+                <span className="flex items-center">
+                  <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5, times: [0, 0.5, 1] }} className="text-[#a78bfa]">.</motion.span>
+                  <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.2, times: [0, 0.5, 1] }} className="text-[#a78bfa]">.</motion.span>
+                  <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.4, times: [0, 0.5, 1] }} className="text-[#a78bfa]">.</motion.span>
+                </span>
               </div>
               <div className="flex space-x-1.5 py-1">
-                <div className="w-2 h-2 rounded-full bg-[#7d8495] animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-2 h-2 rounded-full bg-[#7d8495] animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-2 h-2 rounded-full bg-[#7d8495] animate-bounce" style={{ animationDelay: '300ms' }} />
+                <motion.div
+                  className="w-2 h-2 rounded-full bg-[#a78bfa]"
+                  animate={{ y: [0, -5, 0], opacity: [0.5, 1, 0.5] }}
+                  transition={{ repeat: Infinity, duration: 0.6, ease: "easeInOut" }}
+                />
+                <motion.div
+                  className="w-2 h-2 rounded-full bg-[#a78bfa]"
+                  animate={{ y: [0, -5, 0], opacity: [0.5, 1, 0.5] }}
+                  transition={{ repeat: Infinity, duration: 0.6, ease: "easeInOut", delay: 0.15 }}
+                />
+                <motion.div
+                  className="w-2 h-2 rounded-full bg-[#a78bfa]"
+                  animate={{ y: [0, -5, 0], opacity: [0.5, 1, 0.5] }}
+                  transition={{ repeat: Infinity, duration: 0.6, ease: "easeInOut", delay: 0.3 }}
+                />
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Error State Card */}
