@@ -99,7 +99,7 @@ export function StudySessionShareCard({
           </div>
           <div className="flex flex-col justify-center">
             <span className="text-white font-black tracking-tighter text-xl leading-none mb-0.5">STREAK</span>
-            <span className="text-[#a1a8b9] text-[11px] font-semibold tracking-wide">streakloop.vercel.com</span>
+            <span className="text-[#a1a8b9] text-[11px] font-semibold tracking-wide">streakloop.vercel.app</span>
           </div>
         </div>
       </div>

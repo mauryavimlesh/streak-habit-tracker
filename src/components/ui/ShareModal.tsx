@@ -84,7 +84,7 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
             await navigator.share({
               files: [file],
               title: 'STREAK',
-              text: 'Check out my progress on STREAK! 🔥\nstreakloop.vercel.com',
+              text: 'Check out my progress on STREAK! 🔥\nstreakloop.vercel.app',
             });
           } catch (e) {
             // User likely cancelled
@@ -107,7 +107,7 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
     setShowFallback(false);
   };
 
-  const shareText = encodeURIComponent('Check out my progress on STREAK! 🔥 \nstreakloop.vercel.com');
+  const shareText = encodeURIComponent('Check out my progress on STREAK! 🔥 \nstreakloop.vercel.app');
 
   if (!isOpen) return null;
 
