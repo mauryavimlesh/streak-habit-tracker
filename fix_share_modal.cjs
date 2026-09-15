@@ -1,7 +1,9 @@
-import React, { useRef, useState, useEffect } from 'react';
+const fs = require('fs');
+
+const content = `import React, { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Download, Share2, Smartphone, Square, CheckCircle2, Link, MessageCircle, Mail } from 'lucide-react';
-import { toPng, toBlob } from 'html-to-image';
+import html2canvas from 'html2canvas';
 import { cn } from '../../lib/utils';
 
 interface ShareModalProps {
@@ -37,13 +39,16 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
     if (!cardRef.current) return;
     setIsExporting(true);
     try {
-      const image = await toPng(cardRef.current, {
-        pixelRatio: 3,
+      const canvas = await html2canvas(cardRef.current, {
+        scale: 3, // High resolution for better sharing
         backgroundColor: '#0a0c10',
+        useCORS: true,
       });
+      
+      const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = image;
-      link.download = `${fileName}-${format}.png`;
+      link.download = \`\${fileName}-\${format}.png\`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -67,17 +72,19 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
 
     setIsExporting(true);
     try {
-      const blob = await toBlob(cardRef.current, {
-        pixelRatio: 3,
+      const canvas = await html2canvas(cardRef.current, {
+        scale: 3,
         backgroundColor: '#0a0c10',
+        useCORS: true,
       });
       
-      if (!blob) {
-        setToastMessage({ title: 'Failed to generate image', type: 'error' });
-        setIsExporting(false);
-        return;
-      }
-        const file = new File([blob], `${fileName}-${format}.png`, { type: 'image/png' });
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setToastMessage({ title: 'Failed to generate image', type: 'error' });
+          setIsExporting(false);
+          return;
+        }
+        const file = new File([blob], \`\${fileName}-\${format}.png\`, { type: 'image/png' });
         
         if (navigator.canShare({ files: [file] })) {
           try {
@@ -94,6 +101,7 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
           setShowFallback(true);
         }
         setIsExporting(false);
+      }, 'image/png');
     } catch (error) {
       console.error('Failed to generate image', error);
       setToastMessage({ title: 'Failed to share image', type: 'error' });
@@ -209,7 +217,7 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
                 <Link className="w-5 h-5 text-accent-primary" /> Copy Link
               </button>
               <a
-                href={`https://wa.me/?text=${shareText}`}
+                href={\`https://wa.me/?text=\${shareText}\`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setShowFallback(false)}
@@ -218,7 +226,7 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
                 <MessageCircle className="w-5 h-5 text-[#25D366]" /> WhatsApp
               </a>
               <a
-                href={`https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=Check out my progress on STREAK! 🔥`}
+                href={\`https://t.me/share/url?url=\${encodeURIComponent(window.location.href)}&text=Check out my progress on STREAK! 🔥\`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setShowFallback(false)}
@@ -227,7 +235,7 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
                 <Share2 className="w-5 h-5 text-[#229ED9]" /> Telegram
               </a>
               <a
-                href={`mailto:?subject=STREAK Progress&body=${shareText}`}
+                href={\`mailto:?subject=STREAK Progress&body=\${shareText}\`}
                 onClick={() => setShowFallback(false)}
                 className="w-full py-3.5 px-4 rounded-xl bg-surface-card border border-white/5 text-white text-sm font-semibold flex items-center gap-3 transition-colors hover:bg-white/5"
               >
@@ -247,3 +255,6 @@ export function ShareModal({ isOpen, onClose, children, fileName = 'streak-share
     </AnimatePresence>
   );
 }
+`
+
+fs.writeFileSync('src/components/ui/ShareModal.tsx', content);
