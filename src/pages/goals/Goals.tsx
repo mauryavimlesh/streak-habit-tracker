@@ -446,7 +446,7 @@ export default function Goals() {
                     <div className="flex items-center justify-between pt-1">
                       <div className="flex items-center gap-3 text-xs text-[#7d8495]">
                         <span className="flex items-center gap-1 font-bold text-accent-primary">
-                          <Flame className="w-3.5 h-3.5 fill-accent-primary" /> {streak}d streak
+                          <Flame className="w-3.5 h-3.5 fill-accent-primary" /> {streak.currentStreak}d streak
                         </span>
                         <span>
                           {isTodayComplete ? 'Completed today' : `${Math.max(0, dailyTarget - todayProgress)} ${goal.unit} left`}
@@ -692,13 +692,13 @@ export default function Goals() {
                           <div className="p-3 rounded-xl bg-white/5 border border-white/5">
                             <div className="text-[10px] font-bold text-[#7d8495] uppercase">Streak</div>
                             <div className="text-base font-black text-white flex items-center justify-center gap-1 mt-0.5">
-                              <Flame className="w-4 h-4 fill-accent-primary text-accent-primary" /> {streak}d
+                              <Flame className="w-4 h-4 fill-accent-primary text-accent-primary" /> {streak.currentStreak}d
                             </div>
                           </div>
                           <div className="p-3 rounded-xl bg-white/5 border border-white/5">
                             <div className="text-[10px] font-bold text-[#7d8495] uppercase">Best</div>
                             <div className="text-base font-black text-white mt-0.5">
-                              {selectedGoal.bestStreak || streak}d
+                              {selectedGoal.bestStreak || streak.bestStreak || streak.currentStreak}d
                             </div>
                           </div>
                           <div className="p-3 rounded-xl bg-white/5 border border-white/5">

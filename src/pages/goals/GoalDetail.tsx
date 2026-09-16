@@ -265,10 +265,9 @@ export default function GoalDetail() {
             <h3 className="text-[11px] font-bold text-[#7d8495] uppercase tracking-wider">Goal Streak</h3>
             <div className="mt-2 text-3xl font-black text-white flex items-center gap-2">
               <Flame className="w-6 h-6 fill-accent-primary text-accent-primary" /> 
-              {/* Calculate actual streak here later */}
-              2d
+              {goal.currentProgress || 0}d
             </div>
-            <div className="mt-1 text-xs text-[#7d8495]">Best: 5d</div>
+            <div className="mt-1 text-xs text-[#7d8495]">Best: {goal.bestStreak || 0}d</div>
           </div>
         </div>
 
