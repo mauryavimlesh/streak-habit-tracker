@@ -22,6 +22,7 @@ import AICoach from './pages/AICoach';
 import CreateHabit from './pages/habits/CreateHabit';
 import MyHabits from './pages/habits/MyHabits';
 import Goals from './pages/goals/Goals';
+import GoalDetail from './pages/goals/GoalDetail';
 import Analytics from './pages/analytics/Analytics';
 import Journal from './pages/journal/Journal';
 import Reminders from './pages/reminders/Reminders';
@@ -165,6 +166,14 @@ export default function App() {
           <Route
             path="/goals"
             element={<PublicOrProtected publicComponent={GoalsGuide} protectedComponent={Goals} />}
+          />
+          <Route
+            path="/goals/:goalId"
+            element={
+              <ProtectedRoute>
+                <GoalDetail />
+              </ProtectedRoute>
+            }
           />
           <Route path="/tasks" element={<TasksGuide />} />
           <Route path="/focus-timer" element={<FocusTimerGuide />} />

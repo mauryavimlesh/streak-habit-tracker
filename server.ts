@@ -3,7 +3,6 @@ import express from 'express';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
 import { generateFallbackCoaching } from './api/fallback-coach';
-import feedbackHandler from './api/feedback';
 
 const app = express();
 
@@ -52,11 +51,6 @@ app.get('/api/ai-status', (req, res) => {
     configured: Boolean(process.env.GEMINI_API_KEY),
     model: 'gemini-3.8-flash',
   });
-});
-
-// Feedback & Support Email API endpoint
-app.all('/api/feedback', (req, res) => {
-  return feedbackHandler(req, res);
 });
 
 // Explicit SEO endpoints for robots.txt and sitemap.xml

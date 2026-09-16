@@ -79,6 +79,8 @@ export default function Goals() {
   const [formPriority, setFormPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [formAddToHabit, setFormAddToHabit] = useState(true);
   const [formAddToTask, setFormAddToTask] = useState(true);
+  const [formSubjects, setFormSubjects] = useState<string[]>([]);
+  const [subjectInput, setSubjectInput] = useState('');
   const [formMilestones, setFormMilestones] = useState<string[]>([]);
   const [milestoneInput, setMilestoneInput] = useState('');
 
@@ -135,6 +137,7 @@ export default function Goals() {
         dailyTarget: goalType === 'daily' ? Number(formDailyTarget) || 1 : undefined,
         currentProgress: 0,
         unit: formUnit.trim() || 'units',
+        subjects: formSubjects.length > 0 ? formSubjects : undefined,
         targetDate: formTargetDate,
         priority: formPriority,
         status: 'in_progress',
@@ -167,6 +170,7 @@ export default function Goals() {
     setFormTarget(goal.target);
     setFormDailyTarget(goal.dailyTarget || goal.target);
     setFormUnit(goal.unit || 'units');
+    setFormSubjects(goal.subjects || []);
     setFormTargetDate(goal.targetDate || '2026-12-31');
     setFormPriority(goal.priority || 'medium');
     setFormAddToHabit(Boolean(goal.linkToHabit));
@@ -188,6 +192,7 @@ export default function Goals() {
         target: goalType === 'daily' ? formDailyTarget : Number(formTarget) || 100,
         dailyTarget: goalType === 'daily' ? Number(formDailyTarget) || 1 : undefined,
         unit: formUnit.trim() || 'units',
+        subjects: formSubjects.length > 0 ? formSubjects : undefined,
         targetDate: formTargetDate,
         priority: formPriority,
         linkToHabit: goalType === 'daily' ? formAddToHabit : false,
@@ -212,6 +217,8 @@ export default function Goals() {
     setFormUnit('pages');
     setFormMilestones([]);
     setMilestoneInput('');
+    setFormSubjects([]);
+    setSubjectInput('');
   };
 
   // Daily Goal fast log handler
@@ -387,7 +394,7 @@ export default function Goals() {
                     key={goal.id}
                     layout
                     className="p-4 rounded-2xl bg-surface-card border border-white/5 hover:border-white/15 transition-all space-y-3 group cursor-pointer"
-                    onClick={() => setSelectedGoal(goal)}
+                    onClick={() => navigate(`/goals/${goal.id}`)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-1 min-w-0 flex-1">
@@ -491,7 +498,7 @@ export default function Goals() {
                 <motion.div
                   key={goal.id}
                   layout
-                  onClick={() => setSelectedGoal(goal)}
+                  onClick={() => navigate(`/goals/${goal.id}`)}
                   className="p-4 rounded-2xl bg-surface-card border border-white/5 hover:border-white/15 transition-all cursor-pointer space-y-3 group"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -720,7 +727,7 @@ export default function Goals() {
                                   <span className="font-semibold text-white">
                                     {entry.progress} / {entry.target} {selectedGoal.unit}
                                   </span>
-                                  {entry.status === 'completed' ? (
+                                  {entry.completed ? (
                                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
                                       Done
                                     </span>
@@ -1024,6 +1031,58 @@ export default function Goals() {
                     />
                   </div>
                 </div>
+
+                {goalType === 'daily' && (
+                  <div>
+                    <label className="block text-xs text-[#7d8495] mb-1 font-medium">Subjects (Optional)</label>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={subjectInput}
+                        onChange={(e) => setSubjectInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (subjectInput.trim()) {
+                              setFormSubjects([...formSubjects, subjectInput.trim()]);
+                              setSubjectInput('');
+                            }
+                          }
+                        }}
+                        placeholder="e.g. Physics, Math..."
+                        className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (subjectInput.trim()) {
+                            setFormSubjects([...formSubjects, subjectInput.trim()]);
+                            setSubjectInput('');
+                          }
+                        }}
+                        className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {formSubjects.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {formSubjects.map((sub, idx) => (
+                          <div key={idx} className="flex items-center gap-1 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg text-[11px] text-white">
+                            {sub}
+                            <button
+                              type="button"
+                              onClick={() => setFormSubjects(formSubjects.filter((_, i) => i !== idx))}
+                              className="text-[#7d8495] hover:text-red-400"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Daily Goal Integrations (Habit & Task) */}
                 {goalType === 'daily' && (

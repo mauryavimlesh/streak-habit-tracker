@@ -856,9 +856,9 @@ export default function Home() {
                           <span>
                             {todayProgress} / {dailyTarget} {goal.unit || 'units'} ({pct}%)
                           </span>
-                          {streak > 0 && (
+                          {streak.currentStreak > 0 && (
                             <span className="text-accent-primary font-bold flex items-center gap-0.5">
-                              <Flame className="w-3 h-3 fill-accent-primary" /> {streak}d streak
+                              <Flame className="w-3 h-3 fill-accent-primary" /> {streak.currentStreak}d streak
                             </span>
                           )}
                         </div>
@@ -1304,7 +1304,6 @@ export default function Home() {
           isOpen={true}
           onClose={() => setEditingSleepHabit(null)}
           habit={editingSleepHabit}
-          currentLog={logs.find(l => l.habitId === editingSleepHabit.id && l.date === new Date().toLocaleDateString('en-CA'))}
           onSaved={() => {
             loadData();
             fetchExtraData();

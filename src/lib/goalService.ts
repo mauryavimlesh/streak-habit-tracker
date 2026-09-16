@@ -22,7 +22,23 @@ export interface Milestone {
   completed: boolean;
 }
 
-export type GoalType = 'one_time' | 'daily';
+export type GoalType = 'one_time' | 'daily' | 'weekly' | 'long_term';
+
+export interface GoalActivity {
+  id: string;
+  title: string;
+  subject?: string;
+  type?: string; // 'Lecture' | 'Notes' | 'Revision' | 'DPP' | 'Questions' | 'NCERT Reading' | 'Practice' | 'Preparation' | 'Custom'
+  targetQuantity: number;
+  progress: number;
+  unit: string;
+  completed: boolean;
+  estimatedDuration?: number; // minutes
+  deadline?: string;
+  linkedTaskId?: string;
+  linkedHabitId?: string;
+  focusSessionId?: string;
+}
 
 export interface DailyGoalEntry {
   date: string; // YYYY-MM-DD
@@ -31,6 +47,8 @@ export interface DailyGoalEntry {
   completed: boolean;
   completedAt?: string;
   notes?: string;
+  activities?: GoalActivity[];
+  missedHandled?: 'carried_forward' | 'missed' | 'rescheduled';
 }
 
 export interface Goal {
@@ -39,17 +57,20 @@ export interface Goal {
   title: string;
   description?: string;
   category: string;
-  type?: GoalType; // 'one_time' (default) | 'daily'
-  target: number; // For one-time: overall target. For daily: cumulative or daily target
-  currentProgress: number; // For one-time: progress towards target. For daily: cumulative total units
-  dailyTarget?: number; // e.g. 4 (lectures) or 20 (pages)
-  unit?: string; // 'pages' | 'minutes' | 'hours' | 'steps' | 'glasses' | 'chapters' | 'exercises' | 'lectures' | custom
-  dailyHistory?: Record<string, DailyGoalEntry>; // date (YYYY-MM-DD) -> DailyGoalEntry
+  type?: GoalType;
+  target: number; 
+  currentProgress: number; 
+  dailyTarget?: number; 
+  unit?: string; 
+  subjects?: string[];
+  startDate?: string;
+  endDate?: string;
+  dailyHistory?: Record<string, DailyGoalEntry>; 
   linkToHabit?: boolean;
   linkedHabitId?: string;
   linkToTask?: boolean;
   linkedTaskId?: string;
-  targetDate: string; // YYYY-MM-DD
+  targetDate: string; 
   priority?: 'low' | 'medium' | 'high';
   milestones?: Milestone[];
   linkedHabitIds?: string[];
@@ -406,8 +427,8 @@ export async function createGoal(
           frequencyValue: [],
           icon: 'target',
           color: 'lime',
-        },
-        userId
+          userId
+        }
       );
       newGoal.linkedHabitId = habitId;
     } catch (e) {

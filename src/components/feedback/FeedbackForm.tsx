@@ -1,16 +1,14 @@
-import React, { useState, FormEvent } from 'react';
+import React, { useState, FormEvent, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
-  CheckCircle2,
   AlertCircle,
   Sparkles,
   Send,
+  Mail,
+  Copy,
+  CheckCircle2
 } from 'lucide-react';
-import { ImageUpload } from '../ui/ImageUpload';
-import {
-  FeedbackType,
-  submitFeedback,
-} from '../../lib/supportConfig';
+import { FeedbackType } from '../../lib/supportConfig';
 import { useAuth } from '../../lib/AuthContext';
 import { triggerHaptic } from '../../lib/haptics';
 import { cn } from '../../lib/utils';
@@ -44,10 +42,16 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [email, setEmail] = useState('');
-  const [attachedImages, setAttachedImages] = useState<string[]>([]);
-  const [submitted, setSubmitted] = useState(false);
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showFallback, setShowFallback] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Clear fallback state when fields change
+  useEffect(() => {
+    setShowFallback(false);
+  }, [category, subject, message, email]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -69,43 +73,53 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
       return;
     }
 
-    if (trimmedEmail) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(trimmedEmail)) {
-        setErrorMessage('Please enter a valid email address, or leave it blank.');
-        triggerHaptic('error');
-        return;
-      }
-    }
-
     setIsSubmitting(true);
     setErrorMessage(null);
     triggerHaptic('selection');
 
-    const result = await submitFeedback({
-      category,
-      subject: trimmedSubject,
-      message: trimmedMessage,
-      images: attachedImages,
-      email: trimmedEmail || undefined,
-      userId: user?.uid,
-    });
+    // Prepare email content
+    const selectedCategoryName = FEEDBACK_TYPES.find(t => t.id === category)?.label || 'Feedback';
+    const emailSubject = `[STREAK Feedback] ${selectedCategoryName} - ${trimmedSubject}`;
+    
+    let emailBody = `Category: ${selectedCategoryName}\n`;
+    emailBody += `Subject: ${trimmedSubject}\n\n`;
+    emailBody += `Message:\n${trimmedMessage}\n\n`;
+    emailBody += `User contact: ${trimmedEmail || 'Not provided'}\n`;
+    emailBody += `Date/time: ${new Date().toLocaleString()}\n`;
+    if (user) {
+      emailBody += `User ID: ${user.uid}\n`;
+    }
+    
+    // Add basic device context
+    if (typeof navigator !== 'undefined') {
+      emailBody += `Platform: ${navigator.platform}\n`;
+    }
 
-    setIsSubmitting(false);
+    const mailtoLink = `mailto:vim74590@gmail.com?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
 
-    if (result.success) {
-      setSubmitted(true);
-      triggerHaptic('completion');
-      setSubject('');
-      setMessage('');
-      setEmail('');
-      setAttachedImages([]);
-      if (onSuccess) onSuccess();
-      setTimeout(() => setSubmitted(false), 8000);
-    } else {
-      setErrorMessage(result.error || 'Could not send feedback. Please try again.');
+    try {
+      window.location.href = mailtoLink;
+      
+      // We don't show "successfully submitted" because we just handed it off to the email client.
+      // We'll show a fallback message in case the email client didn't open.
+      setTimeout(() => {
+        setIsSubmitting(false);
+        setShowFallback(true);
+        triggerHaptic('completion');
+      }, 500);
+    } catch (err) {
+      setIsSubmitting(false);
+      setErrorMessage('Could not open your email client. Please see the fallback below.');
+      setShowFallback(true);
       triggerHaptic('error');
     }
+  };
+
+  const handleCopyEmail = () => {
+    navigator.clipboard.writeText('vim74590@gmail.com');
+    setCopied(true);
+    triggerHaptic('completion');
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -129,27 +143,41 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         </div>
       )}
 
-      {submitted ? (
+      {showFallback ? (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="p-6 rounded-2xl bg-accent-primary/15 border border-accent-primary/30 text-center space-y-2.5"
+          className="p-6 rounded-2xl bg-black/40 border border-white/10 text-center space-y-3"
         >
           <div className="w-12 h-12 rounded-full bg-accent-primary/20 text-accent-primary flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-6 h-6" />
+            <Mail className="w-6 h-6" />
           </div>
-          <h4 className="text-sm font-bold text-accent-primary">
-            Thanks for helping improve STREAK.
+          <h4 className="text-sm font-bold text-white">
+            Opening your email client...
           </h4>
-          <p className="text-xs text-white/75 max-w-xs mx-auto leading-relaxed">
-            Your report has been logged and queued for review. Thank you for contributing to making STREAK better.
+          <p className="text-xs text-[#7d8495] max-w-[280px] mx-auto leading-relaxed">
+            If your email app didn't open automatically, please send your feedback directly to:
           </p>
+          
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <code className="px-3 py-1.5 rounded-lg bg-white/5 text-accent-primary text-xs font-medium border border-white/10">
+              vim74590@gmail.com
+            </code>
+            <button
+              onClick={handleCopyEmail}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors cursor-pointer border border-white/10"
+              title="Copy email address"
+            >
+              {copied ? <CheckCircle2 className="w-4 h-4 text-accent-primary" /> : <Copy className="w-4 h-4" />}
+            </button>
+          </div>
+
           <button
             type="button"
-            onClick={() => setSubmitted(false)}
-            className="mt-2 text-xs text-accent-primary hover:underline font-semibold cursor-pointer"
+            onClick={() => setShowFallback(false)}
+            className="mt-4 text-xs text-[#7d8495] hover:text-white font-medium cursor-pointer transition-colors"
           >
-            Submit another response
+            Go back to edit feedback
           </button>
         </motion.div>
       ) : (
@@ -218,22 +246,6 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
             />
           </div>
 
-          {/* Screenshots / Photos with Reusable ImageUpload */}
-          <div>
-            <label className="block text-[11px] font-semibold text-[#7d8495] uppercase tracking-wider mb-1.5">
-              Screenshots / Images <span className="text-[#5c6272] font-normal lowercase">(optional)</span>
-            </label>
-            <ImageUpload
-              images={attachedImages}
-              onChange={setAttachedImages}
-              maxImages={4}
-              maxSizeMb={10}
-              label="Add screenshots"
-              description="PNG, JPG or WebP bug captures or UI suggestions"
-              compact={attachedImages.length > 0}
-            />
-          </div>
-
           {/* Optional Contact Email */}
           <div>
             <label className="block text-[11px] font-semibold text-[#7d8495] uppercase tracking-wider mb-1">
@@ -255,7 +267,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
             className="w-full py-3 rounded-2xl bg-accent-primary text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] disabled:opacity-40 transition-colors cursor-pointer shadow-[0_2px_12px_rgba(140,238,40,0.25)] flex items-center justify-center gap-2 mt-1"
           >
             <Send className="w-3.5 h-3.5" />
-            <span>{isSubmitting ? 'Submitting...' : 'Submit Feedback'}</span>
+            <span>{isSubmitting ? 'Opening Mail Client...' : 'Send via Email'}</span>
           </button>
         </form>
       )}

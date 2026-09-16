@@ -342,17 +342,8 @@ export const getUserHabits = async (userId: string): Promise<Habit[]> => {
 
 export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
   let local = readLocalHabits();
-  if (local.length === 0) {
-    local = [...DEFAULT_HABITS];
-  }
   let index = local.findIndex(h => h.id === habitId);
-  if (index === -1 && habitId.startsWith('default-')) {
-    const def = DEFAULT_HABITS.find(h => h.id === habitId);
-    if (def) {
-      local.push({ ...def });
-      index = local.length - 1;
-    }
-  } else if (index === -1 && (updates.sleepBedtime || updates.sleepWakeTime)) {
+  if (index === -1 && (updates.sleepBedtime || updates.sleepWakeTime)) {
     const sleepHabit = local.find(h => h.name.toLowerCase().includes('sleep') || h.icon === 'moon');
     if (sleepHabit) {
       index = local.findIndex(h => h.id === sleepHabit.id);
@@ -370,6 +361,7 @@ export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
     // If not found, add updated habit object to local
     local.push({
       id: habitId,
+      userId: updates.userId || 'local',
       name: updates.name || 'Habit',
       category: updates.category || 'health',
       frequencyType: updates.frequencyType || 'daily',
@@ -380,7 +372,7 @@ export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
       color: updates.color || 'indigo',
       ...updates,
       updatedAt: new Date().toISOString(),
-    });
+    } as Habit);
     saveLocalHabits(local);
   }
 

@@ -299,13 +299,44 @@ export function DaySchedule({
             {dayJournals.map(j => (
               <div key={j.id} className="p-3 rounded-2xl bg-surface-card border border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400"><Book className="w-4 h-4" /></div>
-                  <span className="text-sm font-semibold text-white line-clamp-1 flex-1">{j.text}</span>
+                  <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400"><Book className="w-4 h-4" /></div>
+                  <span className="text-sm font-semibold text-white line-clamp-1">{j.text}</span>
                 </div>
+                <span className="text-xs text-[#7d8495]">{j.time}</span>
               </div>
             ))}
           </div>
         )}
+        
+        {goals.map(goal => {
+          const entry = goal.dailyHistory?.[selectedDateStr];
+          if (!entry || !entry.activities || entry.activities.length === 0) return null;
+          
+          return (
+            <div key={`goal_${goal.id}`} className="space-y-2 mb-4">
+              <h4 className="text-xs font-bold text-[#7d8495] uppercase tracking-wider">{goal.title}</h4>
+              {entry.activities.map(act => (
+                <div key={act.id} className="p-3 rounded-2xl bg-surface-card border border-white/5 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${act.completed ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-[#7d8495]'}`}>
+                        <CheckCircle2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-sm font-semibold text-white">{act.title}</span>
+                        {act.subject && <div className="text-[10px] text-[#7d8495] uppercase tracking-wider">{act.subject}</div>}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-bold text-white">{act.progress} / {act.targetQuantity}</span>
+                      <span className="text-[10px] text-[#7d8495] block">{act.unit}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
         
         {filteredTasks.length > 0 && (
           <div className="space-y-2 mb-4">
