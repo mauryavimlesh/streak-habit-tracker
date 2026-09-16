@@ -98,6 +98,17 @@ export default function Reminders() {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       setPermissionState(Notification.permission);
     }
+
+    const handleSync = () => {
+      loadData();
+    };
+
+    window.addEventListener('streak_sleep_updated', handleSync);
+    window.addEventListener('streak_reminders_updated', handleSync);
+    return () => {
+      window.removeEventListener('streak_sleep_updated', handleSync);
+      window.removeEventListener('streak_reminders_updated', handleSync);
+    };
   }, [user]);
 
   const handleToggle = async (id: string) => {

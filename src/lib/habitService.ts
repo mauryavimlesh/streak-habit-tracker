@@ -135,6 +135,9 @@ export function saveLocalHabits(habits: Habit[]): void {
     const clean = deduplicateHabits(habits);
     localStorage.setItem(LOCAL_HABITS_KEY, JSON.stringify(clean));
     updateGuestNamespaceField('habits', clean);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('streak_habits_updated', { detail: clean }));
+    }
   } catch {
     // Ignore storage quota
   }
@@ -338,14 +341,46 @@ export const getUserHabits = async (userId: string): Promise<Habit[]> => {
 };
 
 export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
-  const local = readLocalHabits();
-  const index = local.findIndex(h => h.id === habitId);
+  let local = readLocalHabits();
+  if (local.length === 0) {
+    local = [...DEFAULT_HABITS];
+  }
+  let index = local.findIndex(h => h.id === habitId);
+  if (index === -1 && habitId.startsWith('default-')) {
+    const def = DEFAULT_HABITS.find(h => h.id === habitId);
+    if (def) {
+      local.push({ ...def });
+      index = local.length - 1;
+    }
+  } else if (index === -1 && (updates.sleepBedtime || updates.sleepWakeTime)) {
+    const sleepHabit = local.find(h => h.name.toLowerCase().includes('sleep') || h.icon === 'moon');
+    if (sleepHabit) {
+      index = local.findIndex(h => h.id === sleepHabit.id);
+    }
+  }
+
   let isCloudSynced = false;
   let actualUserId = 'local';
   if (index !== -1) {
     actualUserId = local[index].userId || 'local';
     isCloudSynced = actualUserId !== 'local' && actualUserId !== 'default';
     local[index] = { ...local[index], ...updates, updatedAt: new Date().toISOString() };
+    saveLocalHabits(local);
+  } else {
+    // If not found, add updated habit object to local
+    local.push({
+      id: habitId,
+      name: updates.name || 'Habit',
+      category: updates.category || 'health',
+      frequencyType: updates.frequencyType || 'daily',
+      frequencyValue: updates.frequencyValue || [],
+      targetType: updates.targetType || 'count',
+      targetValue: updates.targetValue || 1,
+      icon: updates.icon || 'moon',
+      color: updates.color || 'indigo',
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
     saveLocalHabits(local);
   }
 
@@ -411,7 +446,7 @@ export const deleteHabit = async (habitId: string, userId?: string) => {
 };
 
 // Habit Logs CRUD
-export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'updatedAt'>) => {
+export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'updatedAt'>, skipSync: boolean = false) => {
   // Update local logs immediately
   const localLogs = readLocalLogs();
   const existingIdx = localLogs.findIndex(
@@ -430,6 +465,23 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
     localLogs.unshift(updatedLog);
   }
   saveLocalLogs(localLogs);
+
+  if (!skipSync && (logData.status === 'completed' || logData.status === 'skipped')) {
+    try {
+      const { readLocalGoals, logDailyGoalProgressQuick } = await import('./goalService');
+      const localGoals = readLocalGoals();
+      const linkedGoal = localGoals.find(g => g.linkedHabitId === logData.habitId);
+      if (linkedGoal && linkedGoal.type === 'daily') {
+        const delta = logData.status === 'completed' ? (linkedGoal.dailyTarget || linkedGoal.target || 1) : -(linkedGoal.dailyTarget || linkedGoal.target || 1);
+        await logDailyGoalProgressQuick(linkedGoal.id, logData.date, delta, logData.userId, true);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('streak_goals_updated'));
+        }
+      }
+    } catch (e) {
+      console.warn('Could not sync habit to goal:', e);
+    }
+  }
 
   if (logData.status === 'completed') {
     const habits = readLocalHabits();

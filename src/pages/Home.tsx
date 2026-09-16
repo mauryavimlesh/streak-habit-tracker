@@ -5,7 +5,9 @@ import { useNavigate } from 'react-router';
 import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog, deleteHabit, readLocalHabits, readLocalLogs } from '../lib/habitService';
 import { TaskItem, subscribeToTasks, toggleTaskComplete, deleteTask } from '../lib/taskService';
 import { getUserActivities, Activity as FocusActivity } from '../lib/activityService';
-import { getUserGoals, Goal } from '../lib/goalService';
+import { getUserGoals, Goal, readLocalGoals, logDailyGoalProgressQuick, getTodayGoalProgress, calculateGoalStreak } from '../lib/goalService';
+import { readLocalSleepSettings, format24To12 } from '../lib/sleepService';
+import { Target, Award, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { DailyReflection } from '../components/ui/DailyReflection';
 import { DeleteConfirmModal } from '../components/ui/DeleteConfirmModal';
 import { SleepModal } from '../components/ui/SleepModal';
@@ -126,19 +128,102 @@ export default function Home() {
     }
   }, []);
 
-  // Fetch activities and goals for sharing
-  useEffect(() => {
-    async function fetchExtraData() {
-      if (user) {
-        const [a, g] = await Promise.all([
-          getUserActivities(user.uid),
-          getUserGoals(user.uid)
-        ]);
-        setActivities(a);
-        setGoals(g);
-      }
+  const fetchExtraData = async () => {
+    if (user) {
+      const { ensureDailyGoalTasks } = await import('../lib/goalService');
+      await ensureDailyGoalTasks(user.uid);
+      const [a, g] = await Promise.all([
+        getUserActivities(user.uid),
+        getUserGoals(user.uid)
+      ]);
+      setActivities(a);
+      setGoals(g);
+    } else {
+      const { ensureDailyGoalTasks } = await import('../lib/goalService');
+      await ensureDailyGoalTasks();
+      setGoals(readLocalGoals());
     }
+  };
+
+  const loadData = async () => {
+    if (!user) {
+      const localHabits = readLocalHabits();
+      const habitsToUse = localHabits.length > 0 ? localHabits : DEFAULT_HABITS;
+      setHabits(habitsToUse);
+      const localLogs = readLocalLogs();
+      setLogs(localLogs);
+
+      const progressMap: Record<string, number> = {};
+      const todayString = new Date().toLocaleDateString('en-CA');
+      localLogs.forEach((l) => {
+        if (l.date === todayString) {
+          progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
+        }
+      });
+      setLocalProgress((prev) => ({ ...prev, ...progressMap }));
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const today = new Date();
+      const todayString = today.toLocaleDateString('en-CA');
+
+      const [fetchedHabits, fetchedLogs] = await Promise.all([
+        getUserHabits(user.uid),
+        getHabitLogs(user.uid),
+      ]);
+
+      setLogs(fetchedLogs);
+      if (fetchedHabits.length > 0) {
+        setHabits(fetchedHabits);
+        const progressMap: Record<string, number> = {};
+        const noteMap: Record<string, string> = {};
+        fetchedLogs.forEach((l) => {
+          if (l.date === todayString) {
+            progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
+            if (l.note) {
+               noteMap[l.habitId] = l.note;
+            }
+          }
+        });
+        setLocalProgress((prev) => ({ ...prev, ...progressMap }));
+        setHabitNotes((prev) => ({ ...prev, ...noteMap }));
+      } else {
+        const isInit = localStorage.getItem(`streak_habits_initialized_${user.uid}`);
+        if (!isInit) {
+          const seeded = await seedDefaultHabits(user.uid);
+          setHabits(seeded.length > 0 ? seeded : []);
+        } else {
+          setHabits([]);
+        }
+      }
+      setLogs(fetchedLogs);
+    } catch (err) {
+      console.error(err);
+      setHabits([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchExtraData();
+    loadData();
+
+    const onHabitsUpdated = () => loadData();
+    const onSleepUpdated = () => loadData();
+    const onGoalsUpdated = () => fetchExtraData();
+
+    window.addEventListener('streak_habits_updated', onHabitsUpdated);
+    window.addEventListener('streak_sleep_updated', onSleepUpdated);
+    window.addEventListener('streak_goals_updated', onGoalsUpdated);
+
+    return () => {
+      window.removeEventListener('streak_habits_updated', onHabitsUpdated);
+      window.removeEventListener('streak_sleep_updated', onSleepUpdated);
+      window.removeEventListener('streak_goals_updated', onGoalsUpdated);
+    };
   }, [user]);
 
   // Derived stats for share card
@@ -151,81 +236,6 @@ export default function Home() {
   
   const activeGoalsShare = goals.filter(g => g.status === 'in_progress').length;
   const completedGoalsShare = goals.filter(g => g.status === 'completed').length;
-
-  useEffect(() => {
-    async function loadData() {
-      if (!user) {
-        const localHabits = readLocalHabits();
-        const habitsToUse = localHabits.length > 0 ? localHabits : DEFAULT_HABITS;
-        setHabits(habitsToUse);
-        const localLogs = readLocalLogs();
-        setLogs(localLogs);
-
-        const progressMap: Record<string, number> = {};
-        const todayString = new Date().toLocaleDateString('en-CA');
-        localLogs.forEach((l) => {
-          if (l.date === todayString) {
-            progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
-          }
-        });
-        setLocalProgress((prev) => ({ ...prev, ...progressMap }));
-        setIsLoading(false);
-        return;
-      }
-      setIsLoading(true);
-      try {
-        const today = new Date();
-        const startDay = new Date(today);
-        startDay.setDate(today.getDate() - 6);
-
-        const todayString = today.toLocaleDateString('en-CA');
-        const startDayString = startDay.toLocaleDateString('en-CA');
-
-        const [fetchedHabits, fetchedLogs] = await Promise.all([
-          getUserHabits(user.uid),
-          getHabitLogs(user.uid),
-        ]);
-
-        setLogs(fetchedLogs);
-        if (fetchedHabits.length > 0) {
-          setHabits(fetchedHabits);
-          // Initialize local progress from existing logs
-          const progressMap: Record<string, number> = {};
-          const noteMap: Record<string, string> = {};
-          fetchedLogs.forEach((l) => {
-            if (l.date === todayString) {
-              progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
-              if (l.note) {
-                 noteMap[l.habitId] = l.note;
-              }
-            }
-          });
-          setLocalProgress((prev) => ({ ...prev, ...progressMap }));
-          setHabitNotes((prev) => ({ ...prev, ...noteMap }));
-        } else {
-          // Check if user has already initialized their habits account
-          const isInit = localStorage.getItem(`streak_habits_initialized_${user.uid}`);
-          if (!isInit) {
-            const seeded = await seedDefaultHabits(user.uid);
-            if (seeded.length > 0) {
-              setHabits(seeded);
-            } else {
-              setHabits([]);
-            }
-          } else {
-            setHabits([]);
-          }
-        }
-        setLogs(fetchedLogs);
-      } catch (err) {
-        console.error(err);
-        setHabits([]);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadData();
-  }, [user]);
 
   // Determine step size for incrementing
   const getStep = (habit: Habit) => {
@@ -795,6 +805,129 @@ export default function Home() {
         </div>
       )}
 
+      {/* Daily Goals Section (Requirement 21) */}
+      {(() => {
+        const dailyGoals = goals.filter((g) => g.type === 'daily' && g.status !== 'paused');
+        if (dailyGoals.length === 0) return null;
+        const todayStr = new Date().toLocaleDateString('en-CA');
+
+        return (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-[14px] font-semibold text-[#828899] tracking-tight flex items-center gap-2">
+                <Target className="w-4 h-4 text-accent-primary" /> Daily Goals
+              </h3>
+              <button
+                onClick={() => navigate('/goals')}
+                className="text-xs font-semibold text-accent-primary hover:underline cursor-pointer"
+              >
+                View all
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {dailyGoals.map((goal) => {
+                const todayProgress = getTodayGoalProgress(goal, todayStr);
+                const dailyTarget = goal.dailyTarget || goal.target || 1;
+                const isCompleted = todayProgress >= dailyTarget;
+                const streak = calculateGoalStreak(goal);
+                const pct = Math.min(100, Math.round((todayProgress / dailyTarget) * 100));
+
+                return (
+                  <div
+                    key={goal.id}
+                    className="glass-effect rounded-[24px] p-4 border border-[#232938] space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[15px] font-bold text-white truncate">{goal.title}</span>
+                          {isCompleted ? (
+                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1 shrink-0">
+                              <CheckCircle2 className="w-3 h-3" /> Done
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 shrink-0">
+                              {Math.max(0, dailyTarget - todayProgress)} {goal.unit || 'units'} left
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-[#8c94a6] mt-0.5 flex items-center gap-2">
+                          <span>
+                            {todayProgress} / {dailyTarget} {goal.unit || 'units'} ({pct}%)
+                          </span>
+                          {streak > 0 && (
+                            <span className="text-accent-primary font-bold flex items-center gap-0.5">
+                              <Flame className="w-3 h-3 fill-accent-primary" /> {streak}d streak
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Quick log buttons */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await logDailyGoalProgressQuick(goal.id, todayStr, 1, user?.uid);
+                            fetchExtraData();
+                            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                              navigator.vibrate(30);
+                            }
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-xs font-bold text-white border border-white/5 transition-all cursor-pointer"
+                        >
+                          +1
+                        </button>
+                        {dailyTarget >= 5 && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await logDailyGoalProgressQuick(goal.id, todayStr, 5, user?.uid);
+                              fetchExtraData();
+                              if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                                navigator.vibrate([30, 40]);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-xs font-bold text-white border border-white/5 transition-all cursor-pointer"
+                          >
+                            +5
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const needed = Math.max(0, dailyTarget - todayProgress);
+                            await logDailyGoalProgressQuick(goal.id, todayStr, needed > 0 ? needed : 1, user?.uid);
+                            fetchExtraData();
+                            confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
+                          }}
+                          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+                            isCompleted
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30 border border-accent-primary/30'
+                          }`}
+                        >
+                          <Check className="w-4 h-4 stroke-[2.5]" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="w-full bg-[#1b1f2b] h-2 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-accent-primary transition-all duration-500 rounded-full"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Habits List Section */}
       <div>
         <div className="flex items-center justify-between px-1 mb-3">
@@ -839,16 +972,18 @@ export default function Home() {
               if (habit.name.toLowerCase().includes('sleep')) {
                 const sleepLog = logs.find(l => l.habitId === habit.id && l.date === new Date().toLocaleDateString('en-CA'));
                 const actualSleep = sleepLog?.progressValue || 0;
+                const bedtimeFmt = habit.sleepBedtime ? format24To12(habit.sleepBedtime) : '11:00 PM';
+                const wakeFmt = habit.sleepWakeTime ? format24To12(habit.sleepWakeTime) : '07:00 AM';
                 
                 if (actualSleep > 0) {
-                    subtitle = `${actualSleep} / ${target} hrs`;
-                    if (actualSleep < target) {
+                    subtitle = `${actualSleep}h logged / ${target}h goal • ${bedtimeFmt} → ${wakeFmt}`;
+                    if (actualSleep >= target) {
+                        badge = <span className="ml-2 text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded-full border border-emerald-400/20">Target Met</span>;
+                    } else {
                         badge = <span className="ml-2 text-[10px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full border border-amber-400/20">Partial ({Math.round((actualSleep / target) * 100)}%)</span>;
                     }
-                } else if (habit.reminderTime) {
-                  subtitle = habit.reminderTime;
                 } else {
-                  subtitle = `Target: ${target} hrs`;
+                  subtitle = `${bedtimeFmt} → ${wakeFmt} • Target: ${target}h`;
                 }
               } else {
                 subtitle = `${currentVal} / ${target} ${habit.targetUnit || 'times'}`;
@@ -1171,8 +1306,8 @@ export default function Home() {
           habit={editingSleepHabit}
           currentLog={logs.find(l => l.habitId === editingSleepHabit.id && l.date === new Date().toLocaleDateString('en-CA'))}
           onSaved={() => {
-            // Re-fetch or rely on subscribeToHabitLogs doing it.
-            // The subscription handles the state update!
+            loadData();
+            fetchExtraData();
             if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
               navigator.vibrate([40, 60, 40]);
             }

@@ -2,19 +2,181 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>STREAK — Small actions. Every day.</title>
-    <meta name="description" content="Small actions. Every day. A premium personal operating system for consistency and habits." />
-    <meta property="og:title" content="STREAK — Small actions. Every day." />
-    <meta property="og:description" content="Small actions. Every day. A premium personal operating system for consistency and habits." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    
+    <!-- Primary SEO Metadata -->
+    <title>STREAK — Habit Tracker, Goals &amp; Productivity App</title>
+    <meta name="description" content="Build better habits, track your streaks, manage goals and tasks, journal your progress, and stay focused with STREAK." />
+    <link rel="canonical" href="https://streakloop.vercel.app/" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+
+    <!-- Open Graph / Facebook / LinkedIn / WhatsApp -->
+    <meta property="og:site_name" content="STREAK" />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://streakloop.vercel.app/" />
+    <meta property="og:title" content="STREAK — Habit Tracker, Goals &amp; Productivity App" />
+    <meta property="og:description" content="Build better habits, track your streaks, manage goals and tasks, journal your progress, and stay focused with STREAK." />
+    <meta property="og:image" content="https://streakloop.vercel.app/og-image.png" />
+    <meta property="og:image:secure_url" content="https://streakloop.vercel.app/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="STREAK Habit Tracker, Goals and Productivity App" />
+
+    <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="STREAK — Habit Tracker, Goals &amp; Productivity App" />
+    <meta name="twitter:description" content="Build better habits, track your streaks, manage goals and tasks, journal your progress, and stay focused with STREAK." />
+    <meta name="twitter:image" content="https://streakloop.vercel.app/og-image.png" />
+    <meta name="twitter:image:alt" content="STREAK Habit Tracker, Goals and Productivity App" />
+
+    <!-- Icons & PWA Manifest -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Mobile & PWA Configuration -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="STREAK" />
+    <meta name="application-name" content="STREAK" />
     <meta name="theme-color" content="#0d0e12" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=SF+Pro+Display:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Structured Data: SoftwareApplication, Organization, WebSite -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://streakloop.vercel.app/#software",
+          "name": "STREAK",
+          "applicationCategory": "ProductivityApplication",
+          "operatingSystem": "Web, iOS, Android",
+          "url": "https://streakloop.vercel.app/",
+          "description": "Build better habits, track your streaks, manage goals and tasks, journal your progress, and stay focused with STREAK.",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://streakloop.vercel.app/#organization",
+          "name": "STREAK",
+          "url": "https://streakloop.vercel.app/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://streakloop.vercel.app/icon-512.png",
+            "width": 512,
+            "height": 512
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://streakloop.vercel.app/#website",
+          "name": "STREAK",
+          "url": "https://streakloop.vercel.app/",
+          "publisher": {
+            "@id": "https://streakloop.vercel.app/#organization"
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://streakloop.vercel.app/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What is STREAK?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "STREAK is an all-in-one habit and productivity tracker that brings daily habit tracking, goal milestones, task checklists, study focus timers, reflection journaling, and visual consistency heatmaps into one unified workspace."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is STREAK free to use?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. STREAK is completely free to use. You can start tracking habits immediately in Guest Mode without creating an account or providing a credit card. Your progress is saved locally, with optional cloud backup when you sign in."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Can I track daily habits and maintain consistency streaks?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. STREAK calculates real-time daily completion streaks, longest consistency records, and percentage completion rates. You can customize habit frequencies, target quantities, and daily reminder alerts."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Can I track goals and tasks alongside daily habits?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. STREAK allows you to map overarching life and career goals into actionable milestones, and organize daily to-do tasks alongside your recurring habit routines."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Does STREAK include a study and focus timer?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. STREAK includes an integrated Focus & Study Timer with stopwatch and countdown modes, customizable session durations, and persistent focus history to boost concentration."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Does STREAK work offline?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. STREAK is engineered offline-first. All your habits, streak counts, completed tasks, and journal entries are instantly saved locally in your browser and automatically sync when online."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How does the AI Habit Coach help improve consistency?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "STREAK features an intelligent AI Coach powered by modern Gemini models that evaluates your habit consistency patterns, suggests evidence-based routines, and answers productivity questions."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Does STREAK work on iPhone, Android, and desktop browsers?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. STREAK is responsive and runs seamlessly across iPhone (Safari & PWA), Android (Chrome & PWA), iPad, Mac, and Windows desktop workstations."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is my habit and journal data private and secure?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. Your personal habits, daily logs, and reflection journals remain completely private. Personal data is never indexed by search engines and is stored securely."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Can I export or backup my habit data?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. STREAK supports account-based cloud synchronization with Google or email, ensuring your consistency streaks and journal records are backed up and accessible across all your devices."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body class="bg-[#0d0e12] text-white antialiased">
     <div id="root"></div>

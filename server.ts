@@ -59,6 +59,17 @@ app.all('/api/feedback', (req, res) => {
   return feedbackHandler(req, res);
 });
 
+// Explicit SEO endpoints for robots.txt and sitemap.xml
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain');
+  res.sendFile(path.join(process.cwd(), 'public', 'robots.txt'));
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  res.type('application/xml');
+  res.sendFile(path.join(process.cwd(), 'public', 'sitemap.xml'));
+});
+
 app.post('/api/ai-coach', async (req, res) => {
   try {
     const { message, messages, history, context } = req.body;

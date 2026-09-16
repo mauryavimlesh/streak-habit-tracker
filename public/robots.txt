@@ -1,0 +1,35 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+Allow: /habits
+Allow: /goals
+Allow: /tasks
+Allow: /focus-timer
+Allow: /journal
+Allow: /analytics
+Allow: /ai-coach
+Allow: /about
+Allow: /support
+Allow: /privacy
+Allow: /terms
+Allow: /assets/
+Allow: /*.js$
+Allow: /*.css$
+Allow: /*.png$
+Allow: /*.jpg$
+Allow: /*.svg$
+Allow: /*.ico$
+
+# Disallow private user-authenticated application routes & API endpoints
+Disallow: /api/
+Disallow: /settings
+Disallow: /sync
+Disallow: /themes
+Disallow: /activity
+Disallow: /reminders
+Disallow: /onboarding
+Disallow: /feedback
+Disallow: /login
+
+# Sitemap
+Sitemap: https://streakloop.vercel.app/sitemap.xml

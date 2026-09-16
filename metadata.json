@@ -1,6 +1,6 @@
 {
   "name": "Streak",
-  "description": "Small actions. Every day. A premium personal operating system for consistency and habits.",
+  "description": "Build better habits, track your streaks, manage goals and tasks, journal your progress, and stay focused with STREAK.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

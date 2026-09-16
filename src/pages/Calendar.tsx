@@ -64,8 +64,37 @@ export default function Calendar() {
       setIsLoading(false);
     });
 
+    async function loadExtraData() {
+      if (user) {
+        const [h, l, a, g, j] = await Promise.all([
+          getUserHabits(user.uid),
+          getHabitLogs(user.uid),
+          getUserActivities(user.uid),
+          getUserGoals(user.uid),
+          getUserJournal(user.uid)
+        ]);
+        setHabits(h);
+        setLogs(l);
+        setActivities(a);
+        setGoals(g);
+        setJournals(j);
+      }
+    }
+    loadExtraData();
+
+    const onDataUpdated = () => {
+      loadExtraData();
+    };
+
+    window.addEventListener('streak_habits_updated', onDataUpdated);
+    window.addEventListener('streak_sleep_updated', onDataUpdated);
+    window.addEventListener('streak_goals_updated', onDataUpdated);
+
     return () => {
       unsubscribe();
+      window.removeEventListener('streak_habits_updated', onDataUpdated);
+      window.removeEventListener('streak_sleep_updated', onDataUpdated);
+      window.removeEventListener('streak_goals_updated', onDataUpdated);
     };
   }, [user]);
 

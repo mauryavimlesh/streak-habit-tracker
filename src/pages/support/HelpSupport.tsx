@@ -1,6 +1,8 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'motion/react';
+import { SEO } from '../../components/seo/SEO';
+import { GUIDE_SOCIAL_REGISTRY } from '../../lib/seo/socialMetadata';
 import {
   ChevronLeft,
   MessageCircle,
@@ -44,6 +46,9 @@ export default function HelpSupport() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
+      <SEO
+        socialConfig={GUIDE_SOCIAL_REGISTRY['/support']}
+      />
       {/* Header */}
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">

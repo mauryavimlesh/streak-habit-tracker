@@ -7,11 +7,12 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react';
+import { SEO } from './components/seo/SEO';
 
 // Layouts
 import MainLayout from './components/layout/MainLayout';
 
-// Pages
+// App Pages
 import Home from './pages/Home';
 import Calendar from './pages/Calendar';
 import More from './pages/More';
@@ -32,44 +33,27 @@ import Feedback from './pages/support/Feedback';
 import Activity from './pages/activity/Activity';
 import ActivityHistory from './pages/activity/ActivityHistory';
 
+// Public SEO Pages & Guides
+import LandingPage from './pages/public/LandingPage';
+import HabitsGuide from './pages/public/HabitsGuide';
+import GoalsGuide from './pages/public/GoalsGuide';
+import TasksGuide from './pages/public/TasksGuide';
+import FocusTimerGuide from './pages/public/FocusTimerGuide';
+import JournalGuide from './pages/public/JournalGuide';
+import AnalyticsGuide from './pages/public/AnalyticsGuide';
+import AICoachGuide from './pages/public/AICoachGuide';
+import AboutPage from './pages/public/AboutPage';
+import PrivacyPolicy from './pages/public/PrivacyPolicy';
+import TermsOfService from './pages/public/TermsOfService';
+
 import { TimerProvider } from './lib/timer/TimerContext';
 import { HabitNotificationEngine } from './components/HabitNotificationEngine';
-
-
-function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const { profile, onboardingCompleted, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-t-2 border-accent-primary rounded-full animate-spin"></div>
-      </div>
-    );
-  }
-
-  const isCompleted = Boolean(
-    onboardingCompleted ||
-    profile?.onboardingCompleted ||
-    profile?.hasCompletedOnboarding ||
-    (typeof window !== 'undefined' && localStorage.getItem('streak_onboarding_completed') === 'true')
-  );
-  if (!isCompleted) {
-    return <Navigate to="/onboarding" replace />;
-  }
-
-  return (
-    <>
-      <HabitNotificationEngine />
-      {children}
-    </>
-  );
-}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, profile, onboardingCompleted, loading } = useAuth();
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-screen flex items-center justify-center bg-[#0d0e12]">
         <div className="w-8 h-8 border-t-2 border-accent-primary rounded-full animate-spin"></div>
       </div>
     );
@@ -89,7 +73,62 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/onboarding" replace />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <SEO noindex={true} />
+      {children}
+    </>
+  );
+}
+
+function PublicOrProtected({
+  publicComponent: PublicComp,
+  protectedComponent: ProtectedComp,
+}: {
+  publicComponent: React.ComponentType;
+  protectedComponent: React.ComponentType;
+}) {
+  const { user, profile, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0d0e12]">
+        <div className="w-8 h-8 border-t-2 border-accent-primary rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  const isAuthenticated = Boolean(user || profile?.isGuest);
+  if (isAuthenticated) {
+    return (
+      <ProtectedRoute>
+        <ProtectedComp />
+      </ProtectedRoute>
+    );
+  }
+
+  return <PublicComp />;
+}
+
+function HomeRoute() {
+  const { user, profile, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0d0e12]">
+        <div className="w-8 h-8 border-t-2 border-accent-primary rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  const isAuthenticated = Boolean(user || profile?.isGuest);
+  if (!isAuthenticated) {
+    return <LandingPage />;
+  }
+
+  return (
+    <ProtectedRoute>
+      <MainLayout />
+    </ProtectedRoute>
+  );
 }
 
 export default function App() {
@@ -99,8 +138,22 @@ export default function App() {
         <HabitNotificationEngine />
         <BrowserRouter>
         <Routes>
+          {/* Public Authentication & Onboarding */}
           <Route path="/login" element={<Login />} />
           <Route path="/onboarding" element={<Onboarding />} />
+
+          {/* Root: Landing Page for guests/crawlers, Dashboard for authenticated users */}
+          <Route path="/" element={<HomeRoute />}>
+            <Route index element={<Home />} />
+            <Route path="calendar" element={<Calendar />} />
+            <Route path="more" element={<More />} />
+          </Route>
+
+          {/* Public Guides vs Protected App Views */}
+          <Route
+            path="/habits"
+            element={<PublicOrProtected publicComponent={HabitsGuide} protectedComponent={MyHabits} />}
+          />
           <Route
             path="/habits/new"
             element={
@@ -110,37 +163,32 @@ export default function App() {
             }
           />
           <Route
-            path="/habits"
-            element={
-              <ProtectedRoute>
-                <MyHabits />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/goals"
-            element={
-              <ProtectedRoute>
-                <Goals />
-              </ProtectedRoute>
-            }
+            element={<PublicOrProtected publicComponent={GoalsGuide} protectedComponent={Goals} />}
+          />
+          <Route path="/tasks" element={<TasksGuide />} />
+          <Route path="/focus-timer" element={<FocusTimerGuide />} />
+          <Route
+            path="/journal"
+            element={<PublicOrProtected publicComponent={JournalGuide} protectedComponent={Journal} />}
           />
           <Route
             path="/analytics"
-            element={
-              <ProtectedRoute>
-                <Analytics />
-              </ProtectedRoute>
-            }
+            element={<PublicOrProtected publicComponent={AnalyticsGuide} protectedComponent={Analytics} />}
           />
           <Route
-            path="/journal"
-            element={
-              <ProtectedRoute>
-                <Journal />
-              </ProtectedRoute>
-            }
+            path="/ai-coach"
+            element={<PublicOrProtected publicComponent={AICoachGuide} protectedComponent={AICoach} />}
           />
+
+          {/* Informational & Support Pages */}
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/support" element={<HelpSupport />} />
+          <Route path="/feedback" element={<Feedback />} />
+
+          {/* User App Settings & Activity */}
           <Route
             path="/reminders"
             element={
@@ -189,44 +237,9 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/support"
-            element={
-              <ProtectedRoute>
-                <HelpSupport />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/feedback"
-            element={
-              <ProtectedRoute>
-                <Feedback />
-              </ProtectedRoute>
-            }
-          />
-          
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <MainLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Home />} />
-            <Route path="calendar" element={<Calendar />} />
-            <Route path="more" element={<More />} />
-          </Route>
-          
-          <Route
-            path="/ai-coach"
-            element={
-              <ProtectedRoute>
-                <AICoach />
-              </ProtectedRoute>
-            }
-          />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <VercelAnalytics />
       </BrowserRouter>

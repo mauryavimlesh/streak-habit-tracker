@@ -3,12 +3,17 @@ import { useNavigate } from 'react-router';
 import { ChevronLeft, MessageSquare } from 'lucide-react';
 import { FeedbackForm } from '../../components/feedback/FeedbackForm';
 import { DeveloperFooter } from '../../components/layout/DeveloperFooter';
+import { SEO } from '../../components/seo/SEO';
 
 export default function Feedback() {
   const navigate = useNavigate();
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
+      <SEO
+        title="Feedback & Bug Reports — STREAK"
+        noindex={true}
+      />
       {/* Header */}
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">

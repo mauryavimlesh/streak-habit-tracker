@@ -4,6 +4,7 @@ import { auth } from '../../lib/firebase';
 import { Navigate, useNavigate } from 'react-router';
 import { useAuth } from '../../lib/AuthContext';
 import { motion } from 'motion/react';
+import { SEO } from '../../components/seo/SEO';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -109,6 +110,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      <SEO title="Sign In — STREAK" noindex={true} />
       
       <motion.div 
         initial={{ opacity: 0, y: 20 }}

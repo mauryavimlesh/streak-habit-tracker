@@ -29,6 +29,7 @@ export interface TaskItem {
   type?: 'task' | 'meeting' | 'event' | 'reminder';
   completed: boolean;
   repeat?: 'none' | 'daily' | 'weekly';
+  goalId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -264,6 +265,7 @@ export async function getAllTasks(userId?: string): Promise<TaskItem[]> {
         type: data.type || 'task',
         completed: Boolean(data.completed),
         repeat: data.repeat,
+        goalId: data.goalId,
         createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
         updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
       };
@@ -383,6 +385,8 @@ export async function createTask(
         priority: newTask.priority || 'medium',
         type: newTask.type || 'task',
         completed: Boolean(newTask.completed),
+        repeat: newTask.repeat || 'none',
+        goalId: newTask.goalId || null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -435,6 +439,8 @@ export async function updateTask(
       if (updates.priority !== undefined) firestoreUpdates.priority = updates.priority;
       if (updates.type !== undefined) firestoreUpdates.type = updates.type;
       if (updates.completed !== undefined) firestoreUpdates.completed = updates.completed;
+      if (updates.repeat !== undefined) firestoreUpdates.repeat = updates.repeat;
+      if (updates.goalId !== undefined) firestoreUpdates.goalId = updates.goalId;
 
       await updateDoc(doc(db, 'tasks', taskId), firestoreUpdates);
     } catch (err) {
@@ -447,7 +453,7 @@ export async function updateTask(
 }
 
 // Toggle Task Completion
-export async function toggleTaskComplete(taskId: string, userId?: string): Promise<boolean> {
+export async function toggleTaskComplete(taskId: string, userId?: string, skipSync: boolean = false): Promise<boolean> {
   const local = readLocalTasks();
   const task = local.find((t) => t.id === taskId);
   if (!task) return false;
@@ -457,6 +463,24 @@ export async function toggleTaskComplete(taskId: string, userId?: string): Promi
     trackTaskCompleted(task.category);
   }
   await updateTask(taskId, { completed: nextCompleted }, userId);
+  
+  if (!skipSync && task.goalId) {
+    try {
+      const { readLocalGoals, logDailyGoalProgressQuick } = await import('./goalService');
+      const localGoals = readLocalGoals();
+      const linkedGoal = localGoals.find(g => g.id === task.goalId);
+      if (linkedGoal && linkedGoal.type === 'daily') {
+        const delta = nextCompleted ? (linkedGoal.dailyTarget || linkedGoal.target || 1) : -(linkedGoal.dailyTarget || linkedGoal.target || 1);
+        await logDailyGoalProgressQuick(linkedGoal.id, task.date, delta, userId, true);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('streak_goals_updated'));
+        }
+      }
+    } catch (e) {
+      console.warn('Could not sync task to goal:', e);
+    }
+  }
+  
   return nextCompleted;
 }
 

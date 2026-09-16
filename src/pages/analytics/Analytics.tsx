@@ -67,6 +67,22 @@ export default function Analytics() {
       setLoading(false);
     }
     loadData();
+
+    const onDataUpdated = () => {
+      loadData();
+    };
+
+    window.addEventListener('streak_habits_updated', onDataUpdated);
+    window.addEventListener('streak_sleep_updated', onDataUpdated);
+    window.addEventListener('streak_goals_updated', onDataUpdated);
+    window.addEventListener('streak_tasks_updated', onDataUpdated);
+
+    return () => {
+      window.removeEventListener('streak_habits_updated', onDataUpdated);
+      window.removeEventListener('streak_sleep_updated', onDataUpdated);
+      window.removeEventListener('streak_goals_updated', onDataUpdated);
+      window.removeEventListener('streak_tasks_updated', onDataUpdated);
+    };
   }, [user]);
 
   // Overall calculations
