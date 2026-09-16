@@ -466,15 +466,19 @@ export async function toggleTaskComplete(taskId: string, userId?: string, skipSy
   
   if (!skipSync && task.goalId) {
     try {
-      const { readLocalGoals, logDailyGoalProgressQuick } = await import('./goalService');
+      const { readLocalGoals, logDailyGoalProgressQuick, updateGoalActivity } = await import('./goalService');
       const localGoals = readLocalGoals();
       const linkedGoal = localGoals.find(g => g.id === task.goalId);
-      if (linkedGoal && linkedGoal.type === 'daily') {
+      
+      // If linked to specific activity in goal
+      if (linkedGoal && (task as any).activityId) {
+        await updateGoalActivity(linkedGoal.id, task.date, (task as any).activityId, { completed: nextCompleted }, userId);
+      } else if (linkedGoal && linkedGoal.type === 'daily') {
         const delta = nextCompleted ? (linkedGoal.dailyTarget || linkedGoal.target || 1) : -(linkedGoal.dailyTarget || linkedGoal.target || 1);
         await logDailyGoalProgressQuick(linkedGoal.id, task.date, delta, userId, true);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('streak_goals_updated'));
-        }
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('streak_goals_updated'));
       }
     } catch (e) {
       console.warn('Could not sync task to goal:', e);

@@ -64,6 +64,107 @@ app.get('/sitemap.xml', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'sitemap.xml'));
 });
 
+// Smart Study Plan Extraction from handwritten or printed photos
+app.post('/api/ai-extract-plan', async (req, res) => {
+  try {
+    const { imageBase64, mimeType = 'image/jpeg' } = req.body;
+
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Image data is required.' });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      console.error('[Plan Extractor] GEMINI_API_KEY is not set.');
+      return res.status(500).json({ error: 'AI service configuration is incomplete.' });
+    }
+
+    const ai = getAiClient();
+    if (!ai) {
+      return res.status(500).json({ error: 'AI client failed to initialize.' });
+    }
+
+    // Clean base64 data header if present
+    const base64Data = imageBase64.replace(/^data:image\/[a-zA-Z0-9+]+;base64,/, '');
+
+    const prompt = `Analyze this handwritten or printed student study plan.
+Extract the subjects (e.g. Physics, Chemistry, Botany, Zoology, Math, etc.) and break down all lectures, tasks, questions, notes, and revision activities.
+Format the output STRICTLY as raw JSON (no markdown fences, no explanatory text) with this exact schema:
+{
+  "goalTitle": "Student Study Plan",
+  "subjects": ["Physics", "Chemistry", "Botany", "Zoology"],
+  "dailyTarget": 4,
+  "unit": "Lectures",
+  "activities": [
+    {
+      "title": "Lecture 1",
+      "subject": "Physics",
+      "type": "Lecture",
+      "targetQuantity": 1,
+      "unit": "lecture"
+    }
+  ]
+}
+Supported types: "Lecture", "Notes", "Revision", "DPP", "Questions", "NCERT Reading", "Practice", "Preparation", "Other".
+Be precise and thorough in capturing all items listed for each subject.`;
+
+    let responseText = '';
+    const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+
+    for (const model of candidateModels) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: prompt },
+                {
+                  inlineData: {
+                    mimeType,
+                    data: base64Data,
+                  },
+                },
+              ],
+            },
+          ],
+          config: {
+            temperature: 0.2,
+          },
+        });
+
+        if (response?.text) {
+          responseText = response.text.trim();
+          break;
+        }
+      } catch (err) {
+        console.warn(`[Plan Extractor] Model ${model} failed, trying next:`, err);
+      }
+    }
+
+    if (!responseText) {
+      return res.status(502).json({ error: 'AI plan extraction failed to produce a response.' });
+    }
+
+    // Strip markdown code fences if model returned them
+    const cleanJson = responseText
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
+
+    try {
+      const parsedPlan = JSON.parse(cleanJson);
+      return res.json({ success: true, plan: parsedPlan });
+    } catch (parseErr) {
+      console.error('[Plan Extractor] JSON parse error:', parseErr, 'Raw:', responseText);
+      return res.status(500).json({ error: 'Failed to parse extracted study plan JSON.' });
+    }
+  } catch (error: any) {
+    console.error('[Plan Extractor] Error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error extracting plan.' });
+  }
+});
+
 app.post('/api/ai-coach', async (req, res) => {
   try {
     const { message, messages, history, context } = req.body;
@@ -84,14 +185,16 @@ app.post('/api/ai-coach', async (req, res) => {
       return res.status(500).json({ error: 'AI client failed to initialize.' });
     }
 
-    const systemInstruction = `You are the STREAK AI Coach, a master habit strategist and empathetic personal performance mentor.
-STREAK's core philosophy is "Small actions. Every day." grounded in atomic habits, behavioral momentum, and Stoic mindfulness.
+    const systemInstruction = `You are the STREAK AI Coach & Student Performance Mentor.
+STREAK's core philosophy is "Small actions. Every day." grounded in atomic habits, deep study consistency, subject balance, and Stoic mindfulness.
 
 Core Principles:
-- Tone: Calm, encouraging, grounded, direct, and actionable. Never use hollow buzzwords or overly generic cheerleading.
-- Methodology: Focus on reducing starting friction, habit stacking, identity-based habits, and rebounding quickly after missed days ("Never miss twice").
+- Tone: Calm, encouraging, grounded, analytical, direct, and actionable. Never use hollow buzzwords or overly generic cheerleading.
+- Methodology: Focus on reducing starting friction, habit stacking, subject balance, study focus streaks, and rebounding quickly after missed days ("Never miss twice").
+- Data Interpretation: The application code calculates exact deterministic statistics (habits, streaks, study hours, subject breakdown, goal progress, and missed targets). Your job is to analyze and interpret these real numbers intelligently.
+- Student Support: If the student asks questions such as "How consistent was I this week?", "Which subject am I neglecting?", "How much did I study?", "What goals are falling behind?", or "What should I focus on today?", directly reference their specific subject hours, goal completion rates, and active streaks from the provided context.
 - Style: Provide crisp, practical guidance (2-4 paragraphs or concise bullet points). Format clearly for mobile viewing.
-${context ? `\nUSER & HABIT CONTEXT:\n${typeof context === 'string' ? context : JSON.stringify(context, null, 2)}\nPersonalize your response by referencing their habits, streak count, or goals whenever relevant.` : ''}`.trim();
+${context ? `\nUSER & REAL ACTIVITY CONTEXT:\n${typeof context === 'string' ? context : JSON.stringify(context, null, 2)}\nPersonalize your response with exact numbers from their context.` : ''}`.trim();
 
     let contents: any;
     const conversationList = Array.isArray(messages) ? messages : Array.isArray(history) ? history : null;

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { TaskItem } from '../../lib/taskService';
 import { TaskItemCard } from './TaskItemCard';
 import {
@@ -18,13 +19,18 @@ import {
   Clock,
   CheckCircle2,
   Book,
+  Play,
+  FastForward,
+  ExternalLink,
+  Download,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { Habit, HabitLog } from '../../lib/habitService';
 import { Activity } from '../../lib/activityService';
-import { Goal } from '../../lib/goalService';
+import { Goal, rescheduleGoalActivity, updateGoalActivity } from '../../lib/goalService';
 import { JournalEntry } from '../../lib/journalService';
+import { createGoogleCalendarEventUrl, downloadICSFile } from '../../lib/googleCalendarService';
 
 interface DayScheduleProps {
   habits?: Habit[];
@@ -55,6 +61,7 @@ export function DaySchedule({
   onOpenAddModal,
   streakScore = 68,
 }: DayScheduleProps) {
+  const navigate = useNavigate();
   const [filterType, setFilterType] = useState<'all' | 'task' | 'meeting' | 'event'>('all');
   const [feedbackLiked, setFeedbackLiked] = useState<boolean | null>(null);
 
@@ -308,32 +315,165 @@ export function DaySchedule({
           </div>
         )}
         
-        {goals.map(goal => {
+        {goals.map((goal) => {
           const entry = goal.dailyHistory?.[selectedDateStr];
           if (!entry || !entry.activities || entry.activities.length === 0) return null;
-          
+
           return (
-            <div key={`goal_${goal.id}`} className="space-y-2 mb-4">
-              <h4 className="text-xs font-bold text-[#7d8495] uppercase tracking-wider">{goal.title}</h4>
-              {entry.activities.map(act => (
-                <div key={act.id} className="p-3 rounded-2xl bg-surface-card border border-white/5 flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${act.completed ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-[#7d8495]'}`}>
-                        <CheckCircle2 className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <span className="text-sm font-semibold text-white">{act.title}</span>
-                        {act.subject && <div className="text-[10px] text-[#7d8495] uppercase tracking-wider">{act.subject}</div>}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs font-bold text-white">{act.progress} / {act.targetQuantity}</span>
-                      <span className="text-[10px] text-[#7d8495] block">{act.unit}</span>
-                    </div>
-                  </div>
+            <div key={`goal_${goal.id}`} className="space-y-3 mb-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">{goal.title}</h4>
+                  <span className="text-[10px] text-accent-primary font-semibold px-2 py-0.5 rounded-full bg-accent-primary/10">
+                    Study Plan
+                  </span>
                 </div>
-              ))}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      downloadICSFile(
+                        `${goal.title.replace(/\s+/g, '_')}_${selectedDateStr}`,
+                        entry.activities.map((a) => ({
+                          title: `${a.subject ? `[${a.subject}] ` : ''}${a.title}`,
+                          date: selectedDateStr,
+                          startTime: a.scheduledTime || '10:00 AM',
+                          durationMinutes: a.plannedDurationMinutes || 50,
+                          description: `Study Session for ${goal.title}`,
+                        }))
+                      );
+                    }}
+                    className="text-[11px] font-semibold text-[#7d8495] hover:text-white flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Download .ics for Google/Apple Calendar"
+                  >
+                    <Download className="w-3 h-3" /> .ICS
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {entry.activities.map((act) => {
+                  const status = act.completed ? 'done' : act.status || 'upcoming';
+                  const gcalUrl = createGoogleCalendarEventUrl({
+                    title: `${act.subject ? `[${act.subject}] ` : ''}${act.title}`,
+                    date: selectedDateStr,
+                    startTime: act.scheduledTime || '10:00 AM',
+                    durationMinutes: act.plannedDurationMinutes || 50,
+                    description: `Part of goal: ${goal.title}`,
+                  });
+
+                  return (
+                    <div
+                      key={act.id}
+                      className="p-3.5 rounded-2xl bg-surface-card border border-white/5 hover:border-white/15 transition-all space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateGoalActivity(
+                                goal.id,
+                                selectedDateStr,
+                                act.id,
+                                { completed: !act.completed },
+                                goal.userId
+                              );
+                            }}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                              act.completed
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-white/5 text-[#7d8495] hover:border-white/20 border border-white/10'
+                            }`}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </button>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-sm font-semibold ${act.completed ? 'line-through text-white/50' : 'text-white'}`}>
+                                {act.title}
+                              </span>
+                              {act.subject && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-white/90">
+                                  {act.subject}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-[#7d8495] mt-0.5">
+                              {act.scheduledTime && (
+                                <span className="flex items-center gap-1 text-white/80">
+                                  <Clock className="w-3 h-3 text-accent-primary" />
+                                  {act.scheduledTime}
+                                </span>
+                              )}
+                              <span>• {act.plannedDurationMinutes || 45} mins</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div>
+                          {act.completed ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              Done
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-accent-primary/10 text-accent-primary border border-accent-primary/20">
+                              Upcoming
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Bar */}
+                      <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigate('/activity', {
+                                state: {
+                                  subject: act.subject || 'Study',
+                                  plannedMinutes: act.plannedDurationMinutes || 45,
+                                  activityTitle: act.title,
+                                  goalId: goal.id,
+                                  activityId: act.id,
+                                },
+                              });
+                            }}
+                            className="px-2.5 py-1 rounded-xl bg-accent-primary text-black font-bold text-[11px] flex items-center gap-1 hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
+                          >
+                            <Play className="w-3 h-3 fill-black" />
+                            <span>Start Study Block</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              rescheduleGoalActivity(goal.id, selectedDateStr, act.id, 30, goal.userId);
+                            }}
+                            className="px-2 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer"
+                            title="Delay this session by 30 minutes if running late"
+                          >
+                            <FastForward className="w-3 h-3 text-[#fbbf24]" />
+                            <span>+30m</span>
+                          </button>
+                        </div>
+
+                        <a
+                          href={gcalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] font-semibold text-[#7d8495] hover:text-white flex items-center gap-1 transition-colors"
+                          title="Add to Google Calendar"
+                        >
+                          <ExternalLink className="w-3 h-3" /> GCal
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           );
         })}

@@ -17,7 +17,8 @@ import {
   HelpCircle,
   Compass,
   CheckCircle2,
-  Play
+  Play,
+  Calendar
 } from 'lucide-react';
 import UserAvatar from '../components/profile/UserAvatar';
 import EditProfileModal from '../components/profile/EditProfileModal';
@@ -41,6 +42,7 @@ export default function More() {
     { id: 'habits', label: 'My Habits', icon: List, color: 'text-blue-400', bg: 'bg-blue-400/20', path: '/habits' },
     { id: 'goals', label: 'Goals', icon: Target, color: 'text-pink-400', bg: 'bg-pink-400/20', path: '/goals' },
     { id: 'analytics', label: 'Analytics', icon: BarChart2, color: 'text-yellow-400', bg: 'bg-yellow-400/20', path: '/analytics' },
+    { id: 'weekly-review', label: 'Weekly Review', sub: '(Sunday Reflection)', icon: Calendar, color: 'text-teal-400', bg: 'bg-teal-400/20', path: '/analytics?review=true' },
     { id: 'ai', label: 'AI Coach', sub: '(Chat with AI)', icon: Sparkles, color: 'text-purple-400', bg: 'bg-purple-400/20', path: '/ai-coach' },
     { id: 'activity', label: 'Focus / Activity Timer', icon: Play, color: 'text-emerald-400', bg: 'bg-emerald-400/20', path: '/activity/history' },
     { id: 'onboarding', label: 'Onboarding Flow', sub: '(Replay Intro)', icon: Compass, color: 'text-accent-primary', bg: 'bg-accent-primary/20', path: '/onboarding?replay=true' },
@@ -147,7 +149,7 @@ export default function More() {
         <div>
           <h3 className="text-xs font-semibold text-[#7d8495] uppercase tracking-wider mb-2 ml-4">Productivity</h3>
           <div className="bg-surface-card border border-[#1f232c] rounded-[24px] p-2 divide-y divide-[#1e222c] shadow-sm">
-            {menuItems.filter(i => ['goals', 'habits', 'analytics', 'activity', 'ai', 'journal'].includes(i.id)).map((item) => (
+            {menuItems.filter(i => ['goals', 'habits', 'analytics', 'weekly-review', 'activity', 'ai', 'journal'].includes(i.id)).map((item) => (
               <button key={item.id} onClick={() => item.path && navigate(item.path)} className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-[#181c26] transition-colors group cursor-pointer">
                 <div className="flex items-center gap-3.5">
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${item.bg} ${item.color}`}>

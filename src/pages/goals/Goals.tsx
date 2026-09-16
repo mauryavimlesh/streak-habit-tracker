@@ -43,6 +43,7 @@ import {
 import { cn } from '../../lib/utils';
 import { ShareModal } from '../../components/ui/ShareModal';
 import { StreakShareCard } from '../../components/ui/StreakShareCard';
+import { StudyPlanImportModal } from '../../components/goals/StudyPlanImportModal';
 import { Share } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -62,6 +63,7 @@ export default function Goals() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [activeFilter, setActiveFilter] = useState<'all' | 'daily' | 'one_time' | 'completed' | 'paused'>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
@@ -317,16 +319,26 @@ export default function Goals() {
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            resetForm();
-            setIsCreateOpen(true);
-          }}
-          className="px-3.5 py-1.5 rounded-full bg-accent-primary text-black font-semibold text-xs flex items-center gap-1.5 shadow-[0_2px_12px_rgba(140,238,40,0.3)] hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5 stroke-[3]" />
-          <span>New Goal</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 text-white/90 border border-white/10 font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Import photo of study plan"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-accent-primary" />
+            <span className="hidden sm:inline">Smart Import</span>
+          </button>
+          <button
+            onClick={() => {
+              resetForm();
+              setIsCreateOpen(true);
+            }}
+            className="px-3.5 py-1.5 rounded-full bg-accent-primary text-black font-semibold text-xs flex items-center gap-1.5 shadow-[0_2px_12px_rgba(140,238,40,0.3)] hover:bg-[#9eff38] active:scale-95 transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <span>New Goal</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Content */}
@@ -1207,6 +1219,17 @@ export default function Goals() {
           />
         )}
       </ShareModal>
+
+      {/* Smart Study Plan Photo Import Modal */}
+      <StudyPlanImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        userId={user?.uid || 'local'}
+        onGoalCreated={(newGoalId) => {
+          loadGoals();
+          navigate(`/goals/${newGoalId}`);
+        }}
+      />
     </div>
   );
 }

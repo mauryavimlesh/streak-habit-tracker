@@ -34,6 +34,10 @@ export interface GoalActivity {
   unit: string;
   completed: boolean;
   estimatedDuration?: number; // minutes
+  scheduledTime?: string;
+  plannedDurationMinutes?: number;
+  notes?: string;
+  status?: 'upcoming' | 'in_progress' | 'done' | 'missed';
   deadline?: string;
   linkedTaskId?: string;
   linkedHabitId?: string;
@@ -70,7 +74,7 @@ export interface Goal {
   linkedHabitId?: string;
   linkToTask?: boolean;
   linkedTaskId?: string;
-  targetDate: string; 
+  targetDate?: string; 
   priority?: 'low' | 'medium' | 'high';
   milestones?: Milestone[];
   linkedHabitIds?: string[];
@@ -941,6 +945,284 @@ export async function logDailyGoalProgressQuick(goalId: string, dateStr: string,
 export function getGoalHistoryList(goal: Goal) {
   if (!goal || !goal.dailyHistory) return [];
   return Object.values(goal.dailyHistory).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+export async function addGoalActivity(
+  goalId: string,
+  dateStr: string,
+  activityData: Omit<GoalActivity, 'id'>,
+  userId: string = 'local',
+  options?: { addToTask?: boolean; addToHabit?: boolean }
+): Promise<GoalActivity | null> {
+  const localGoals = readLocalGoals();
+  const goal = localGoals.find(g => g.id === goalId);
+  if (!goal) return null;
+
+  const activityId = 'act_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+  const newActivity: GoalActivity = {
+    ...activityData,
+    id: activityId,
+    progress: activityData.progress || 0,
+    completed: Boolean(activityData.completed),
+    unit: activityData.unit || 'unit',
+  };
+
+  // Optional: Create linked task
+  if (options?.addToTask) {
+    try {
+      const { createTask } = await import('./taskService');
+      const task = await createTask({
+        title: `${newActivity.title}${newActivity.subject ? ` (${newActivity.subject})` : ''}`,
+        description: `Linked to Goal: ${goal.title}`,
+        date: dateStr,
+        category: (goal.category as any) || 'Study',
+        priority: goal.priority || 'medium',
+        type: 'task',
+        goalId: goal.id,
+        completed: newActivity.completed,
+      }, userId);
+      if (task?.id) {
+        newActivity.linkedTaskId = task.id;
+      }
+    } catch (err) {
+      console.warn('Failed creating linked task for goal activity:', err);
+    }
+  }
+
+  // Optional: Create linked habit
+  if (options?.addToHabit) {
+    try {
+      const { createHabit } = await import('./habitService');
+      const habitId = await createHabit({
+        userId,
+        name: newActivity.title,
+        category: goal.category || 'Study',
+        icon: 'BookOpen',
+        color: '#a5ff36',
+        frequencyType: 'daily',
+        frequencyValue: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        targetType: 'count',
+        targetValue: newActivity.targetQuantity || 1,
+        targetUnit: newActivity.unit || 'unit',
+      });
+      if (habitId) {
+        newActivity.linkedHabitId = typeof habitId === 'string' ? habitId : (habitId as any).id;
+      }
+    } catch (err) {
+      console.warn('Failed creating linked habit for goal activity:', err);
+    }
+  }
+
+  const history = { ...(goal.dailyHistory || {}) };
+  const currentEntry = history[dateStr] || {
+    date: dateStr,
+    target: goal.dailyTarget || goal.target || 1,
+    progress: 0,
+    completed: false,
+    activities: [],
+  };
+
+  const updatedActivities = [...(currentEntry.activities || []), newActivity];
+  const completedCount = updatedActivities.filter(a => a.completed).length;
+  const isDayCompleted = completedCount >= currentEntry.target;
+
+  history[dateStr] = {
+    ...currentEntry,
+    activities: updatedActivities,
+    progress: completedCount,
+    completed: isDayCompleted,
+    completedAt: isDayCompleted ? new Date().toISOString() : currentEntry.completedAt,
+  };
+
+  await updateGoal(goalId, { dailyHistory: history }, userId);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_goals_updated'));
+    window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
+    window.dispatchEvent(new CustomEvent('streak_habits_updated'));
+  }
+
+  return newActivity;
+}
+
+export async function updateGoalActivity(
+  goalId: string,
+  dateStr: string,
+  activityId: string,
+  updates: Partial<GoalActivity>,
+  userId: string = 'local'
+): Promise<GoalActivity | null> {
+  const localGoals = readLocalGoals();
+  const goal = localGoals.find(g => g.id === goalId);
+  if (!goal || !goal.dailyHistory || !goal.dailyHistory[dateStr]) return null;
+
+  const history = { ...goal.dailyHistory };
+  const dayEntry = { ...history[dateStr] };
+  const activities = [...(dayEntry.activities || [])];
+  const actIndex = activities.findIndex(a => a.id === activityId);
+  if (actIndex === -1) return null;
+
+  const oldAct = activities[actIndex];
+  const updatedAct: GoalActivity = {
+    ...oldAct,
+    ...updates,
+  };
+
+  if (updates.progress !== undefined) {
+    updatedAct.completed = updatedAct.progress >= updatedAct.targetQuantity;
+  }
+
+  activities[actIndex] = updatedAct;
+  dayEntry.activities = activities;
+
+  const completedActivities = activities.filter(a => a.completed).length;
+  const target = dayEntry.target || goal.dailyTarget || 1;
+  const isCompleted = completedActivities >= target;
+
+  dayEntry.progress = completedActivities;
+  dayEntry.completed = isCompleted;
+  if (isCompleted && !dayEntry.completedAt) {
+    dayEntry.completedAt = new Date().toISOString();
+  }
+
+  history[dateStr] = dayEntry;
+  await updateGoal(goalId, { dailyHistory: history }, userId);
+
+  // Sync to linked task if present
+  if (updatedAct.linkedTaskId && updates.completed !== undefined) {
+    try {
+      const { updateTask } = await import('./taskService');
+      await updateTask(updatedAct.linkedTaskId, { completed: updatedAct.completed }, userId);
+    } catch (e) {
+      console.warn('Error syncing activity completion to task:', e);
+    }
+  }
+
+  // Sync to linked habit if present
+  if (updatedAct.linkedHabitId) {
+    try {
+      const { logHabit } = await import('./habitService');
+      await logHabit({
+        userId,
+        habitId: updatedAct.linkedHabitId,
+        date: dateStr,
+        status: updatedAct.completed ? 'completed' : 'in_progress',
+        progressValue: updatedAct.progress,
+      }, true);
+    } catch (e) {
+      console.warn('Error syncing activity completion to habit:', e);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_goals_updated'));
+    window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
+    window.dispatchEvent(new CustomEvent('streak_habits_updated'));
+  }
+
+  return updatedAct;
+}
+
+export async function deleteGoalActivity(
+  goalId: string,
+  dateStr: string,
+  activityId: string,
+  userId: string = 'local'
+): Promise<boolean> {
+  const localGoals = readLocalGoals();
+  const goal = localGoals.find(g => g.id === goalId);
+  if (!goal || !goal.dailyHistory || !goal.dailyHistory[dateStr]) return false;
+
+  const history = { ...goal.dailyHistory };
+  const dayEntry = { ...history[dateStr] };
+  const activities = [...(dayEntry.activities || [])];
+  const targetAct = activities.find(a => a.id === activityId);
+  const remaining = activities.filter(a => a.id !== activityId);
+
+  dayEntry.activities = remaining;
+  const completedCount = remaining.filter(a => a.completed).length;
+  dayEntry.progress = completedCount;
+  dayEntry.completed = completedCount >= (dayEntry.target || goal.dailyTarget || 1);
+
+  history[dateStr] = dayEntry;
+  await updateGoal(goalId, { dailyHistory: history }, userId);
+
+  // If had linked task, delete or unlink it
+  if (targetAct?.linkedTaskId) {
+    try {
+      const { deleteTask } = await import('./taskService');
+      await deleteTask(targetAct.linkedTaskId, userId);
+    } catch {
+      // ignore
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_goals_updated'));
+    window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
+  }
+  return true;
+}
+
+export async function rescheduleGoalActivity(
+  goalId: string,
+  fromDateStr: string,
+  activityId: string,
+  target: string | number,
+  userId: string = 'local'
+): Promise<boolean> {
+  const localGoals = readLocalGoals();
+  const goal = localGoals.find(g => g.id === goalId);
+  if (!goal || !goal.dailyHistory || !goal.dailyHistory[fromDateStr]) return false;
+
+  const fromActivities = goal.dailyHistory[fromDateStr].activities || [];
+  const act = fromActivities.find(a => a.id === activityId);
+  if (!act) return false;
+
+  // Case A: target is a number -> delay scheduled time on the same date by N minutes
+  if (typeof target === 'number') {
+    let currentHour = 10;
+    let currentMin = 0;
+    if (act.scheduledTime) {
+      const match = act.scheduledTime.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+      if (match) {
+        currentHour = parseInt(match[1], 10);
+        currentMin = parseInt(match[2], 10);
+        if (match[3]?.toUpperCase() === 'PM' && currentHour < 12) currentHour += 12;
+        if (match[3]?.toUpperCase() === 'AM' && currentHour === 12) currentHour = 0;
+      }
+    }
+
+    const totalMins = currentHour * 60 + currentMin + target;
+    const newH24 = Math.floor(totalMins / 60) % 24;
+    const newM = totalMins % 60;
+    const meridiem = newH24 >= 12 ? 'PM' : 'AM';
+    const newH12 = newH24 % 12 === 0 ? 12 : newH24 % 12;
+    const newTimeStr = `${newH12}:${newM.toString().padStart(2, '0')} ${meridiem}`;
+
+    await updateGoalActivity(goalId, fromDateStr, activityId, { scheduledTime: newTimeStr }, userId);
+    return true;
+  }
+
+  // Case B: target is a date string -> reschedule to new date
+  const toDateStr = target;
+  await updateGoalActivity(goalId, fromDateStr, activityId, { notes: `Rescheduled to ${toDateStr}` }, userId);
+
+  const newActivityData: Omit<GoalActivity, 'id'> = {
+    title: act.title,
+    subject: act.subject,
+    type: act.type,
+    targetQuantity: act.targetQuantity,
+    progress: 0,
+    unit: act.unit,
+    completed: false,
+    estimatedDuration: act.estimatedDuration,
+    scheduledTime: act.scheduledTime,
+    notes: `Rescheduled from ${fromDateStr}`,
+  };
+
+  await addGoalActivity(goalId, toDateStr, newActivityData, userId, { addToTask: Boolean(act.linkedTaskId) });
+  return true;
 }
 
 export async function syncLocalGoalsToCloud(userId: string) {

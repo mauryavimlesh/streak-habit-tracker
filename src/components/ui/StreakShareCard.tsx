@@ -9,7 +9,7 @@ export interface StreakShareCardProps {
   totalTasks?: number;
   completedGoals?: number;
   activeGoals?: number;
-  streak: number;
+  streak: number | any;
   userName: string;
   totalHabits: number;
   completedHabits: number;
@@ -33,6 +33,7 @@ export function StreakShareCard({
 }: StreakShareCardProps) {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   const isSquare = format === 'square';
+  const streakNum = typeof streak === 'object' && streak !== null ? (streak.currentStreak ?? 0) : (Number(streak) || 0);
 
   return (
     <div 
@@ -68,7 +69,7 @@ export function StreakShareCard({
           </div>
           
           <h3 className={cn("leading-none font-bold text-white mb-2 tracking-tighter", goalTitle ? (isSquare ? "text-2xl" : "text-[28px]") : (isSquare ? "text-4xl" : "text-[54px]"))}>
-            {goalTitle || streak}
+            {goalTitle || streakNum}
           </h3>
           <p className="text-sm font-semibold text-accent-primary uppercase tracking-widest mb-4">
             {goalTitle ? 'Goal Target' : 'Day Streak'}
@@ -95,7 +96,7 @@ export function StreakShareCard({
               <span className="text-[10px] text-[#7d8495] uppercase font-bold tracking-wider mb-1">Score</span>
               <span className="text-white font-bold text-sm flex items-center gap-1">
                 <Award className="w-3.5 h-3.5 text-amber-400" />
-                {streak * 10}
+                {streakNum * 10}
               </span>
             </div>
             </div>

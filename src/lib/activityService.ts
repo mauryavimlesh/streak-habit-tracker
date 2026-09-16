@@ -11,8 +11,27 @@ export interface Activity {
   time: string;
   startTime?: string;
   endTime?: string;
+  category?: string;
+  subject?: string;
+  goalId?: string;
+  activityId?: string;
   linkedHabitId?: string;
+  completionStatus?: 'completed' | 'partial' | 'abandoned';
+  notes?: string;
   createdAt?: any;
+}
+
+export interface StudyStatistics {
+  totalStudyMinutes: number;
+  todayStudyMinutes: number;
+  weeklyStudyMinutes: number;
+  monthlyStudyMinutes: number;
+  sessionCount: number;
+  averageSessionMinutes: number;
+  longestSessionMinutes: number;
+  bestStudyDay: { date: string; minutes: number } | null;
+  studyStreakDays: number;
+  subjectBreakdown: Record<string, { minutes: number; sessions: number }>;
 }
 
 const LOCAL_ACTIVITIES_KEY = 'streak_activities_v1';
@@ -78,4 +97,97 @@ export async function deleteActivity(id: string, userId?: string) {
       console.warn('Error deleting activity', e);
     }
   }
+}
+
+export function calculateStudyStatistics(activities: Activity[]): StudyStatistics {
+  const todayStr = new Date().toLocaleDateString('en-CA');
+  const now = new Date();
+  const oneWeekAgo = new Date(now);
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  const oneWeekAgoStr = oneWeekAgo.toLocaleDateString('en-CA');
+
+  const oneMonthAgo = new Date(now);
+  oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+  const oneMonthAgoStr = oneMonthAgo.toLocaleDateString('en-CA');
+
+  let totalMinutes = 0;
+  let todayMinutes = 0;
+  let weeklyMinutes = 0;
+  let monthlyMinutes = 0;
+  let longestSession = 0;
+  const dayTotals: Record<string, number> = {};
+  const subjectBreakdown: Record<string, { minutes: number; sessions: number }> = {};
+
+  for (const act of activities) {
+    const mins = act.durationMinutes + (act.durationSeconds ? Math.round(act.durationSeconds / 60) : 0);
+    totalMinutes += mins;
+    if (mins > longestSession) longestSession = mins;
+
+    if (act.date === todayStr) {
+      todayMinutes += mins;
+    }
+    if (act.date >= oneWeekAgoStr) {
+      weeklyMinutes += mins;
+    }
+    if (act.date >= oneMonthAgoStr) {
+      monthlyMinutes += mins;
+    }
+
+    dayTotals[act.date] = (dayTotals[act.date] || 0) + mins;
+
+    const subj = act.subject || act.category || 'General';
+    if (!subjectBreakdown[subj]) {
+      subjectBreakdown[subj] = { minutes: 0, sessions: 0 };
+    }
+    subjectBreakdown[subj].minutes += mins;
+    subjectBreakdown[subj].sessions += 1;
+  }
+
+  // Calculate best study day
+  let bestStudyDay: { date: string; minutes: number } | null = null;
+  let maxDayMins = 0;
+  for (const [date, mins] of Object.entries(dayTotals)) {
+    if (mins > maxDayMins) {
+      maxDayMins = mins;
+      bestStudyDay = { date, minutes: mins };
+    }
+  }
+
+  // Calculate consecutive active study streak days
+  let studyStreakDays = 0;
+  const checkDate = new Date();
+  while (true) {
+    const dateStr = checkDate.toLocaleDateString('en-CA');
+    if ((dayTotals[dateStr] || 0) > 0) {
+      studyStreakDays++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      // If today has 0 so far, check if yesterday was active
+      if (dateStr === todayStr) {
+        checkDate.setDate(checkDate.getDate() - 1);
+        const yestStr = checkDate.toLocaleDateString('en-CA');
+        if ((dayTotals[yestStr] || 0) > 0) {
+          // continue checking from yesterday
+          continue;
+        }
+      }
+      break;
+    }
+  }
+
+  const sessionCount = activities.length;
+  const averageSessionMinutes = sessionCount > 0 ? Math.round(totalMinutes / sessionCount) : 0;
+
+  return {
+    totalStudyMinutes: totalMinutes,
+    todayStudyMinutes: todayMinutes,
+    weeklyStudyMinutes: weeklyMinutes,
+    monthlyStudyMinutes: monthlyMinutes,
+    sessionCount,
+    averageSessionMinutes,
+    longestSessionMinutes: longestSession,
+    bestStudyDay,
+    studyStreakDays,
+    subjectBreakdown,
+  };
 }
