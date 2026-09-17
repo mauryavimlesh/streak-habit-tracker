@@ -37,11 +37,6 @@ function getAiClient(): GoogleGenAI | null {
 }
 
 app.post('/api/config', (req, res) => {
-  const { geminiApiKey } = req.body;
-  if (geminiApiKey) {
-    process.env.GEMINI_API_KEY = geminiApiKey;
-    aiClient = null;
-  }
   res.json({ success: true, configured: Boolean(process.env.GEMINI_API_KEY) });
 });
 
@@ -170,9 +165,14 @@ app.post('/api/ai-coach', async (req, res) => {
     const { message, messages, history, context } = req.body;
 
     if (!process.env.GEMINI_API_KEY) {
-      console.error('[AI Coach] GEMINI_API_KEY is not set.');
-      return res.status(500).json({
-        error: 'AI Coach configuration is incomplete.',
+      console.log('[AI Coach] GEMINI_API_KEY not configured, generating truthful deterministic coaching fallback.');
+      const fallbackPrompt = message || (Array.isArray(messages) && messages[messages.length - 1]?.text) || 'How do I build consistency?';
+      const fallbackText = generateFallbackCoaching(fallbackPrompt, context);
+      return res.json({
+        success: true,
+        text: fallbackText,
+        reply: fallbackText,
+        fallback: true,
       });
     }
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { ChevronLeft, Trash2, Clock, Play, BarChart2 } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { getUserActivities, deleteActivity, Activity } from '../../lib/activityService';
+import { getTodayDateKey } from '../../lib/dateUtils';
 import { DeleteConfirmModal } from '../../components/ui/DeleteConfirmModal';
 import { useTimer } from '../../lib/timer/TimerContext';
 import { cn } from '../../lib/utils';
@@ -23,6 +24,12 @@ export default function ActivityHistory() {
       setLoading(false);
     }
     load();
+
+    const handleUpdate = () => {
+      load();
+    };
+    window.addEventListener('streak_activities_updated', handleUpdate);
+    return () => window.removeEventListener('streak_activities_updated', handleUpdate);
   }, [user]);
 
   const handleDelete = async () => {
@@ -32,7 +39,7 @@ export default function ActivityHistory() {
     setDeletingId(null);
   };
 
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todayStr = getTodayDateKey();
   const todayActivities = activities.filter(a => a.date === todayStr);
   const totalTodayMinutes = todayActivities.reduce((acc, a) => acc + a.durationMinutes + (a.durationSeconds / 60), 0);
   const totalTodayHours = Math.floor(totalTodayMinutes / 60);

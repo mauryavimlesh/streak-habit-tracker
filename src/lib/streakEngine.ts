@@ -1,4 +1,5 @@
 import { HabitLog, HabitFrequency } from './habitService';
+import { getTodayDateKey, parseDateKey, formatDateKey, addDays, diffDays } from './dateUtils';
 
 export interface StreakStats {
   currentStreak: number;
@@ -17,14 +18,21 @@ export function calculateStreakStats(
 ): StreakStats {
   const stats: StreakStats = { currentStreak: 0, bestStreak: 0, recoveryStreak: 0 };
 
-  // Sort logs in descending order by date (newest first), only counting completions
-  const sortedLogs = [...logs]
-    .filter((log) => log.status === 'completed')
-    .sort((a, b) => b.date.localeCompare(a.date));
+  // Deduplicate and filter completed logs only
+  const completedDateMap = new Map<string, HabitLog>();
+  logs.forEach((log) => {
+    if (log.status === 'completed' && log.date) {
+      const canonicalDate = log.date.split('T')[0];
+      completedDateMap.set(canonicalDate, { ...log, date: canonicalDate });
+    }
+  });
+
+  // Sort logs in descending order by date (newest first)
+  const sortedLogs = Array.from(completedDateMap.values()).sort((a, b) => b.date.localeCompare(a.date));
 
   if (sortedLogs.length === 0) return stats;
 
-  const todayStr = targetDateStr || new Date().toLocaleDateString('en-CA'); // 'YYYY-MM-DD'
+  const todayStr = targetDateStr || getTodayDateKey(); // 'YYYY-MM-DD'
 
   if (frequencyType === 'daily') {
     stats.bestStreak = calculateMaxContinuousDays(sortedLogs);
@@ -36,8 +44,7 @@ export function calculateStreakStats(
       stats.recoveryStreak = stats.currentStreak;
     }
   } else if (frequencyType === 'weekly' || frequencyType === 'selected_days') {
-    // For non-daily frequencies, we can count total completions as the "streak" or 
-    // implement a more advanced ISO week logic. For now, continuous completions logic.
+    // For non-daily frequencies, count unique completion dates
     stats.bestStreak = sortedLogs.length; 
     stats.currentStreak = sortedLogs.length;
   }
@@ -48,62 +55,45 @@ export function calculateStreakStats(
 function calculateCurrentContinuousDays(sortedLogs: HabitLog[], todayStr: string): number {
   if (sortedLogs.length === 0) return 0;
   
-  let currentStreak = 0;
-  let checkDate = new Date(todayStr);
-  
-  // Verify if today or yesterday was completed to keep the streak alive
-  const todayLog = sortedLogs.find(l => l.date === todayStr);
-  
-  const yesterdayDate = new Date(checkDate);
-  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterdayStr = yesterdayDate.toLocaleDateString('en-CA');
-  const yesterdayLog = sortedLogs.find(l => l.date === yesterdayStr);
+  const dateSet = new Set(sortedLogs.map((l) => l.date));
+  const yesterdayStr = addDays(todayStr, -1);
 
-  if (todayLog || yesterdayLog) {
-    // Start counting backwards from the most recent logged date
-    checkDate = new Date((todayLog || yesterdayLog)!.date);
-  } else {
-    return 0; // Streak broken
-  }
-
-  while (true) {
-    const dateStr = checkDate.toLocaleDateString('en-CA');
-    const hasLog = sortedLogs.find(l => l.date === dateStr);
-    
-    if (hasLog) {
-      currentStreak++;
-      checkDate.setDate(checkDate.getDate() - 1);
+  // If neither today nor yesterday has a log, streak is 0
+  let cursor = todayStr;
+  if (!dateSet.has(todayStr)) {
+    if (dateSet.has(yesterdayStr)) {
+      cursor = yesterdayStr;
     } else {
-      break; // Streak broken
+      return 0; // Streak broken
     }
   }
 
-  return currentStreak;
+  let streak = 0;
+  while (dateSet.has(cursor)) {
+    streak++;
+    cursor = addDays(cursor, -1);
+  }
+
+  return streak;
 }
 
 function calculateMaxContinuousDays(sortedLogs: HabitLog[]): number {
   if (sortedLogs.length === 0) return 0;
   if (sortedLogs.length === 1) return 1;
 
+  // sortedLogs are sorted newest to oldest
   let maxStreak = 1;
   let currentRun = 1;
 
-  // We iterate through sorted logs (newest to oldest)
-  // If the previous log is exactly 1 day older, we increment run
   for (let i = 0; i < sortedLogs.length - 1; i++) {
-    const d1 = new Date(sortedLogs[i].date);
-    const d2 = new Date(sortedLogs[i + 1].date);
-    
-    // Difference in days
-    const diffTime = Math.abs(d1.getTime() - d2.getTime());
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    const diff = diffDays(sortedLogs[i + 1].date, sortedLogs[i].date);
 
-    if (diffDays === 1) {
+    if (diff === 1) {
       currentRun++;
       if (currentRun > maxStreak) {
         maxStreak = currentRun;
       }
-    } else if (diffDays === 0) {
+    } else if (diff === 0) {
       // Duplicate entry for same day, ignore
     } else {
       currentRun = 1;

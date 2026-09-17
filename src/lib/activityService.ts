@@ -1,5 +1,7 @@
 import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
+import { isCloudSyncableUser } from './authUtils';
+import { getTodayDateKey, addDays } from './dateUtils';
 
 export interface Activity {
   id?: string;
@@ -55,7 +57,11 @@ export async function saveActivity(activity: Omit<Activity, 'id' | 'createdAt'>,
   local.unshift(newActivity);
   saveLocalActivities(local);
 
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_activities_updated'));
+  }
+
+  if (isCloudSyncableUser(userId)) {
     try {
       const docRef = await addDoc(collection(db, 'activities'), {
         ...activity,
@@ -72,7 +78,7 @@ export async function saveActivity(activity: Omit<Activity, 'id' | 'createdAt'>,
 }
 
 export async function getUserActivities(userId: string): Promise<Activity[]> {
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     return getLocalActivities();
   }
   try {
@@ -90,7 +96,7 @@ export async function deleteActivity(id: string, userId?: string) {
   const local = getLocalActivities().filter(a => a.id !== id);
   saveLocalActivities(local);
 
-  if (userId && userId !== 'local' && userId !== 'default' && !id.startsWith('act_')) {
+  if (isCloudSyncableUser(userId) && !id.startsWith('act_')) {
     try {
       await deleteDoc(doc(db, 'activities', id));
     } catch (e) {
@@ -100,15 +106,9 @@ export async function deleteActivity(id: string, userId?: string) {
 }
 
 export function calculateStudyStatistics(activities: Activity[]): StudyStatistics {
-  const todayStr = new Date().toLocaleDateString('en-CA');
-  const now = new Date();
-  const oneWeekAgo = new Date(now);
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  const oneWeekAgoStr = oneWeekAgo.toLocaleDateString('en-CA');
-
-  const oneMonthAgo = new Date(now);
-  oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
-  const oneMonthAgoStr = oneMonthAgo.toLocaleDateString('en-CA');
+  const todayStr = getTodayDateKey();
+  const oneWeekAgoStr = addDays(todayStr, -7);
+  const oneMonthAgoStr = addDays(todayStr, -30);
 
   let totalMinutes = 0;
   let todayMinutes = 0;
@@ -126,10 +126,10 @@ export function calculateStudyStatistics(activities: Activity[]): StudyStatistic
     if (act.date === todayStr) {
       todayMinutes += mins;
     }
-    if (act.date >= oneWeekAgoStr) {
+    if (act.date >= oneWeekAgoStr && act.date <= todayStr) {
       weeklyMinutes += mins;
     }
-    if (act.date >= oneMonthAgoStr) {
+    if (act.date >= oneMonthAgoStr && act.date <= todayStr) {
       monthlyMinutes += mins;
     }
 
@@ -155,23 +155,15 @@ export function calculateStudyStatistics(activities: Activity[]): StudyStatistic
 
   // Calculate consecutive active study streak days
   let studyStreakDays = 0;
-  const checkDate = new Date();
-  while (true) {
-    const dateStr = checkDate.toLocaleDateString('en-CA');
-    if ((dayTotals[dateStr] || 0) > 0) {
+  const yesterdayStr = addDays(todayStr, -1);
+  const hasToday = (dayTotals[todayStr] || 0) > 0;
+  const hasYesterday = (dayTotals[yesterdayStr] || 0) > 0;
+
+  if (hasToday || hasYesterday) {
+    let cursor = hasToday ? todayStr : yesterdayStr;
+    while ((dayTotals[cursor] || 0) > 0) {
       studyStreakDays++;
-      checkDate.setDate(checkDate.getDate() - 1);
-    } else {
-      // If today has 0 so far, check if yesterday was active
-      if (dateStr === todayStr) {
-        checkDate.setDate(checkDate.getDate() - 1);
-        const yestStr = checkDate.toLocaleDateString('en-CA');
-        if ((dayTotals[yestStr] || 0) > 0) {
-          // continue checking from yesterday
-          continue;
-        }
-      }
-      break;
+      cursor = addDays(cursor, -1);
     }
   }
 

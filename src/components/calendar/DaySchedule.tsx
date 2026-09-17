@@ -31,6 +31,7 @@ import { Activity } from '../../lib/activityService';
 import { Goal, rescheduleGoalActivity, updateGoalActivity } from '../../lib/goalService';
 import { JournalEntry } from '../../lib/journalService';
 import { createGoogleCalendarEventUrl, downloadICSFile } from '../../lib/googleCalendarService';
+import { formatDateKey, formatDisplayDate } from '../../lib/dateUtils';
 
 interface DayScheduleProps {
   habits?: Habit[];
@@ -43,6 +44,7 @@ interface DayScheduleProps {
   onToggleTask: (taskId: string) => void;
   onEditTask: (task: TaskItem) => void;
   onDeleteTask: (taskId: string) => void;
+  onUpdateTaskProgress?: (taskId: string, newQuantity: number) => void;
   onOpenAddModal: (type?: 'task' | 'meeting' | 'event' | 'reminder') => void;
   streakScore?: number;
 }
@@ -58,6 +60,7 @@ export function DaySchedule({
   onToggleTask,
   onEditTask,
   onDeleteTask,
+  onUpdateTaskProgress,
   onOpenAddModal,
   streakScore = 68,
 }: DayScheduleProps) {
@@ -71,12 +74,14 @@ export function DaySchedule({
   const standardTaskCount = tasks.filter((t) => !t.type || t.type === 'task' || t.type === 'reminder').length;
   const completedCount = tasks.filter((t) => t.completed).length;
 
-  const selectedDateStr = selectedDate.toLocaleDateString('en-CA');
+  const selectedDateStr = formatDateKey(selectedDate);
   
   // Aggregate all events for the selected date
   const dayLogs = logs.filter(l => l.date === selectedDateStr && l.status === 'completed');
   const dayActivities = activities.filter(a => a.date === selectedDateStr);
   const dayJournals = journals.filter(j => j.date === selectedDateStr);
+  const totalFocusMinutes = dayActivities.reduce((acc, a) => acc + (a.durationMinutes || 0), 0);
+  const totalItemsCount = eventCount + meetingCount + standardTaskCount + dayLogs.length + dayActivities.length;
   
   const filteredTasks = tasks.filter((t) => {
     if (filterType === 'all') return true;
@@ -92,57 +97,77 @@ export function DaySchedule({
   const isToday =
     selectedDate.toDateString() === new Date().toDateString();
 
+  const hasGoalActivities = goals.some((g) => (g.dailyHistory?.[selectedDateStr]?.activities?.length || 0) > 0);
+
   return (
     <div className="space-y-6 pt-1 pb-16 select-none">
-      {/* Weather & Location (Matching Reference Screen 1) */}
-      <div className="flex items-center gap-4 text-xs font-semibold text-[#8e96a8]">
+      {/* Date & Focus Status Header */}
+      <div className="flex items-center gap-2.5 text-xs font-semibold text-[#8e96a8]">
         <div className="flex items-center gap-1.5 bg-[#14161e] border border-[#212634] px-3 py-1.5 rounded-full shadow-sm">
-          <CloudRain className="w-3.5 h-3.5 text-[#60a5fa]" />
-          <span className="text-white">6°</span>
+          <CalendarIcon className="w-3.5 h-3.5 text-accent-primary" />
+          <span className="text-white">{formatDisplayDate(selectedDateStr)}</span>
         </div>
-        <div className="flex items-center gap-1.5 bg-[#14161e] border border-[#212634] px-3 py-1.5 rounded-full shadow-sm">
-          <Navigation className="w-3 h-3 text-accent-primary rotate-45" />
-          <span className="text-white">Krakow</span>
-        </div>
+        {totalFocusMinutes > 0 && (
+          <div className="flex items-center gap-1.5 bg-[#14161e] border border-[#212634] px-3 py-1.5 rounded-full shadow-sm">
+            <Clock className="w-3.5 h-3.5 text-sky-400" />
+            <span className="text-white">{totalFocusMinutes}m Focus</span>
+          </div>
+        )}
       </div>
 
-      {/* Large Typographic Status Greeting (Matching Reference Screen 1) */}
+      {/* Typographic Status Greeting */}
       <div className="space-y-1">
         <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-tight">
           {greeting}
         </h2>
         <div className="text-lg sm:text-xl font-medium text-white/80 leading-snug">
-          You have{' '}
-          <span className="inline-flex items-center gap-1 font-semibold text-white">
-            <CalendarIcon className="w-4 h-4 text-[#c084fc] inline" /> {eventCount || 2} events,
-          </span>{' '}
-          <br className="sm:hidden" />
-          <span className="inline-flex items-center gap-1 font-semibold text-white">
-            <Users className="w-4 h-4 text-[#818cf8] inline" /> {meetingCount || 2} meetings
-          </span>{' '}
-          and <br className="sm:hidden" />
-          <span className="inline-flex items-center gap-1 font-semibold text-accent-primary">
-            <CheckSquare className="w-4 h-4 text-accent-primary inline" /> {standardTaskCount} tasks
-          </span>{' '}
-          {isToday ? 'today.' : 'on this date.'}
+          {tasks.length === 0 ? (
+            <span>No tasks scheduled {isToday ? 'for today.' : 'on this date.'}</span>
+          ) : (
+            <>
+              You have{' '}
+              {eventCount > 0 && (
+                <span className="inline-flex items-center gap-1 font-semibold text-white mr-1.5">
+                  <CalendarIcon className="w-4 h-4 text-[#c084fc] inline" /> {eventCount} event{eventCount !== 1 ? 's' : ''},
+                </span>
+              )}
+              {meetingCount > 0 && (
+                <span className="inline-flex items-center gap-1 font-semibold text-white mr-1.5">
+                  <Users className="w-4 h-4 text-[#818cf8] inline" /> {meetingCount} meeting{meetingCount !== 1 ? 's' : ''},
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 font-semibold text-accent-primary">
+                <CheckSquare className="w-4 h-4 text-accent-primary inline" /> {standardTaskCount} task{standardTaskCount !== 1 ? 's' : ''}
+              </span>{' '}
+              {isToday ? 'today.' : 'on this date.'}
+            </>
+          )}
         </div>
       </div>
 
-      {/* Wellness Metrics / Readiness Badges (Matching Reference Screen 1) */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#171a24] border border-[#232a3b] text-xs font-semibold text-white/90 shrink-0">
-          <Moon className="w-3.5 h-3.5 text-[#818cf8]" />
-          <span>Great</span>
+      {/* Real Activity Badges */}
+      {(dayLogs.length > 0 || totalFocusMinutes > 0 || completedCount > 0) && (
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+          {dayLogs.length > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#171a24] border border-[#232a3b] text-xs font-semibold text-white/90 shrink-0">
+              <CheckCircle2 className="w-3.5 h-3.5 text-accent-primary" />
+              <span>{dayLogs.length} Habit{dayLogs.length !== 1 ? 's' : ''} Completed</span>
+            </div>
+          )}
+          {totalFocusMinutes > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#171a24] border border-[#232a3b] text-xs font-semibold text-white/90 shrink-0">
+              <Zap className="w-3.5 h-3.5 text-[#fbbf24]" />
+              <span>{totalFocusMinutes}m Focus Logged</span>
+            </div>
+          )}
+          {completedCount > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#171a24] border border-[#232a3b] text-xs font-semibold text-white/90 shrink-0">
+              <Flame className="w-3.5 h-3.5 text-accent-primary" />
+              <span>{completedCount} Task{completedCount !== 1 ? 's' : ''} Done</span>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#171a24] border border-[#232a3b] text-xs font-semibold text-white/90 shrink-0">
-          <Zap className="w-3.5 h-3.5 text-[#fbbf24]" />
-          <span>Typical</span>
-        </div>
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#171a24] border border-[#232a3b] text-xs font-semibold text-white/90 shrink-0">
-          <Flame className="w-3.5 h-3.5 text-accent-primary" />
-          <span>Good</span>
-        </div>
-      </div>
+      )}
 
       {/* STREAK / Exo Score Banner with Progress Line (Matching Reference Screen 2) */}
       <div className="p-4 rounded-[24px] bg-[#13161f] border border-[#1f2533] shadow-sm">
@@ -490,6 +515,7 @@ export function DaySchedule({
                     onToggle={onToggleTask}
                     onEdit={onEditTask}
                     onDelete={onDeleteTask}
+                    onUpdateProgress={onUpdateTaskProgress}
                   />
                 ))}
               </AnimatePresence>
@@ -497,7 +523,7 @@ export function DaySchedule({
           </div>
         )}
         
-        {filteredTasks.length === 0 && dayLogs.length === 0 && dayActivities.length === 0 && dayJournals.length === 0 && (
+        {filteredTasks.length === 0 && dayLogs.length === 0 && dayActivities.length === 0 && dayJournals.length === 0 && !hasGoalActivities && (
           /* Empty State for the Day */
           <div className="py-8 px-4 rounded-[24px] bg-[#12141c] border border-dashed border-[#242a38] text-center">
             <div className="w-12 h-12 rounded-full bg-[#1b202c] border border-[#2b3345] flex items-center justify-center text-[#7d8495] mx-auto mb-3">

@@ -31,6 +31,7 @@ import {
   deleteJournalEntry,
 } from '../../lib/journalService';
 import { permanentlyDeleteRecord } from '../../lib/deletionService';
+import { sendCoachMessage } from '../../lib/aiCoachService';
 import { DeleteConfirmModal } from '../../components/ui/DeleteConfirmModal';
 import { cn } from '../../lib/utils';
 
@@ -156,16 +157,11 @@ export default function Journal() {
     if (!text.trim()) return;
     setIsAiLoading(true);
     try {
-      const res = await fetch('/api/ai-coach', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: `The user wrote this journal reflection: "${text}". Give a 2-sentence encouraging, stoic, and actionable insight to ground their habits and momentum.`,
-        }),
-      });
-      const data = await res.json();
-      if (data.reply) {
-        setAiInsight(data.reply);
+      const insight = await sendCoachMessage(
+        `The user wrote this journal reflection: "${text}". Give a 2-sentence encouraging, stoic, and actionable insight to ground their habits and momentum.`
+      );
+      if (insight) {
+        setAiInsight(insight);
       }
     } catch (err) {
       console.warn('AI reflection error:', err);

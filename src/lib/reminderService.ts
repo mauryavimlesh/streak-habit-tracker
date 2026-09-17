@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { trackReminderCreated, trackReminderTriggered } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
+import { isCloudSyncableUser } from './authUtils';
 import { VibrationPatternType } from './alarmAudio';
 
 export type ReminderRepeat = 'once' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'custom' | 'monthly';
@@ -431,7 +432,7 @@ export function saveLocalReminders(reminders: ReminderItem[]): void {
 
 export async function getUserReminders(userId: string): Promise<ReminderItem[]> {
   const local = readLocalReminders();
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     return deduplicateReminders(local);
   }
 
@@ -497,7 +498,7 @@ export async function toggleReminder(id: string, userId?: string): Promise<Remin
   const updated = list.map((r) => (r.id === id ? { ...r, enabled: newState } : r));
   saveLocalReminders(updated);
   
-  if (userId && userId !== 'local' && userId !== 'default' && !id.startsWith('temp_rem_')) {
+  if (isCloudSyncableUser(userId) && !id.startsWith('temp_rem_')) {
     try {
       const ref = doc(db, 'reminders', id);
       await updateDoc(ref, { enabled: newState });
@@ -517,7 +518,7 @@ export async function createReminder(
   let newId = 'temp_rem_' + Date.now();
   let serverTime = new Date().toISOString();
 
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (isCloudSyncableUser(userId)) {
     try {
       const docRef = await addDoc(collection(db, 'reminders'), {
         ...item,
@@ -553,7 +554,7 @@ export async function updateReminder(
   const updated = list.map((r) => (r.id === id ? { ...r, ...updates } : r));
   saveLocalReminders(updated);
   
-  if (userId && userId !== 'local' && userId !== 'default' && !id.startsWith('temp_rem_')) {
+  if (isCloudSyncableUser(userId) && !id.startsWith('temp_rem_')) {
     try {
       const ref = doc(db, 'reminders', id);
       await updateDoc(ref, updates);
@@ -570,7 +571,7 @@ export async function deleteReminder(id: string, userId?: string): Promise<Remin
   const updated = list.filter((r) => r.id !== id);
   saveLocalReminders(updated);
   
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (isCloudSyncableUser(userId)) {
     try {
       await deleteDoc(doc(db, 'reminders', id));
     } catch (err) {
@@ -653,7 +654,7 @@ export function subscribeToReminders(
   userId: string | undefined,
   callback: (reminders: ReminderItem[]) => void
 ): () => void {
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     callback(readLocalReminders());
     return () => {};
   }
@@ -687,7 +688,7 @@ export function subscribeToReminders(
 }
 
 export async function syncLocalRemindersToCloud(userId: string) {
-  if (!userId || userId === 'local' || userId === 'default') return;
+  if (!isCloudSyncableUser(userId)) return;
   const localReminders = readLocalReminders();
   for (const reminder of localReminders) {
     if (!reminder.userId || reminder.userId === 'local' || reminder.userId !== userId) {

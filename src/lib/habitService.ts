@@ -22,6 +22,7 @@ import {
   trackHabitUncompleted
 } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
+import { isCloudSyncableUser } from './authUtils';
 
 export type HabitFrequency = 'daily' | 'selected_days' | 'weekly' | 'custom';
 export type TargetType = 'binary' | 'count' | 'duration' | 'quantity';
@@ -143,55 +144,6 @@ export function saveLocalHabits(habits: Habit[]): void {
   }
 }
 
-function generateDefaultSeedLogs(): HabitLog[] {
-  const seedLogs: HabitLog[] = [];
-  const defaultHabitsConfig = [
-    { id: 'default-1', target: 30, completionChance: 0.83 }, // Morning Workout
-    { id: 'default-2', target: 8, completionChance: 0.88 },  // Drink Water
-    { id: 'default-3', target: 8, completionChance: 0.77 },  // Sleep 8 Hours
-  ];
-
-  const now = new Date();
-  for (let i = 29; i >= 1; i--) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - i);
-    const dateStr = d.toLocaleDateString('en-CA');
-    const dayOfWeek = d.getDay();
-
-    defaultHabitsConfig.forEach((cfg, idx) => {
-      const factor = ((d.getDate() * 19 + d.getMonth() * 37 + idx * 29 + (dayOfWeek === 0 || dayOfWeek === 6 ? 7 : 13)) % 100) / 100;
-      const isCompleted = factor < cfg.completionChance;
-      const isPartial = !isCompleted && factor < (cfg.completionChance + 0.1);
-
-      let progressVal = 0;
-      let status: HabitLog['status'] = 'missed';
-
-      if (isCompleted) {
-        progressVal = cfg.target;
-        status = 'completed';
-      } else if (isPartial) {
-        progressVal = Math.max(1, Math.round(cfg.target * 0.6));
-        status = 'partial';
-      }
-
-      if (progressVal > 0 || status === 'completed') {
-        seedLogs.push({
-          id: `seed_log_${cfg.id}_${dateStr}`,
-          habitId: cfg.id,
-          userId: 'default',
-          date: dateStr,
-          status,
-          progressValue: progressVal,
-          createdAt: d.toISOString(),
-          updatedAt: d.toISOString(),
-        });
-      }
-    });
-  }
-
-  return seedLogs;
-}
-
 export function readLocalLogs(): HabitLog[] {
   try {
     const raw = localStorage.getItem(LOCAL_LOGS_KEY);
@@ -205,10 +157,7 @@ export function readLocalLogs(): HabitLog[] {
       }
     }
 
-    // Auto-seed initial 30-day baseline logs for default habits
-    const initialSeed = generateDefaultSeedLogs();
-    saveLocalLogs(initialSeed);
-    return initialSeed;
+    return [];
   } catch {
     return [];
   }
@@ -257,7 +206,7 @@ export const createHabit = async (habitData: Omit<Habit, 'id' | 'createdAt' | 'u
   local.unshift(newHabit);
   saveLocalHabits(local);
 
-  if (habitData.userId && habitData.userId !== 'local' && habitData.userId !== 'default') {
+  if (isCloudSyncableUser(habitData.userId)) {
     try {
       const docRef = await addDoc(collection(db, 'habits'), {
         ...habitData,
@@ -281,7 +230,7 @@ export const createHabit = async (habitData: Omit<Habit, 'id' | 'createdAt' | 'u
 export const getUserHabits = async (userId: string): Promise<Habit[]> => {
   const local = readLocalHabits();
   
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     return deduplicateHabits(local);
   }
 
@@ -354,7 +303,7 @@ export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
   let actualUserId = 'local';
   if (index !== -1) {
     actualUserId = local[index].userId || 'local';
-    isCloudSynced = actualUserId !== 'local' && actualUserId !== 'default';
+    isCloudSynced = isCloudSyncableUser(actualUserId);
     local[index] = { ...local[index], ...updates, updatedAt: new Date().toISOString() };
     saveLocalHabits(local);
   } else {
@@ -404,7 +353,38 @@ export const deleteHabit = async (habitId: string, userId?: string) => {
   const filteredLogs = localLogs.filter(l => l.habitId !== habitId);
   saveLocalLogs(filteredLogs);
 
-  if (userId && userId !== 'local' && userId !== 'default' && !habitId.startsWith('temp_habit_')) {
+  // Clean up local reminders linked to this habit
+  try {
+    const { readLocalReminders, saveLocalReminders } = await import('./reminderService');
+    const localReminders = readLocalReminders();
+    const filteredReminders = localReminders.filter((r) => r.linkedHabitId !== habitId);
+    if (filteredReminders.length !== localReminders.length) {
+      saveLocalReminders(filteredReminders);
+    }
+  } catch {
+    // ignore
+  }
+
+  // Unlink any tasks linked to this habit
+  try {
+    const { readLocalTasks, saveLocalTasks } = await import('./taskService');
+    const localTasks = readLocalTasks();
+    let tasksChanged = false;
+    const updatedTasks = localTasks.map((t) => {
+      if (t.linkedHabitId === habitId) {
+        tasksChanged = true;
+        return { ...t, linkedHabitId: undefined };
+      }
+      return t;
+    });
+    if (tasksChanged) {
+      saveLocalTasks(updatedTasks);
+    }
+  } catch {
+    // ignore
+  }
+
+  if (isCloudSyncableUser(userId) && !habitId.startsWith('temp_habit_')) {
     try {
       const targetDocId = habitId.startsWith('default-') ? `${userId}_${habitId}` : habitId;
       await deleteDoc(doc(db, 'habits', targetDocId));
@@ -414,7 +394,7 @@ export const deleteHabit = async (habitId: string, userId?: string) => {
   }
 
   // Also asynchronously clean up Firestore habit_logs for this habit
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (isCloudSyncableUser(userId)) {
     try {
       const q = query(
         collection(db, 'habit_logs'),
@@ -445,6 +425,8 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
     l => l.habitId === logData.habitId && l.date === logData.date
   );
 
+  const previousStatus = existingIdx !== -1 ? localLogs[existingIdx].status : null;
+
   const updatedLog: HabitLog = {
     ...logData,
     id: existingIdx !== -1 ? localLogs[existingIdx].id : 'log_' + Date.now(),
@@ -458,13 +440,16 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
   }
   saveLocalLogs(localLogs);
 
-  if (!skipSync && (logData.status === 'completed' || logData.status === 'skipped')) {
+  const wasCompleted = previousStatus === 'completed';
+  const isNowCompleted = logData.status === 'completed';
+
+  if (!skipSync && wasCompleted !== isNowCompleted) {
     try {
       const { readLocalGoals, logDailyGoalProgressQuick } = await import('./goalService');
       const localGoals = readLocalGoals();
       const linkedGoal = localGoals.find(g => g.linkedHabitId === logData.habitId);
       if (linkedGoal && linkedGoal.type === 'daily') {
-        const delta = logData.status === 'completed' ? (linkedGoal.dailyTarget || linkedGoal.target || 1) : -(linkedGoal.dailyTarget || linkedGoal.target || 1);
+        const delta = isNowCompleted ? (linkedGoal.dailyTarget || linkedGoal.target || 1) : -(linkedGoal.dailyTarget || linkedGoal.target || 1);
         await logDailyGoalProgressQuick(linkedGoal.id, logData.date, delta, logData.userId, true);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('streak_goals_updated'));
@@ -485,7 +470,7 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
     trackHabitUncompleted(habit?.category);
   }
 
-  if (logData.userId && logData.userId !== 'local' && logData.userId !== 'default') {
+  if (isCloudSyncableUser(logData.userId)) {
     try {
       const q = query(
         collection(db, 'habit_logs'),
@@ -520,7 +505,7 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
 };
 
 export const seedDefaultHabits = async (userId: string): Promise<Habit[]> => {
-  if (!userId || userId === 'local' || userId === 'default') return [];
+  if (!isCloudSyncableUser(userId)) return [];
 
   // 1. Guard check: has this user already seeded or initialized habits?
   const seededFlag = localStorage.getItem(`streak_habits_seeded_${userId}`);
@@ -605,7 +590,7 @@ export const seedDefaultHabits = async (userId: string): Promise<Habit[]> => {
 
 export const getHabitLogs = async (userId: string, startDate?: string, endDate?: string): Promise<HabitLog[]> => {
   const local = readLocalLogs();
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     let logs = local;
     if (startDate) logs = logs.filter(l => l.date >= startDate);
     if (endDate) logs = logs.filter(l => l.date <= endDate);
@@ -663,6 +648,7 @@ export interface JournalLog {
 
 // Journal CRUD
 export const logReflection = async (logData: Omit<JournalLog, 'id' | 'createdAt' | 'updatedAt'>) => {
+  if (!isCloudSyncableUser(logData.userId)) return '';
   try {
     let reflectionId = '';
     const q = query(
@@ -713,6 +699,7 @@ export const logReflection = async (logData: Omit<JournalLog, 'id' | 'createdAt'
 };
 
 export const getReflection = async (userId: string, date: string): Promise<JournalLog | null> => {
+  if (!isCloudSyncableUser(userId)) return null;
   try {
     const q = query(
       collection(db, 'journal_logs'),
@@ -729,7 +716,7 @@ export const getReflection = async (userId: string, date: string): Promise<Journ
 };
 
 export const syncLocalToCloud = async (userId: string) => {
-  if (!userId || userId === 'local' || userId === 'default') return;
+  if (!isCloudSyncableUser(userId)) return;
   const localHabits = readLocalHabits();
   let syncedHabits = 0;
   for (const habit of localHabits) {
@@ -815,7 +802,7 @@ export const subscribeToHabits = (
   userId: string | undefined,
   callback: (habits: Habit[]) => void
 ): (() => void) => {
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     callback(readLocalHabits());
     return () => {};
   }
@@ -870,7 +857,7 @@ export const subscribeToHabitLogs = (
   userId: string | undefined,
   callback: (logs: HabitLog[]) => void
 ): (() => void) => {
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     callback(readLocalLogs());
     return () => {};
   }

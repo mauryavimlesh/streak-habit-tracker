@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { trackJournalEntryCreated, trackJournalEntryEdited, trackJournalEntryDeleted } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
+import { isCloudSyncableUser } from './authUtils';
 
 export type JournalMood = 'great' | 'good' | 'neutral' | 'tired' | 'stressed';
 
@@ -90,18 +91,9 @@ export function readLocalJournal(): JournalEntry[] {
         return deduplicateJournal(parsed);
       }
     }
-    
-    // Check if user has initialized previously
-    const isInit = localStorage.getItem(JOURNAL_INITIALIZED_KEY);
-    if (isInit) {
-      return [];
-    }
-
-    saveLocalJournal(DEFAULT_ENTRIES);
-    localStorage.setItem(JOURNAL_INITIALIZED_KEY, 'true');
-    return deduplicateJournal(DEFAULT_ENTRIES);
+    return [];
   } catch {
-    return deduplicateJournal(DEFAULT_ENTRIES);
+    return [];
   }
 }
 
@@ -116,7 +108,7 @@ export function saveLocalJournal(entries: JournalEntry[]): void {
 
 export async function getUserJournal(userId?: string): Promise<JournalEntry[]> {
   const local = readLocalJournal();
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     return deduplicateJournal(local);
   }
 
@@ -204,7 +196,7 @@ export async function createJournalEntry(
   local.unshift(newEntry);
   saveLocalJournal(local);
 
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (isCloudSyncableUser(userId)) {
     try {
       const docRef = await addDoc(collection(db, 'journal_logs'), {
         userId,
@@ -231,6 +223,9 @@ export async function createJournalEntry(
   }
 
   trackJournalEntryCreated(newEntry.mood);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_journal_updated', { detail: newEntry }));
+  }
   return newEntry;
 }
 
@@ -252,7 +247,7 @@ export async function updateJournalEntry(
   local[index] = updated;
   saveLocalJournal(local);
 
-  if (userId && userId !== 'local' && userId !== 'default' && !entryId.startsWith('temp_journal_')) {
+  if (isCloudSyncableUser(userId) && !entryId.startsWith('temp_journal_')) {
     try {
       await updateDoc(doc(db, 'journal_logs', entryId), {
         ...updates,
@@ -265,6 +260,9 @@ export async function updateJournalEntry(
   }
 
   trackJournalEntryEdited(updated.mood);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_journal_updated', { detail: updated }));
+  }
   return updated;
 }
 
@@ -273,7 +271,7 @@ export async function deleteJournalEntry(entryId: string, userId?: string): Prom
   const filtered = local.filter((e) => e.id !== entryId);
   saveLocalJournal(filtered);
 
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (isCloudSyncableUser(userId)) {
     try {
       await deleteDoc(doc(db, 'journal_logs', entryId));
     } catch (err) {
@@ -283,12 +281,15 @@ export async function deleteJournalEntry(entryId: string, userId?: string): Prom
   }
 
   trackJournalEntryDeleted();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_journal_updated', { detail: { id: entryId } }));
+  }
   return true;
 }
 
 
 export const syncLocalJournalToCloud = async (userId: string) => {
-  if (!userId || userId === 'local' || userId === 'default') return;
+  if (!isCloudSyncableUser(userId)) return;
   const localJournal = readLocalJournal();
   let syncCount = 0;
   for (const entry of localJournal) {
@@ -334,7 +335,7 @@ export function subscribeToJournal(
   userId: string | undefined,
   callback: (entries: JournalEntry[]) => void
 ): () => void {
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     callback(readLocalJournal());
     return () => {};
   }

@@ -1,5 +1,5 @@
 import { readLocalHabits, saveLocalHabits, readLocalLogs, saveLocalLogs } from './habitService';
-import { readLocalTasks, saveLocalTasks } from './taskService';
+import { readLocalTasks, saveLocalTasks, readLocalArchivedTasks } from './taskService';
 import { readLocalGoals, saveLocalGoals } from './goalService';
 import { readLocalJournal, saveLocalJournal } from './journalService';
 import { readLocalReminders, saveLocalReminders } from './reminderService';
@@ -53,6 +53,7 @@ export interface FullBackupData {
   habits: any[];
   habitLogs: any[];
   tasks: any[];
+  archivedTasks?: any[];
   goals: any[];
   journal: any[];
   reminders: any[];
@@ -65,6 +66,7 @@ export function getArchiveStats() {
   const habits = readLocalHabits();
   const habitLogs = readLocalLogs();
   const tasks = readLocalTasks();
+  const archivedTasks = readLocalArchivedTasks();
   const goals = readLocalGoals();
   const journal = readLocalJournal();
   const reminders = readLocalReminders();
@@ -73,6 +75,7 @@ export function getArchiveStats() {
     habitsCount: habits.length,
     logsCount: habitLogs.length,
     tasksCount: tasks.length,
+    archivedTasksCount: archivedTasks.length,
     goalsCount: goals.length,
     journalCount: journal.length,
     remindersCount: reminders.length,
@@ -105,6 +108,7 @@ export function exportAllData(): string {
     habits: readLocalHabits(),
     habitLogs: readLocalLogs(),
     tasks: readLocalTasks(),
+    archivedTasks: readLocalArchivedTasks(),
     goals: readLocalGoals(),
     journal: readLocalJournal(),
     reminders: readLocalReminders(),
@@ -156,17 +160,68 @@ export function importBackupData(jsonString: string): { success: boolean; error?
 
 export function clearAllLocalData(): void {
   try {
-    localStorage.removeItem('streak_guest_data');
-    localStorage.removeItem('streak_habits_v1');
-    localStorage.removeItem('streak_habit_logs_v1');
-    localStorage.removeItem('streak_tasks_v1');
-    localStorage.removeItem('streak_goals_v1');
-    localStorage.removeItem('streak_journal_v1');
-    localStorage.removeItem('streak_reminders_v1');
-    localStorage.removeItem('streak_appearance_v1');
-    localStorage.removeItem('streak_app_settings_v1');
-    localStorage.removeItem('streak_local_profile_v1');
-    localStorage.removeItem('streak_user_profile');
+    const keysToRemove = [
+      'streak_guest_data',
+      'streak_habits_v1',
+      'streak_habit_logs_v1',
+      'streak_tasks_v1',
+      'streak_goals_v1',
+      'streak_journal_v1',
+      'streak_reminders_v1',
+      'streak_activities_v1',
+      'streak_sleep_settings_v1',
+      'streak_sleep_records_v1',
+      'streak_google_calendar_config_v1',
+      'streak_archived_tasks',
+      'streak_journal_initialized',
+      'streak_tasks_initialized',
+      'streak_milestones_unlocked',
+      'streak_appearance_v1',
+      'streak_app_settings_v1',
+      'streak_local_profile_v1',
+      'streak_user_profile',
+      'streak_onboarding_completed',
+      'streak_habits',
+      'streak_habit_logs',
+      'streak_tasks',
+      'streak_journal',
+      'streak_goals',
+      'streak_ai_coach_messages_v1',
+      'streak_active_timer',
+      'streak_snooze_history_v1',
+      'lastSyncTime',
+    ];
+    keysToRemove.forEach((k) => {
+      try {
+        localStorage.removeItem(k);
+      } catch {}
+    });
+
+    // Clear dynamic user-scoped flags and caches
+    if (typeof localStorage !== 'undefined') {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (
+          key &&
+          (key.startsWith('streak_habits_initialized_') ||
+            key.startsWith('streak_habits_seeded_') ||
+            key.startsWith('streak_notif_') ||
+            key.startsWith('streak_ai_coach_messages_'))
+        ) {
+          try {
+            localStorage.removeItem(key);
+          } catch {}
+        }
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('streak_habits_updated'));
+      window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
+      window.dispatchEvent(new CustomEvent('streak_goals_updated'));
+      window.dispatchEvent(new CustomEvent('streak_activities_updated'));
+      window.dispatchEvent(new CustomEvent('streak_reminders_updated'));
+    }
   } catch {
     // Ignore
   }

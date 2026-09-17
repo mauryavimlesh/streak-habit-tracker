@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { readLocalHabits, saveLocalHabits, Habit, HabitLog, logHabit, updateHabit, readLocalLogs, saveLocalLogs } from './habitService';
 import { readLocalReminders, saveLocalReminders, ReminderItem } from './reminderService';
+import { isCloudSyncableUser } from './authUtils';
 
 export interface SleepSettings {
   enabled: boolean;
@@ -206,7 +207,7 @@ export function saveLocalSleepSettings(settings: SleepSettings): void {
 
 export async function getSleepSettings(userId?: string): Promise<SleepSettings> {
   const local = readLocalSleepSettings();
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     return local;
   }
 
@@ -242,7 +243,7 @@ export async function updateSleepSettings(
   console.log('[SleepService] userId:', userId);
 
   let docRef: any = null;
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (isCloudSyncableUser(userId)) {
     docRef = doc(db, 'users', userId, 'settings', 'sleep');
     try {
       const snapBefore = await getDoc(docRef);
@@ -443,7 +444,7 @@ export function saveLocalSleepRecords(records: SleepRecord[]): void {
 
 export async function getSleepRecords(userId?: string): Promise<SleepRecord[]> {
   const local = readLocalSleepRecords();
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     return local;
   }
 
@@ -497,7 +498,7 @@ export async function saveSleepRecord(
   saveLocalSleepRecords(records);
 
   // Sync to Firestore
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (isCloudSyncableUser(userId)) {
     try {
       const docRef = doc(db, 'users', userId, 'sleep_records', id);
       await setDoc(docRef, { ...fullRecord, updatedAt: serverTimestamp() }, { merge: true });

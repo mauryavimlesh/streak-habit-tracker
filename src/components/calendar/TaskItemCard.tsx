@@ -1,6 +1,6 @@
 import React from 'react';
 import { TaskItem } from '../../lib/taskService';
-import { Check, Clock, Trash2, Edit3, Briefcase, Heart, Dumbbell, Calendar as CalendarIcon, Users, Bell } from 'lucide-react';
+import { Check, Clock, Trash2, Edit3, Briefcase, Heart, Dumbbell, Calendar as CalendarIcon, Users, Bell, Plus, Minus, Target } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 
@@ -10,9 +10,10 @@ interface TaskItemCardProps {
   onToggle: (taskId: string) => void;
   onEdit: (task: TaskItem) => void;
   onDelete: (taskId: string) => void;
+  onUpdateProgress?: (taskId: string, newQuantity: number) => void;
 }
 
-export function TaskItemCard({ task, onToggle, onEdit, onDelete }: TaskItemCardProps) {
+export function TaskItemCard({ task, onToggle, onEdit, onDelete, onUpdateProgress }: TaskItemCardProps) {
   // Category-based or type-based icons and colors matching the reference
   const getCategoryConfig = () => {
     if (task.type === 'meeting') {
@@ -171,6 +172,81 @@ export function TaskItemCard({ task, onToggle, onEdit, onDelete }: TaskItemCardP
             <p className="text-[11px] text-[#636a7a] truncate mt-0.5 font-normal">
               {task.description}
             </p>
+          )}
+
+          {/* Quantitative Progress Indicator (e.g., pages, minutes, questions) */}
+          {typeof task.targetQuantity === 'number' && task.targetQuantity > 0 && (
+            <div className="mt-2 pt-1.5 border-t border-white/5">
+              <div className="flex items-center justify-between gap-2 text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <Target className="w-3 h-3 text-accent-primary" />
+                  <span className="font-semibold text-white">
+                    {task.progressQuantity ?? 0} / {task.targetQuantity} {task.unit || 'units'}
+                  </span>
+                  <span className="text-[#7d8495] font-medium">
+                    ({Math.min(100, Math.round(((task.progressQuantity ?? 0) / task.targetQuantity) * 100))}%)
+                  </span>
+                </div>
+
+                {/* Quick stepper controls if onUpdateProgress is supplied */}
+                {onUpdateProgress && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 shrink-0"
+                  >
+                    <button
+                      type="button"
+                      title="Decrease by 1"
+                      onClick={() => {
+                        const current = task.progressQuantity ?? 0;
+                        if (current > 0) {
+                          onUpdateProgress(task.id, Math.max(0, current - 1));
+                        }
+                      }}
+                      className="w-5 h-5 rounded-md bg-white/5 hover:bg-white/10 text-[#7d8495] hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+
+                    <button
+                      type="button"
+                      title="Increase by 1"
+                      onClick={() => {
+                        const current = task.progressQuantity ?? 0;
+                        onUpdateProgress(task.id, current + 1);
+                      }}
+                      className="px-1.5 h-5 rounded-md bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary font-bold text-[10px] flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      +1
+                    </button>
+
+                    {task.targetQuantity >= 10 && (
+                      <button
+                        type="button"
+                        title="Increase by 5"
+                        onClick={() => {
+                          const current = task.progressQuantity ?? 0;
+                          onUpdateProgress(task.id, current + 5);
+                        }}
+                        className="px-1.5 h-5 rounded-md bg-accent-primary/10 hover:bg-accent-primary/20 text-accent-primary font-bold text-[10px] flex items-center justify-center transition-colors cursor-pointer"
+                      >
+                        +5
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-[#0e1118] h-1.5 rounded-full overflow-hidden mt-1.5 border border-white/5">
+                <div
+                  className="h-full bg-accent-primary rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.min(100, Math.round(((task.progressQuantity ?? 0) / task.targetQuantity) * 100))}%`,
+                  }}
+                />
+              </div>
+            </div>
           )}
         </div>
       </div>

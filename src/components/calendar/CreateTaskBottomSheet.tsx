@@ -13,6 +13,7 @@ import {
   Flag,
   ChevronRight,
   Check,
+  Target,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { TaskItem } from '../../lib/taskService';
@@ -107,6 +108,9 @@ export function CreateTaskBottomSheet({
   const [category, setCategory] = useState<'Work' | 'Health' | 'Fitness' | 'Personal' | 'General'>('Work');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [enableUnitTracking, setEnableUnitTracking] = useState(false);
+  const [unit, setUnit] = useState('pages');
+  const [targetQuantity, setTargetQuantity] = useState('10');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -120,6 +124,9 @@ export function CreateTaskBottomSheet({
       setCategory('Work');
       setPriority('medium');
       setShowMoreOptions(false);
+      setEnableUnitTracking(false);
+      setUnit('pages');
+      setTargetQuantity('10');
       setError('');
       setIsSubmitting(false);
     }
@@ -162,6 +169,9 @@ export function CreateTaskBottomSheet({
     }
 
     try {
+      const parsedQty = enableUnitTracking ? parseFloat(targetQuantity) : undefined;
+      const validTarget = typeof parsedQty === 'number' && !isNaN(parsedQty) && parsedQty > 0 ? parsedQty : undefined;
+
       await onSaveTask({
         title: cleanTitle,
         description: description.trim() || undefined,
@@ -171,6 +181,9 @@ export function CreateTaskBottomSheet({
         priority,
         type: selectedType,
         completed: false,
+        unit: enableUnitTracking && unit.trim() ? unit.trim() : undefined,
+        targetQuantity: validTarget,
+        progressQuantity: enableUnitTracking && validTarget ? 0 : undefined,
       });
       onClose();
     } catch (err: any) {
@@ -434,6 +447,80 @@ export function CreateTaskBottomSheet({
               >
                 <span>{showMoreOptions ? 'Less' : 'Notes'}</span>
               </button>
+            </div>
+
+            {/* Quantitative Unit Tracking Field (e.g., pages, minutes, questions) */}
+            <div className="p-3.5 rounded-2xl bg-[#0c0e14] border border-white/5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-accent-primary" />
+                  <span className="text-xs font-semibold text-white">Quantitative Progress</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEnableUnitTracking(!enableUnitTracking)}
+                  className={cn(
+                    'px-2.5 py-0.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border',
+                    enableUnitTracking
+                      ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/30'
+                      : 'bg-white/5 text-[#7d8495] border-white/5 hover:text-white'
+                  )}
+                >
+                  {enableUnitTracking ? 'Active' : '+ Add Unit'}
+                </button>
+              </div>
+
+              {enableUnitTracking && (
+                <div className="space-y-2.5 pt-1 border-t border-white/5">
+                  {/* Preset unit pills */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {['pages', 'minutes', 'questions', 'reps', 'problems'].map((u) => (
+                      <button
+                        key={u}
+                        type="button"
+                        onClick={() => setUnit(u)}
+                        className={cn(
+                          'px-2 py-0.5 rounded-lg text-[11px] font-medium border transition-all cursor-pointer',
+                          unit.toLowerCase() === u
+                            ? 'bg-accent-primary text-black border-accent-primary font-bold'
+                            : 'bg-white/5 text-[#7d8495] border-white/5 hover:text-white'
+                        )}
+                      >
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#7d8495] uppercase tracking-wider mb-1">
+                        Unit
+                      </label>
+                      <input
+                        type="text"
+                        value={unit}
+                        onChange={(e) => setUnit(e.target.value)}
+                        placeholder="e.g. pages"
+                        className="w-full px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-white/20 focus:outline-none focus:border-accent-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-[#7d8495] uppercase tracking-wider mb-1">
+                        Target Quantity
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="any"
+                        value={targetQuantity}
+                        onChange={(e) => setTargetQuantity(e.target.value)}
+                        placeholder="e.g. 10"
+                        className="w-full px-3 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-white/20 focus:outline-none focus:border-accent-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Extra Description / Notes if expanded */}

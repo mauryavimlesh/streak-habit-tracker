@@ -39,6 +39,7 @@ import {
   getTodayGoalProgress,
   calculateGoalStreak,
   getGoalHistoryList,
+  calculateGoalProgress,
 } from '../../lib/goalService';
 import { cn } from '../../lib/utils';
 import { ShareModal } from '../../components/ui/ShareModal';
@@ -46,6 +47,7 @@ import { StreakShareCard } from '../../components/ui/StreakShareCard';
 import { StudyPlanImportModal } from '../../components/goals/StudyPlanImportModal';
 import { Share } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { getTodayDateKey } from '../../lib/dateUtils';
 
 const DAILY_PRESETS = [
   { title: 'Read 20 pages', target: 20, unit: 'pages', category: 'Study' },
@@ -68,6 +70,7 @@ export default function Goals() {
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form states for Create / Edit
   const [goalType, setGoalType] = useState<GoalType>('daily');
@@ -86,7 +89,7 @@ export default function Goals() {
   const [formMilestones, setFormMilestones] = useState<string[]>([]);
   const [milestoneInput, setMilestoneInput] = useState('');
 
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todayStr = getTodayDateKey();
 
   const loadGoals = async () => {
     const list = await getUserGoals(user?.uid || 'local');
@@ -127,40 +130,45 @@ export default function Goals() {
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
-    if (!formTitle.trim()) return;
+    if (!formTitle.trim() || isSubmitting) return;
 
-    await createGoal(
-      {
-        title: formTitle.trim(),
-        description: formDesc.trim() || undefined,
-        category: formCategory,
-        type: goalType,
-        target: goalType === 'daily' ? formDailyTarget : Number(formTarget) || 100,
-        dailyTarget: goalType === 'daily' ? Number(formDailyTarget) || 1 : undefined,
-        currentProgress: 0,
-        unit: formUnit.trim() || 'units',
-        subjects: formSubjects.length > 0 ? formSubjects : undefined,
-        targetDate: formTargetDate,
-        priority: formPriority,
-        status: 'in_progress',
-        linkToHabit: goalType === 'daily' ? formAddToHabit : false,
-        linkToTask: goalType === 'daily' ? formAddToTask : false,
-        milestones:
-          goalType !== 'daily'
-            ? formMilestones.map((m, idx) => ({
-                id: 'm_' + Date.now() + '_' + idx,
-                title: m,
-                completed: false,
-                order: idx,
-              }))
-            : undefined,
-      },
-      user?.uid || 'local'
-    );
+    setIsSubmitting(true);
+    try {
+      await createGoal(
+        {
+          title: formTitle.trim(),
+          description: formDesc.trim() || undefined,
+          category: formCategory,
+          type: goalType,
+          target: goalType === 'daily' ? formDailyTarget : Number(formTarget) || 100,
+          dailyTarget: goalType === 'daily' ? Number(formDailyTarget) || 1 : undefined,
+          currentProgress: 0,
+          unit: formUnit.trim() || 'units',
+          subjects: formSubjects.length > 0 ? formSubjects : undefined,
+          targetDate: formTargetDate,
+          priority: formPriority,
+          status: 'in_progress',
+          linkToHabit: goalType === 'daily' ? formAddToHabit : false,
+          linkToTask: goalType === 'daily' ? formAddToTask : false,
+          milestones:
+            goalType !== 'daily'
+              ? formMilestones.map((m, idx) => ({
+                  id: 'm_' + Date.now() + '_' + idx,
+                  title: m,
+                  completed: false,
+                  order: idx,
+                }))
+              : undefined,
+        },
+        user?.uid || 'local'
+      );
 
-    setIsCreateOpen(false);
-    resetForm();
-    loadGoals();
+      setIsCreateOpen(false);
+      resetForm();
+      loadGoals();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleStartEdit = (goal: Goal) => {
@@ -182,31 +190,36 @@ export default function Goals() {
 
   const handleSaveEdit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!editingGoal || !formTitle.trim()) return;
+    if (!editingGoal || !formTitle.trim() || isSubmitting) return;
 
-    await updateGoal(
-      editingGoal.id,
-      {
-        title: formTitle.trim(),
-        description: formDesc.trim() || undefined,
-        category: formCategory,
-        type: goalType,
-        target: goalType === 'daily' ? formDailyTarget : Number(formTarget) || 100,
-        dailyTarget: goalType === 'daily' ? Number(formDailyTarget) || 1 : undefined,
-        unit: formUnit.trim() || 'units',
-        subjects: formSubjects.length > 0 ? formSubjects : undefined,
-        targetDate: formTargetDate,
-        priority: formPriority,
-        linkToHabit: goalType === 'daily' ? formAddToHabit : false,
-        linkToTask: goalType === 'daily' ? formAddToTask : false,
-      },
-      user?.uid || 'local'
-    );
+    setIsSubmitting(true);
+    try {
+      await updateGoal(
+        editingGoal.id,
+        {
+          title: formTitle.trim(),
+          description: formDesc.trim() || undefined,
+          category: formCategory,
+          type: goalType,
+          target: goalType === 'daily' ? formDailyTarget : Number(formTarget) || 100,
+          dailyTarget: goalType === 'daily' ? Number(formDailyTarget) || 1 : undefined,
+          unit: formUnit.trim() || 'units',
+          subjects: formSubjects.length > 0 ? formSubjects : undefined,
+          targetDate: formTargetDate,
+          priority: formPriority,
+          linkToHabit: goalType === 'daily' ? formAddToHabit : false,
+          linkToTask: goalType === 'daily' ? formAddToTask : false,
+        },
+        user?.uid || 'local'
+      );
 
-    setIsEditOpen(false);
-    setEditingGoal(null);
-    resetForm();
-    loadGoals();
+      setIsEditOpen(false);
+      setEditingGoal(null);
+      resetForm();
+      loadGoals();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const resetForm = () => {
@@ -395,11 +408,12 @@ export default function Goals() {
               const isDaily = goal.type === 'daily';
 
               if (isDaily) {
-                const todayProgress = getTodayGoalProgress(goal, todayStr);
-                const dailyTarget = goal.dailyTarget || goal.target || 1;
-                const percent = Math.min(100, Math.round((todayProgress / dailyTarget) * 100));
-                const isTodayComplete = todayProgress >= dailyTarget;
-                const streak = calculateGoalStreak(goal);
+                const goalProgress = calculateGoalProgress(goal, todayStr);
+                const todayProgress = goalProgress.todayProgress;
+                const dailyTarget = goalProgress.todayTarget;
+                const percent = goalProgress.todayPercent;
+                const isTodayComplete = goalProgress.isTodayComplete;
+                const streak = { currentStreak: goalProgress.currentStreak, bestStreak: goalProgress.bestStreak };
 
                 return (
                   <motion.div
@@ -503,8 +517,9 @@ export default function Goals() {
               }
 
               // One-Time Goal Card
-              const percent = Math.min(100, Math.round((goal.currentProgress / (goal.target || 1)) * 100));
-              const isCompleted = goal.status === 'completed' || percent >= 100;
+              const goalProgress = calculateGoalProgress(goal, todayStr);
+              const percent = goalProgress.overallPercent;
+              const isCompleted = goalProgress.paceStatus === 'completed' || goal.status === 'completed' || percent >= 100;
 
               return (
                 <motion.div
@@ -636,11 +651,12 @@ export default function Goals() {
                 <div className="space-y-4">
                   {/* Today's Progress Box */}
                   {(() => {
-                    const todayProgress = getTodayGoalProgress(selectedGoal, todayStr);
-                    const dailyTarget = selectedGoal.dailyTarget || selectedGoal.target || 1;
-                    const pct = Math.min(100, Math.round((todayProgress / dailyTarget) * 100));
-                    const isDone = todayProgress >= dailyTarget;
-                    const streak = calculateGoalStreak(selectedGoal);
+                    const goalProgress = calculateGoalProgress(selectedGoal, todayStr);
+                    const todayProgress = goalProgress.todayProgress;
+                    const dailyTarget = goalProgress.todayTarget;
+                    const pct = goalProgress.todayPercent;
+                    const isDone = goalProgress.isTodayComplete;
+                    const streak = { currentStreak: goalProgress.currentStreak, bestStreak: goalProgress.bestStreak };
                     const history = getGoalHistoryList(selectedGoal);
 
                     return (
@@ -716,7 +732,7 @@ export default function Goals() {
                           <div className="p-3 rounded-xl bg-white/5 border border-white/5">
                             <div className="text-[10px] font-bold text-[#7d8495] uppercase">Total Days</div>
                             <div className="text-base font-black text-white mt-0.5">
-                              {selectedGoal.totalCompletedDays || (isDone ? 1 : 0)}
+                              {goalProgress.completedDaysCount}
                             </div>
                           </div>
                         </div>
@@ -1193,9 +1209,10 @@ export default function Goals() {
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-2xl bg-accent-primary text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] transition-colors cursor-pointer mt-3"
+                  disabled={isSubmitting}
+                  className="w-full py-3 rounded-2xl bg-accent-primary text-black font-bold text-xs tracking-wide hover:bg-[#9eff38] transition-colors cursor-pointer mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isEditOpen ? 'Save Changes' : 'Create Goal'}
+                  {isSubmitting ? 'Saving...' : isEditOpen ? 'Save Changes' : 'Create Goal'}
                 </button>
               </form>
             </motion.div>

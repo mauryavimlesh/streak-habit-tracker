@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 import { Play, Square, Pause, ChevronLeft, Minimize2, CheckCircle2, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { saveActivity } from '../../lib/activityService';
 import { getUserHabits, getHabitLogs, Habit, logHabit } from '../../lib/habitService';
+import { updateGoalActivity } from '../../lib/goalService';
+import { formatDateKey, getTodayDateKey } from '../../lib/dateUtils';
 import { cn } from '../../lib/utils';
 import { useTimer, TimerMode } from '../../lib/timer/TimerContext';
 import { DeleteConfirmModal } from '../../components/ui/DeleteConfirmModal';
@@ -28,13 +30,17 @@ const PRESETS = [
 
 export default function Activity() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { state, elapsedMs, startTimer, pauseTimer, resumeTimer, stopTimer, resetTimer, minimizeTimer } = useTimer();
 
-  const [selectedType, setSelectedType] = useState(ACTIVITY_TYPES[0]);
-  const [customType, setCustomType] = useState('');
-  const [mode, setMode] = useState<TimerMode>('stopwatch');
-  const [targetDurationMs, setTargetDurationMs] = useState<number | null>(null);
+  const navState = (location.state as any) || {};
+  const initialType = navState.activityTitle || navState.subject || ACTIVITY_TYPES[0];
+
+  const [selectedType, setSelectedType] = useState(ACTIVITY_TYPES.includes(initialType) ? initialType : ACTIVITY_TYPES[0]);
+  const [customType, setCustomType] = useState(ACTIVITY_TYPES.includes(initialType) ? '' : initialType);
+  const [mode, setMode] = useState<TimerMode>(navState.plannedMinutes ? 'countdown' : 'stopwatch');
+  const [targetDurationMs, setTargetDurationMs] = useState<number | null>(navState.plannedMinutes ? navState.plannedMinutes * 60 * 1000 : null);
   
   const [matchingHabit, setMatchingHabit] = useState<Habit | null>(null);
   const [showMatchModal, setShowMatchModal] = useState(false);
@@ -43,6 +49,13 @@ export default function Activity() {
   const [isMaximized, setIsMaximized] = useState(false);
 
   const activeType = customType.trim() ? customType.trim() : selectedType;
+
+  useEffect(() => {
+    // If navigated with direct goal/activity intent, pre-set custom type if needed
+    if (navState.activityTitle && !customType && !ACTIVITY_TYPES.includes(navState.activityTitle)) {
+      setCustomType(navState.activityTitle);
+    }
+  }, [navState.activityTitle]);
 
   useEffect(() => {
     // If the timer is complete, look for a matching habit
@@ -82,17 +95,33 @@ export default function Activity() {
     const totalSeconds = Math.floor(elapsedMs / 1000);
     const endTime = new Date();
     const startTime = state.startedAt ? new Date(state.startedAt) : new Date(endTime.getTime() - elapsedMs);
+    const canonicalDate = formatDateKey(startTime);
     
     await saveActivity({
       userId: user?.uid || 'local',
       name: state.activityName,
       durationMinutes: Math.floor(totalSeconds / 60),
       durationSeconds: totalSeconds % 60,
-      date: new Date().toLocaleDateString('en-CA'),
+      date: canonicalDate,
       time: endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       startTime: startTime.toISOString(),
-      endTime: endTime.toISOString()
+      endTime: endTime.toISOString(),
+      subject: navState.subject,
+      goalId: navState.goalId,
+      activityId: navState.activityId,
     }, user?.uid);
+
+    if (navState.goalId && navState.activityId) {
+      try {
+        await updateGoalActivity(navState.goalId, canonicalDate, navState.activityId, { completed: true }, user?.uid);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('streak_goals_updated'));
+        }
+      } catch (e) {
+        console.warn('Could not mark goal activity complete', e);
+      }
+    }
+
     resetTimer();
     navigate(-1);
   };
@@ -102,27 +131,40 @@ export default function Activity() {
     
     const totalSeconds = Math.floor(elapsedMs / 1000);
     const addedValue = Math.floor(totalSeconds / 60) || 1; // At least 1 unit if under a minute
-    const today = new Date().toLocaleDateString('en-CA');
-    
-    // Save to history too
     const endTime = new Date();
     const startTime = state.startedAt ? new Date(state.startedAt) : new Date(endTime.getTime() - elapsedMs);
+    const canonicalDate = formatDateKey(startTime);
     
+    // Save to history too
     await saveActivity({
       userId: user?.uid || 'local',
       name: state.activityName,
       durationMinutes: Math.floor(totalSeconds / 60),
       durationSeconds: totalSeconds % 60,
-      date: today,
+      date: canonicalDate,
       time: endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
-      linkedHabitId: matchingHabit.id
+      linkedHabitId: matchingHabit.id,
+      subject: navState.subject,
+      goalId: navState.goalId,
+      activityId: navState.activityId,
     }, user?.uid);
+
+    if (navState.goalId && navState.activityId) {
+      try {
+        await updateGoalActivity(navState.goalId, canonicalDate, navState.activityId, { completed: true }, user?.uid);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('streak_goals_updated'));
+        }
+      } catch (e) {
+        console.warn('Could not mark goal activity complete', e);
+      }
+    }
 
     // Update habit log
     const logs = await getHabitLogs(user?.uid || 'local');
-    const todayLog = logs.find(l => l.habitId === matchingHabit.id && l.date === today);
+    const todayLog = logs.find(l => l.habitId === matchingHabit.id && l.date === canonicalDate);
     const currentProgress = todayLog?.progressValue || 0;
     const newProgress = currentProgress + addedValue;
     const target = matchingHabit.targetValue || 1;
@@ -130,7 +172,7 @@ export default function Activity() {
     await logHabit({
       userId: user?.uid || 'local',
       habitId: matchingHabit.id!,
-      date: today,
+      date: canonicalDate,
       status: newProgress >= target ? 'completed' : 'in_progress',
       progressValue: newProgress
     });

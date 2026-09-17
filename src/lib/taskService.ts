@@ -15,6 +15,8 @@ import {
 } from 'firebase/firestore';
 import { trackTaskCreated, trackTaskCompleted } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
+import { getTodayDateKey, diffDays } from './dateUtils';
+import { isCloudSyncableUser } from './authUtils';
 
 export interface TaskItem {
   id: string;
@@ -30,12 +32,27 @@ export interface TaskItem {
   completed: boolean;
   repeat?: 'none' | 'daily' | 'weekly';
   goalId?: string;
+  linkedGoalId?: string;
+  linkedGoalActivityId?: string;
+  linkedHabitId?: string;
+  unit?: string; // e.g. 'pages', 'minutes', 'questions', 'problems'
+  targetQuantity?: number; // e.g. 50
+  progressQuantity?: number; // e.g. 25
+  isArchived?: boolean;
+  archivedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
+export interface ArchivedTaskItem extends TaskItem {
+  archivedAt: string;
+  originalDate?: string;
+}
+
 const LOCAL_STORAGE_KEY = 'streak_tasks_v1';
 const TASKS_INITIALIZED_KEY = 'streak_tasks_initialized';
+export const ARCHIVED_STORAGE_KEY = 'streak_archived_tasks_v1';
+export const LAST_AUTO_ARCHIVE_CHECK_KEY = 'streak_last_tasks_auto_archive_check';
 
 // Deduplicate tasks by ID and by content (title + date + time + type)
 export function deduplicateTasks(tasks: TaskItem[]): TaskItem[] {
@@ -239,11 +256,60 @@ export function saveLocalTasks(tasks: TaskItem[]) {
   }
 }
 
+function updateGuestArchivedTasksNamespace(archivedTasks: ArchivedTaskItem[]) {
+  try {
+    const raw = localStorage.getItem(GUEST_DATA_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      parsed.archivedTasks = archivedTasks;
+      parsed.updatedAt = new Date().toISOString();
+      localStorage.setItem(GUEST_DATA_KEY, JSON.stringify(parsed));
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+export function readLocalArchivedTasks(): ArchivedTaskItem[] {
+  try {
+    const raw = localStorage.getItem(ARCHIVED_STORAGE_KEY);
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+    const guestRaw = localStorage.getItem(GUEST_DATA_KEY);
+    if (guestRaw) {
+      const parsed = JSON.parse(guestRaw);
+      if (Array.isArray(parsed.archivedTasks)) {
+        return parsed.archivedTasks;
+      }
+    }
+    return [];
+  } catch (err) {
+    console.error('Error reading local archived tasks:', err);
+    return [];
+  }
+}
+
+export function saveLocalArchivedTasks(archivedTasks: ArchivedTaskItem[]): void {
+  try {
+    localStorage.setItem(ARCHIVED_STORAGE_KEY, JSON.stringify(archivedTasks));
+    updateGuestArchivedTasksNamespace(archivedTasks);
+  } catch (err) {
+    console.error('Error saving local archived tasks:', err);
+  }
+}
+
 // Fetch all tasks (merges local storage and Firestore if authenticated)
 export async function getAllTasks(userId?: string): Promise<TaskItem[]> {
+  // Asynchronously trigger auto-archive for tasks older than 30 days to maintain performance
+  autoArchiveOldCompletedTasks(userId).catch(() => {});
+
   const local = readLocalTasks();
 
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     return deduplicateTasks(local);
   }
 
@@ -265,7 +331,12 @@ export async function getAllTasks(userId?: string): Promise<TaskItem[]> {
         type: data.type || 'task',
         completed: Boolean(data.completed),
         repeat: data.repeat,
-        goalId: data.goalId,
+        goalId: data.goalId || data.linkedGoalId,
+        unit: data.unit || undefined,
+        targetQuantity: typeof data.targetQuantity === 'number' ? data.targetQuantity : undefined,
+        progressQuantity: typeof data.progressQuantity === 'number' ? data.progressQuantity : undefined,
+        isArchived: Boolean(data.isArchived),
+        archivedAt: data.archivedAt?.toDate ? data.archivedAt.toDate().toISOString() : (data.archivedAt || undefined),
         createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
         updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
       };
@@ -277,6 +348,7 @@ export async function getAllTasks(userId?: string): Promise<TaskItem[]> {
     const firestoreTasks: TaskItem[] = [];
 
     for (const t of rawFirestoreTasks) {
+      if (t.isArchived) continue;
       const contentKey = `${t.title.trim().toLowerCase()}_${t.date}_${(t.time || '').trim()}_${t.type || 'task'}`;
       if (seenContent.has(contentKey)) {
         duplicateDocIdsToDelete.push(t.id);
@@ -363,6 +435,11 @@ export async function createTask(
     date: cleanDate,
     id: tempId,
     userId,
+    unit: taskData.unit?.trim() || undefined,
+    targetQuantity: typeof taskData.targetQuantity === 'number' && taskData.targetQuantity > 0 ? taskData.targetQuantity : undefined,
+    progressQuantity: typeof taskData.progressQuantity === 'number'
+      ? taskData.progressQuantity
+      : (taskData.completed && typeof taskData.targetQuantity === 'number' ? taskData.targetQuantity : 0),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -372,9 +449,9 @@ export async function createTask(
   saveLocalTasks(local);
 
   // 2. Sync with Firestore if authenticated
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (isCloudSyncableUser(userId)) {
     try {
-      const docRef = await addDoc(collection(db, 'tasks'), {
+      const taskPayload: Record<string, any> = {
         userId,
         title: newTask.title,
         description: newTask.description || '',
@@ -389,7 +466,12 @@ export async function createTask(
         goalId: newTask.goalId || null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
+      if (newTask.unit) taskPayload.unit = newTask.unit;
+      if (typeof newTask.targetQuantity === 'number') taskPayload.targetQuantity = newTask.targetQuantity;
+      if (typeof newTask.progressQuantity === 'number') taskPayload.progressQuantity = newTask.progressQuantity;
+
+      const docRef = await addDoc(collection(db, 'tasks'), taskPayload);
       // Update local task with firestore doc ID
       newTask.id = docRef.id;
       const currentLocal = readLocalTasks();
@@ -425,7 +507,7 @@ export async function updateTask(
   saveLocalTasks(local);
 
   // Background sync with Firestore
-  if (userId && userId !== 'local' && userId !== 'default' && !taskId.startsWith('temp_task_')) {
+  if (isCloudSyncableUser(userId) && !taskId.startsWith('temp_task_')) {
     try {
       const firestoreUpdates: any = {
         updatedAt: serverTimestamp(),
@@ -441,6 +523,11 @@ export async function updateTask(
       if (updates.completed !== undefined) firestoreUpdates.completed = updates.completed;
       if (updates.repeat !== undefined) firestoreUpdates.repeat = updates.repeat;
       if (updates.goalId !== undefined) firestoreUpdates.goalId = updates.goalId;
+      if (updates.unit !== undefined) firestoreUpdates.unit = updates.unit;
+      if (updates.targetQuantity !== undefined) firestoreUpdates.targetQuantity = updates.targetQuantity;
+      if (updates.progressQuantity !== undefined) firestoreUpdates.progressQuantity = updates.progressQuantity;
+      if (updates.isArchived !== undefined) firestoreUpdates.isArchived = updates.isArchived;
+      if (updates.archivedAt !== undefined) firestoreUpdates.archivedAt = updates.archivedAt;
 
       await updateDoc(doc(db, 'tasks', taskId), firestoreUpdates);
     } catch (err) {
@@ -450,6 +537,39 @@ export async function updateTask(
   }
 
   return updated;
+}
+
+/**
+ * Updates a quantitative unit progress for a task (e.g. 15 pages out of 50).
+ * Automatically marks the task complete when progress reaches or exceeds the target quantity.
+ */
+export async function updateTaskProgressQuantity(
+  taskId: string,
+  newQuantity: number,
+  userId?: string
+): Promise<TaskItem | null> {
+  const local = readLocalTasks();
+  const task = local.find((t) => t.id === taskId);
+  if (!task) return null;
+
+  const validQuantity = Math.max(0, Math.round(newQuantity * 100) / 100);
+  const isTargetMet =
+    typeof task.targetQuantity === 'number' && task.targetQuantity > 0
+      ? validQuantity >= task.targetQuantity
+      : task.completed;
+
+  if (isTargetMet && !task.completed) {
+    trackTaskCompleted(task.category);
+  }
+
+  return updateTask(
+    taskId,
+    {
+      progressQuantity: validQuantity,
+      completed: isTargetMet,
+    },
+    userId
+  );
 }
 
 // Toggle Task Completion
@@ -493,11 +613,16 @@ export function subscribeToTasks(
   userId: string | undefined,
   onUpdate: (tasks: TaskItem[]) => void
 ): () => void {
+  // Asynchronously schedule auto-archive check in the background
+  setTimeout(() => {
+    autoArchiveOldCompletedTasks(userId).catch(() => {});
+  }, 1200);
+
   // Immediately supply cached local tasks for instant rendering
   const local = deduplicateTasks(readLocalTasks());
   onUpdate(local);
 
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     return () => {};
   }
 
@@ -521,6 +646,12 @@ export function subscribeToTasks(
             type: data.type || 'task',
             completed: Boolean(data.completed),
             repeat: data.repeat,
+            goalId: data.goalId || data.linkedGoalId,
+            unit: data.unit || undefined,
+            targetQuantity: typeof data.targetQuantity === 'number' ? data.targetQuantity : undefined,
+            progressQuantity: typeof data.progressQuantity === 'number' ? data.progressQuantity : undefined,
+            isArchived: Boolean(data.isArchived),
+            archivedAt: data.archivedAt?.toDate ? data.archivedAt.toDate().toISOString() : (data.archivedAt || undefined),
             createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
             updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
           };
@@ -529,6 +660,7 @@ export function subscribeToTasks(
         const seenContent = new Set<string>();
         const firestoreTasks: TaskItem[] = [];
         for (const t of rawFirestoreTasks) {
+          if (t.isArchived) continue;
           const contentKey = `${t.title.trim().toLowerCase()}_${t.date}_${(t.time || '').trim()}_${t.type || 'task'}`;
           if (!seenContent.has(contentKey)) {
             seenContent.add(contentKey);
@@ -570,7 +702,7 @@ export async function deleteTask(taskId: string, userId?: string): Promise<boole
   const filtered = local.filter((t) => t.id !== taskId);
   saveLocalTasks(filtered);
 
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (isCloudSyncableUser(userId)) {
     try {
       await deleteDoc(doc(db, 'tasks', taskId));
     } catch (err) {
@@ -583,7 +715,7 @@ export async function deleteTask(taskId: string, userId?: string): Promise<boole
 }
 
 export const syncLocalTasksToCloud = async (userId: string) => {
-  if (!userId || userId === 'local' || userId === 'default') return;
+  if (!isCloudSyncableUser(userId)) return;
   const localTasks = deduplicateTasks(readLocalTasks());
   let syncCount = 0;
   for (const task of localTasks) {
@@ -627,3 +759,343 @@ export const syncLocalTasksToCloud = async (userId: string) => {
     saveLocalTasks([]);
   }
 };
+
+/**
+ * Automatically archives completed tasks older than 30 days into the dedicated 'Archived' history store.
+ * Keeps the active tasks collection and calendar views lean, snappy, and high-performance.
+ */
+export async function autoArchiveOldCompletedTasks(
+  userId?: string,
+  options: { force?: boolean; daysThreshold?: number } = {}
+): Promise<{ archivedCount: number; archivedTasks: ArchivedTaskItem[] }> {
+  const daysThreshold = options.daysThreshold ?? 30;
+  const todayKey = getTodayDateKey();
+
+  // Rate-limiting check for automatic background runs (throttle to once every 12 hours unless forced)
+  if (!options.force) {
+    const lastCheckStr = localStorage.getItem(LAST_AUTO_ARCHIVE_CHECK_KEY);
+    if (lastCheckStr) {
+      const lastCheck = parseInt(lastCheckStr, 10);
+      const twelveHoursMs = 12 * 60 * 60 * 1000;
+      if (Date.now() - lastCheck < twelveHoursMs) {
+        return { archivedCount: 0, archivedTasks: [] };
+      }
+    }
+  }
+
+  // Update check timestamp
+  localStorage.setItem(LAST_AUTO_ARCHIVE_CHECK_KEY, Date.now().toString());
+
+  const currentLocalTasks = readLocalTasks();
+  const existingArchived = readLocalArchivedTasks();
+  const archivedMap = new Map<string, ArchivedTaskItem>();
+  existingArchived.forEach((item) => archivedMap.set(item.id, item));
+
+  const toArchive: ArchivedTaskItem[] = [];
+  const remainingActiveTasks: TaskItem[] = [];
+
+  for (const task of currentLocalTasks) {
+    if (!task || !task.date) {
+      remainingActiveTasks.push(task);
+      continue;
+    }
+
+    const ageDays = diffDays(task.date, todayKey);
+    // Condition: Task is completed AND older than threshold (default 30 days)
+    if (task.completed && ageDays >= daysThreshold) {
+      const archivedRecord: ArchivedTaskItem = {
+        ...task,
+        originalDate: task.date,
+        archivedAt: new Date().toISOString(),
+      };
+      toArchive.push(archivedRecord);
+      archivedMap.set(task.id, archivedRecord);
+    } else {
+      remainingActiveTasks.push(task);
+    }
+  }
+
+  // Save updated active tasks & archived tasks in local storage
+  if (toArchive.length > 0) {
+    saveLocalTasks(remainingActiveTasks);
+    saveLocalArchivedTasks(Array.from(archivedMap.values()));
+  }
+
+  // If authenticated user, move old completed tasks in Firestore
+  if (isCloudSyncableUser(userId)) {
+    try {
+      // Query completed tasks for this user from Firestore
+      const q = query(
+        collection(db, 'tasks'),
+        where('userId', '==', userId),
+        where('completed', '==', true)
+      );
+      const snapshot = await getDocs(q);
+
+      const firestoreToArchive: TaskItem[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const taskDate = data.date;
+        if (taskDate) {
+          const ageDays = diffDays(taskDate, todayKey);
+          if (ageDays >= daysThreshold) {
+            firestoreToArchive.push({
+              id: docSnap.id,
+              userId: data.userId,
+              title: data.title,
+              description: data.description,
+              date: data.date,
+              time: data.time,
+              timeEnd: data.timeEnd,
+              category: data.category,
+              priority: data.priority,
+              type: data.type || 'task',
+              completed: true,
+              repeat: data.repeat,
+              goalId: data.goalId || data.linkedGoalId,
+              createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
+              updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
+            });
+          }
+        }
+      });
+
+      // Move each qualifying firestore task to archived_tasks collection and remove from tasks
+      for (const t of firestoreToArchive) {
+        try {
+          const archivedDocRef = doc(db, 'archived_tasks', t.id);
+          const taskPayload: Record<string, any> = {
+            userId,
+            title: t.title,
+            date: t.date,
+            originalDate: t.date,
+            completed: true,
+            archivedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          if (t.description) taskPayload.description = t.description;
+          if (t.time) taskPayload.time = t.time;
+          if (t.timeEnd) taskPayload.timeEnd = t.timeEnd;
+          if (t.repeat) taskPayload.repeat = t.repeat;
+          if (t.category) taskPayload.category = t.category;
+          if (t.priority) taskPayload.priority = t.priority;
+          if (t.type) taskPayload.type = t.type;
+          if (t.goalId) taskPayload.linkedGoalId = t.goalId;
+          if (t.unit) taskPayload.unit = t.unit;
+          if (typeof t.targetQuantity === 'number') taskPayload.targetQuantity = t.targetQuantity;
+          if (typeof t.progressQuantity === 'number') taskPayload.progressQuantity = t.progressQuantity;
+
+          await setDoc(archivedDocRef, taskPayload);
+          await deleteDoc(doc(db, 'tasks', t.id));
+
+          const archivedItem: ArchivedTaskItem = {
+            ...t,
+            originalDate: t.date,
+            archivedAt: new Date().toISOString(),
+          };
+          archivedMap.set(t.id, archivedItem);
+          if (!toArchive.some((x) => x.id === t.id)) {
+            toArchive.push(archivedItem);
+          }
+        } catch (err) {
+          console.warn(`Could not archive task ${t.id} in Firestore:`, err);
+        }
+      }
+
+      saveLocalArchivedTasks(Array.from(archivedMap.values()));
+    } catch (err) {
+      console.warn('Firestore auto-archive check failed:', err);
+    }
+  }
+
+  if (toArchive.length > 0 && typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('streak_tasks_archived', {
+        detail: { count: toArchive.length, archivedTasks: toArchive },
+      })
+    );
+    window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
+  }
+
+  return {
+    archivedCount: toArchive.length,
+    archivedTasks: toArchive,
+  };
+}
+
+/**
+ * Retrieves all archived tasks from the dedicated history store.
+ */
+export async function getArchivedTasks(userId?: string): Promise<ArchivedTaskItem[]> {
+  const local = readLocalArchivedTasks();
+
+  if (!isCloudSyncableUser(userId)) {
+    return local.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }
+
+  try {
+    const q = query(collection(db, 'archived_tasks'), where('userId', '==', userId));
+    const snapshot = await getDocs(q);
+    const firestoreArchived: ArchivedTaskItem[] = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        userId: data.userId,
+        title: data.title,
+        description: data.description,
+        date: data.date,
+        originalDate: data.originalDate || data.date,
+        time: data.time,
+        timeEnd: data.timeEnd,
+        category: data.category,
+        priority: data.priority,
+        type: data.type || 'task',
+        completed: Boolean(data.completed),
+        repeat: data.repeat,
+        goalId: data.linkedGoalId || data.goalId,
+        unit: data.unit || undefined,
+        targetQuantity: typeof data.targetQuantity === 'number' ? data.targetQuantity : undefined,
+        progressQuantity: typeof data.progressQuantity === 'number' ? data.progressQuantity : undefined,
+        archivedAt: data.archivedAt?.toDate
+          ? data.archivedAt.toDate().toISOString()
+          : (data.archivedAt || new Date().toISOString()),
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
+        updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
+      };
+    });
+
+    const map = new Map<string, ArchivedTaskItem>();
+    firestoreArchived.forEach((item) => map.set(item.id, item));
+    local.forEach((item) => {
+      if (!map.has(item.id)) {
+        map.set(item.id, item);
+      }
+    });
+
+    const merged = Array.from(map.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    saveLocalArchivedTasks(merged);
+    return merged;
+  } catch (err) {
+    console.warn('Failed to fetch archived tasks from Firestore, returning local:', err);
+    return local.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }
+}
+
+/**
+ * Restores a previously archived task back into active tasks.
+ */
+export async function restoreArchivedTask(
+  taskId: string,
+  userId?: string
+): Promise<TaskItem | null> {
+  const localArchived = readLocalArchivedTasks();
+  const index = localArchived.findIndex((t) => t.id === taskId);
+  if (index === -1) return null;
+
+  const itemToRestore = localArchived[index];
+
+  // Remove from archived store
+  const remainingArchived = localArchived.filter((t) => t.id !== taskId);
+  saveLocalArchivedTasks(remainingArchived);
+
+  // Re-add to active tasks store
+  const activeTask: TaskItem = {
+    id: itemToRestore.id,
+    userId: itemToRestore.userId || userId,
+    title: itemToRestore.title,
+    description: itemToRestore.description,
+    date: itemToRestore.date,
+    time: itemToRestore.time,
+    timeEnd: itemToRestore.timeEnd,
+    category: itemToRestore.category,
+    priority: itemToRestore.priority,
+    type: itemToRestore.type || 'task',
+    completed: itemToRestore.completed,
+    repeat: itemToRestore.repeat,
+    goalId: itemToRestore.goalId,
+    unit: itemToRestore.unit,
+    targetQuantity: itemToRestore.targetQuantity,
+    progressQuantity: itemToRestore.progressQuantity,
+    createdAt: itemToRestore.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const localTasks = readLocalTasks();
+  localTasks.unshift(activeTask);
+  saveLocalTasks(localTasks);
+
+  // If authenticated, delete from archived_tasks and set in tasks
+  if (isCloudSyncableUser(userId)) {
+    try {
+      await deleteDoc(doc(db, 'archived_tasks', taskId));
+      const targetDocRef = doc(db, 'tasks', taskId);
+      const payload: Record<string, any> = {
+        userId,
+        title: activeTask.title,
+        date: activeTask.date,
+        completed: Boolean(activeTask.completed),
+        updatedAt: serverTimestamp(),
+      };
+      if (activeTask.description) payload.description = activeTask.description;
+      if (activeTask.time) payload.time = activeTask.time;
+      if (activeTask.timeEnd) payload.timeEnd = activeTask.timeEnd;
+      if (activeTask.repeat) payload.repeat = activeTask.repeat;
+      if (activeTask.category) payload.category = activeTask.category;
+      if (activeTask.priority) payload.priority = activeTask.priority;
+      if (activeTask.type) payload.type = activeTask.type;
+      if (activeTask.goalId) payload.goalId = activeTask.goalId;
+      if (activeTask.unit) payload.unit = activeTask.unit;
+      if (typeof activeTask.targetQuantity === 'number') payload.targetQuantity = activeTask.targetQuantity;
+      if (typeof activeTask.progressQuantity === 'number') payload.progressQuantity = activeTask.progressQuantity;
+
+      await setDoc(targetDocRef, payload);
+    } catch (err) {
+      console.warn(`Could not restore archived task ${taskId} in Firestore:`, err);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
+  }
+
+  return activeTask;
+}
+
+/**
+ * Permanently deletes a task from the archived store.
+ */
+export async function deleteArchivedTask(taskId: string, userId?: string): Promise<boolean> {
+  const localArchived = readLocalArchivedTasks();
+  const filtered = localArchived.filter((t) => t.id !== taskId);
+  saveLocalArchivedTasks(filtered);
+
+  if (isCloudSyncableUser(userId)) {
+    try {
+      await deleteDoc(doc(db, 'archived_tasks', taskId));
+    } catch (err) {
+      console.warn('Could not delete archived task in Firestore:', err);
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Clears all archived tasks for the user.
+ */
+export async function clearAllArchivedTasks(userId?: string): Promise<boolean> {
+  const localArchived = readLocalArchivedTasks();
+  saveLocalArchivedTasks([]);
+
+  if (isCloudSyncableUser(userId)) {
+    try {
+      for (const item of localArchived) {
+        await deleteDoc(doc(db, 'archived_tasks', item.id)).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('Could not clear all archived tasks in Firestore:', err);
+    }
+  }
+
+  return true;
+}

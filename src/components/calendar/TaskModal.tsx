@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TaskItem } from '../../lib/taskService';
-import { X, Calendar, Clock, Tag, Flag, Layers, AlertCircle } from 'lucide-react';
+import { X, Calendar, Clock, Tag, Flag, Layers, AlertCircle, Target, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 
@@ -34,6 +34,8 @@ const TYPES: { label: string; value: 'task' | 'meeting' | 'event' | 'reminder' }
   { label: 'Reminder', value: 'reminder' },
 ];
 
+const COMMON_UNITS = ['pages', 'minutes', 'questions', 'reps', 'problems', 'chapters'];
+
 export function TaskModal({
   isOpen,
   onClose,
@@ -50,6 +52,13 @@ export function TaskModal({
   const [category, setCategory] = useState<'Work' | 'Health' | 'Fitness' | 'Personal' | 'General'>('Work');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [type, setType] = useState<'task' | 'meeting' | 'event' | 'reminder'>(initialType);
+  
+  // Unit & Quantity Tracking
+  const [hasUnitTracking, setHasUnitTracking] = useState(false);
+  const [unit, setUnit] = useState('pages');
+  const [targetQuantity, setTargetQuantity] = useState<string>('10');
+  const [progressQuantity, setProgressQuantity] = useState<string>('0');
+
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -63,6 +72,18 @@ export function TaskModal({
       setCategory(initialTask.category || 'Work');
       setPriority(initialTask.priority || 'medium');
       setType(initialTask.type || 'task');
+
+      if (initialTask.unit || typeof initialTask.targetQuantity === 'number') {
+        setHasUnitTracking(true);
+        setUnit(initialTask.unit || 'pages');
+        setTargetQuantity(String(initialTask.targetQuantity || '10'));
+        setProgressQuantity(String(initialTask.progressQuantity || '0'));
+      } else {
+        setHasUnitTracking(false);
+        setUnit('pages');
+        setTargetQuantity('10');
+        setProgressQuantity('0');
+      }
     } else {
       setTitle('');
       setDescription('');
@@ -72,6 +93,10 @@ export function TaskModal({
       setCategory('Work');
       setPriority('medium');
       setType(initialType);
+      setHasUnitTracking(false);
+      setUnit('pages');
+      setTargetQuantity('10');
+      setProgressQuantity('0');
     }
     setError('');
     setIsSubmitting(false);
@@ -94,6 +119,15 @@ export function TaskModal({
     setError('');
 
     try {
+      const parsedTargetQty = hasUnitTracking ? parseFloat(targetQuantity) : undefined;
+      const parsedProgressQty = hasUnitTracking ? parseFloat(progressQuantity) : undefined;
+      const validTarget = typeof parsedTargetQty === 'number' && !isNaN(parsedTargetQty) && parsedTargetQty > 0 ? parsedTargetQty : undefined;
+      const validProgress = typeof parsedProgressQty === 'number' && !isNaN(parsedProgressQty) && parsedProgressQty >= 0 ? parsedProgressQty : 0;
+
+      const isCompleted = initialTask?.completed
+        ? initialTask.completed
+        : (validTarget !== undefined ? validProgress >= validTarget : false);
+
       await onSave({
         title: cleanTitle,
         description: description.trim() || undefined,
@@ -103,7 +137,10 @@ export function TaskModal({
         category,
         priority,
         type,
-        completed: initialTask ? initialTask.completed : false,
+        completed: isCompleted,
+        unit: hasUnitTracking && unit.trim() ? unit.trim() : undefined,
+        targetQuantity: validTarget,
+        progressQuantity: hasUnitTracking && validTarget ? validProgress : undefined,
       });
       onClose();
     } catch (err: any) {
@@ -297,6 +334,109 @@ export function TaskModal({
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* Quantitative Unit Tracking */}
+            <div className="p-4 rounded-2xl bg-[#0a0c10] border border-[#202532] space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Target className="w-4 h-4 text-accent-primary" />
+                  <span className="text-xs font-bold text-white">Quantitative Progress Tracking</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setHasUnitTracking(!hasUnitTracking)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border',
+                    hasUnitTracking
+                      ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/40'
+                      : 'bg-white/5 text-[#7d8495] border-white/5 hover:text-white'
+                  )}
+                >
+                  {hasUnitTracking ? 'Enabled' : '+ Add Unit Tracking'}
+                </button>
+              </div>
+
+              {hasUnitTracking && (
+                <div className="space-y-3 pt-1 border-t border-white/5">
+                  {/* Preset Unit Chips */}
+                  <div>
+                    <span className="block text-[11px] font-semibold text-[#7d8495] mb-1.5">
+                      Common Units
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {COMMON_UNITS.map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => setUnit(u)}
+                          className={cn(
+                            'px-2.5 py-1 rounded-lg text-xs font-medium border transition-all cursor-pointer',
+                            unit.toLowerCase() === u
+                              ? 'bg-accent-primary text-black border-accent-primary font-bold'
+                              : 'bg-white/5 text-[#7d8495] border-white/5 hover:text-white'
+                          )}
+                        >
+                          {u}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    {/* Unit Name */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#8b93a6] mb-1">
+                        Unit Name
+                      </label>
+                      <input
+                        type="text"
+                        value={unit}
+                        onChange={(e) => setUnit(e.target.value)}
+                        placeholder="e.g. pages, reps"
+                        required={hasUnitTracking}
+                        className="w-full px-3 py-2 bg-[#12151d] border border-[#202532] rounded-xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60"
+                      />
+                    </div>
+
+                    {/* Target Quantity */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#8b93a6] mb-1">
+                        Target Quantity
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="any"
+                        value={targetQuantity}
+                        onChange={(e) => setTargetQuantity(e.target.value)}
+                        placeholder="e.g. 50"
+                        required={hasUnitTracking}
+                        className="w-full px-3 py-2 bg-[#12151d] border border-[#202532] rounded-xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60"
+                      />
+                    </div>
+
+                    {/* Current Progress Quantity */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#8b93a6] mb-1">
+                        Current Done
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={progressQuantity}
+                        onChange={(e) => setProgressQuantity(e.target.value)}
+                        placeholder="0"
+                        className="w-full px-3 py-2 bg-[#12151d] border border-[#202532] rounded-xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-[#7d8495]">
+                    Enables quantitative progress bars (e.g. 15 / 50 {unit || 'units'}) with direct steppers on your schedule.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Actions */}

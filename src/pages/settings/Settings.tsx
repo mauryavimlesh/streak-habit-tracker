@@ -32,6 +32,11 @@ import { cn } from '../../lib/utils';
 import UserAvatar from '../../components/profile/UserAvatar';
 import EditProfileModal from '../../components/profile/EditProfileModal';
 import DeveloperFooter from '../../components/layout/DeveloperFooter';
+import { AddToHomeScreenModal } from '../../components/pwa/AddToHomeScreenModal';
+import { TimezoneAuditModal } from '../../components/diagnostics/TimezoneAuditModal';
+import { usePWAInstall } from '../../lib/pwa/usePWAInstall';
+import { flushOfflineSync, getPendingOfflineActionsCount } from '../../lib/offlineSyncService';
+import { Smartphone, Wifi, WifiOff, Globe, Download } from 'lucide-react';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -49,6 +54,29 @@ export default function Settings() {
       : null;
   });
   const [hasPendingGuestData, setHasPendingGuestData] = useState(() => hasGuestDataToMigrate());
+
+  // PWA, Offline, and Timezone state
+  const { isInstalled, isInstallable } = usePWAInstall();
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [isTimezoneAuditOpen, setIsTimezoneAuditOpen] = useState(false);
+  const [pendingSyncCount, setPendingSyncCount] = useState(() => getPendingOfflineActionsCount());
+  const [isSyncingOffline, setIsSyncingOffline] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const handleManualOfflineSync = async () => {
+    setIsSyncingOffline(true);
+    setSyncMessage(null);
+    try {
+      const res = await flushOfflineSync();
+      setPendingSyncCount(getPendingOfflineActionsCount());
+      setSyncMessage(res.syncedCount > 0 ? `Synced ${res.syncedCount} actions to cloud` : 'All changes are up to date');
+    } catch {
+      setSyncMessage('Sync postponed: offline or server unavailable');
+    } finally {
+      setIsSyncingOffline(false);
+      setTimeout(() => setSyncMessage(null), 3500);
+    }
+  };
 
   useEffect(() => {
     if (profile?.displayName || profile?.name) {
@@ -352,6 +380,106 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* App Installation & Offline Data */}
+        <div className="p-5 rounded-3xl bg-surface-card border border-white/5 space-y-4">
+          <span className="text-[11px] font-semibold text-[#7d8495] uppercase tracking-wider block">
+            Installation & Offline Sync
+          </span>
+
+          {/* PWA Home Screen */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-[#a5ff36]/10 border border-[#a5ff36]/20 flex items-center justify-center text-[#a5ff36]">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-white">Install STREAK App</h4>
+                <p className="text-[10px] text-[#7d8495]">
+                  {isInstalled ? 'Running as standalone Home Screen app' : 'Add to Home Screen for fast offline tracking'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsInstallModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white flex items-center gap-1.5 transition cursor-pointer"
+            >
+              {isInstalled ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#a5ff36]" />
+                  <span>Installed</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5 text-[#a5ff36]" />
+                  <span>Install</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Offline Sync Status */}
+          <div className="pt-3 border-t border-white/5 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                  <Wifi className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Offline Data Availability</h4>
+                  <p className="text-[10px] text-[#7d8495]">
+                    Habits, tasks, and journals are cached for offline access
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleManualOfflineSync}
+                disabled={isSyncingOffline}
+                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={cn('w-3.5 h-3.5 text-[#38bdf8]', isSyncingOffline && 'animate-spin')} />
+                <span>{isSyncingOffline ? 'Syncing...' : 'Sync Now'}</span>
+              </button>
+            </div>
+
+            {pendingSyncCount > 0 && (
+              <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] flex items-center justify-between">
+                <span>{pendingSyncCount} offline changes pending sync</span>
+                <span className="text-[10px] text-amber-400 font-mono">Queued</span>
+              </div>
+            )}
+
+            {syncMessage && (
+              <div className="p-2 rounded-xl bg-[#a5ff36]/10 border border-[#a5ff36]/20 text-[#a5ff36] text-[11px] flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>{syncMessage}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Timezone & Day Boundary Diagnostics */}
+          <div className="pt-3 border-t border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <Globe className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-white">Timezone & Day Boundary</h4>
+                <p className="text-[10px] text-[#7d8495]">Verify midnight rollover consistency</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsTimezoneAuditOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-[#a5ff36]" />
+              <span>Audit</span>
+            </button>
+          </div>
+        </div>
+
         {/* Maintenance & Reset */}
         <div className="p-5 rounded-3xl bg-surface-card border border-white/5 space-y-3">
           <span className="text-[11px] font-semibold text-[#7d8495] uppercase tracking-wider block">
@@ -444,6 +572,16 @@ export default function Settings() {
       <EditProfileModal
         isOpen={isEditProfileOpen}
         onClose={() => setIsEditProfileOpen(false)}
+      />
+
+      <AddToHomeScreenModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+      />
+
+      <TimezoneAuditModal
+        isOpen={isTimezoneAuditOpen}
+        onClose={() => setIsTimezoneAuditOpen(false)}
       />
     </div>
   );

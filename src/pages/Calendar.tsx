@@ -7,6 +7,8 @@ import {
   updateTask,
   deleteTask,
   toggleTaskComplete,
+  updateTaskProgressQuantity,
+  readLocalArchivedTasks,
   TaskItem,
 } from '../lib/taskService';
 import { CalendarHeader } from '../components/calendar/CalendarHeader';
@@ -17,6 +19,7 @@ import { TaskModal } from '../components/calendar/TaskModal';
 import { CreateTaskBottomSheet } from '../components/calendar/CreateTaskBottomSheet';
 import { AddActionMenu } from '../components/calendar/AddActionMenu';
 import { DeleteConfirmModal } from '../components/calendar/DeleteConfirmModal';
+import { ArchivedTasksModal } from '../components/calendar/ArchivedTasksModal';
 import { Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { trackCalendarOpened, trackCalendarDateSelected } from '../lib/analyticsService';
@@ -24,6 +27,8 @@ import { getHabitLogs, getUserHabits, Habit, HabitLog } from '../lib/habitServic
 import { getUserActivities, Activity } from '../lib/activityService';
 import { getUserGoals, Goal } from '../lib/goalService';
 import { getUserJournal, JournalEntry } from '../lib/journalService';
+import { formatDateKey } from '../lib/dateUtils';
+import { getUnifiedActivitiesForDate } from '../lib/unifiedActivityService';
 
 export default function Calendar() {
   const { user } = useAuth();
@@ -51,6 +56,8 @@ export default function Calendar() {
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
   const [modalType, setModalType] = useState<'task' | 'meeting' | 'event' | 'reminder'>('task');
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [isArchivedModalOpen, setIsArchivedModalOpen] = useState(false);
+  const [archivedCount, setArchivedCount] = useState<number>(() => readLocalArchivedTasks().length);
 
   // Gesture tracking for touch & pointer swipes
   const dragStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -86,15 +93,25 @@ export default function Calendar() {
       loadExtraData();
     };
 
+    const onTasksArchived = () => {
+      setArchivedCount(readLocalArchivedTasks().length);
+    };
+
     window.addEventListener('streak_habits_updated', onDataUpdated);
     window.addEventListener('streak_sleep_updated', onDataUpdated);
     window.addEventListener('streak_goals_updated', onDataUpdated);
+    window.addEventListener('streak_activities_updated', onDataUpdated);
+    window.addEventListener('streak_tasks_archived', onTasksArchived);
+    window.addEventListener('streak_tasks_updated', onTasksArchived);
 
     return () => {
       unsubscribe();
       window.removeEventListener('streak_habits_updated', onDataUpdated);
       window.removeEventListener('streak_sleep_updated', onDataUpdated);
       window.removeEventListener('streak_goals_updated', onDataUpdated);
+      window.removeEventListener('streak_activities_updated', onDataUpdated);
+      window.removeEventListener('streak_tasks_archived', onTasksArchived);
+      window.removeEventListener('streak_tasks_updated', onTasksArchived);
     };
   }, [user]);
 
@@ -160,7 +177,7 @@ export default function Calendar() {
     setViewMonthDate(new Date(viewMonthDate.getFullYear(), viewMonthDate.getMonth() + 1, 1));
   };
 
-  // Task map for fast indicator dots on calendar days
+  // Activity & Task map for fast indicator dots on calendar days
   const taskDatesMap = useMemo(() => {
     const map: Record<
       string,
@@ -180,15 +197,30 @@ export default function Calendar() {
       }
     });
 
-    return map;
-  }, [tasks]);
+    logs.forEach((l) => {
+      if (!map[l.date]) {
+        map[l.date] = { count: 0, completedCount: 0, hasHighPriority: false };
+      }
+      map[l.date].count += 1;
+      if (l.status === 'completed') {
+        map[l.date].completedCount += 1;
+      }
+    });
 
-  // Selected date key: YYYY-MM-DD
+    activities.forEach((a) => {
+      if (!map[a.date]) {
+        map[a.date] = { count: 0, completedCount: 0, hasHighPriority: false };
+      }
+      map[a.date].count += 1;
+      map[a.date].completedCount += 1;
+    });
+
+    return map;
+  }, [tasks, logs, activities]);
+
+  // Selected date key: canonical YYYY-MM-DD
   const selectedDateStr = useMemo(() => {
-    const y = selectedDate.getFullYear();
-    const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
-    const d = String(selectedDate.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return formatDateKey(selectedDate);
   }, [selectedDate]);
 
   // Tasks for the selected date
@@ -196,13 +228,20 @@ export default function Calendar() {
     return tasks.filter((t) => t.date === selectedDateStr);
   }, [tasks, selectedDateStr]);
 
-  // Calculate score for display (reflecting completion rate)
+  // Calculate truthful score for display (reflecting real completion rate)
   const streakScore = useMemo(() => {
-    if (selectedDateTasks.length === 0) return 68;
-    const completed = selectedDateTasks.filter((t) => t.completed).length;
-    const ratio = completed / selectedDateTasks.length;
-    return Math.round(50 + ratio * 45);
-  }, [selectedDateTasks]);
+    const unified = getUnifiedActivitiesForDate(selectedDateStr, {
+      habits,
+      logs,
+      tasks,
+      goals,
+      activities,
+      journals,
+    });
+    if (unified.length === 0) return 0;
+    const completed = unified.filter((a) => a.completed).length;
+    return Math.min(100, Math.round((completed / unified.length) * 100));
+  }, [selectedDateStr, habits, logs, tasks, goals, activities, journals]);
 
   // Task CRUD operations
   const handleToggleTask = async (taskId: string) => {
@@ -227,6 +266,38 @@ export default function Calendar() {
       prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t))
     );
     await toggleTaskComplete(taskId, user?.uid);
+  };
+
+  const handleUpdateTaskProgress = async (taskId: string, newQty: number) => {
+    // Tactile feedback
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(20);
+      } catch {
+        // Ignore
+      }
+    }
+
+    // Instant optimistic update
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === taskId) {
+          const target = t.targetQuantity || 1;
+          const willBeDone = newQty >= target;
+          return {
+            ...t,
+            progressQuantity: newQty,
+            completed: willBeDone ? true : t.completed,
+          };
+        }
+        return t;
+      })
+    );
+
+    const updated = await updateTaskProgressQuantity(taskId, newQty, user?.uid);
+    if (updated) {
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
+    }
   };
 
   const handleOpenAddModal = (type: 'task' | 'meeting' | 'event' | 'reminder' = 'task') => {
@@ -350,6 +421,8 @@ export default function Calendar() {
             setViewMode((prev) => (prev === 'week' ? 'month' : 'week'))
           }
           onResetToday={handleResetToday}
+          onOpenArchive={() => setIsArchivedModalOpen(true)}
+          archivedCount={archivedCount}
           streakScore={streakScore}
         />
 
@@ -423,9 +496,15 @@ export default function Calendar() {
         <DaySchedule
           selectedDate={selectedDate}
           tasks={selectedDateTasks}
+          habits={habits}
+          logs={logs}
+          activities={activities}
+          goals={goals}
+          journals={journals}
           onToggleTask={handleToggleTask}
           onEditTask={handleEditTask}
           onDeleteTask={(id) => setDeletingTaskId(id)}
+          onUpdateTaskProgress={handleUpdateTaskProgress}
           onOpenAddModal={handleOpenAddModal}
           streakScore={streakScore}
         />
@@ -484,6 +563,16 @@ export default function Calendar() {
         onClose={() => setDeletingTaskId(null)}
         onConfirm={handleConfirmDelete}
         title={deletingTaskItem?.title || 'this task'}
+      />
+
+      {/* Dedicated Historical Archived Tasks Modal */}
+      <ArchivedTasksModal
+        isOpen={isArchivedModalOpen}
+        onClose={() => setIsArchivedModalOpen(false)}
+        userId={user?.uid}
+        onTaskRestored={() => {
+          setArchivedCount(readLocalArchivedTasks().length);
+        }}
       />
     </div>
   );

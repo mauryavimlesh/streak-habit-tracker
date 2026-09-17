@@ -77,15 +77,19 @@ service cloud.firestore {
         && data.title is string && data.title.size() > 0 && data.title.size() <= 200
         && (!('description' in data) || (data.description is string && data.description.size() <= 1000))
         && (!('target' in data) || data.target is number)
+        && (!('dailyTarget' in data) || data.dailyTarget is number)
         && (!('currentProgress' in data) || data.currentProgress is number)
         && (!('unit' in data) || (data.unit is string && data.unit.size() <= 50))
         && (!('targetDate' in data) || (data.targetDate is string && data.targetDate.size() <= 20))
         && (!('deadline' in data) || data.deadline is timestamp || (data.deadline is string && data.deadline.size() <= 50))
         && (!('category' in data) || (data.category is string && data.category.size() <= 50))
         && (!('priority' in data) || (data.priority is string && data.priority.matches('^(low|medium|high)$')))
+        && (!('type' in data) || (data.type is string && data.type.matches('^(daily|weekly|monthly|one_time|long_term)$')))
         && (!('status' in data) || (data.status is string && data.status.matches('^(in_progress|completed|paused|archived)$')))
+        && (!('subjects' in data) || (data.subjects is list && data.subjects.size() <= 50))
         && (!('milestones' in data) || (data.milestones is list && data.milestones.size() <= 50))
-        && (!('linkedHabitIds' in data) || (data.linkedHabitIds is list && data.linkedHabitIds.size() <= 50));
+        && (!('linkedHabitIds' in data) || (data.linkedHabitIds is list && data.linkedHabitIds.size() <= 50))
+        && (!('dailyHistory' in data) || data.dailyHistory is map);
     }
 
     function isValidJournalLog(data) {
@@ -115,7 +119,61 @@ service cloud.firestore {
         && (!('repeat' in data) || (data.repeat is string && data.repeat.size() <= 50))
         && (!('category' in data) || (data.category is string && data.category.size() <= 50))
         && (!('priority' in data) || (data.priority is string && data.priority.matches('^(low|medium|high)$')))
-        && (!('type' in data) || (data.type is string && data.type.matches('^(task|meeting|event|reminder)$')));
+        && (!('type' in data) || (data.type is string && data.type.matches('^(task|meeting|event|reminder)$')))
+        && (!('unit' in data) || (data.unit is string && data.unit.size() <= 50))
+        && (!('targetQuantity' in data) || data.targetQuantity is number)
+        && (!('progressQuantity' in data) || data.progressQuantity is number)
+        && (!('isArchived' in data) || data.isArchived is bool)
+        && (!('archivedAt' in data) || isValidTimestamp(data.archivedAt) || (data.archivedAt is string && data.archivedAt.size() <= 50))
+        && (!('linkedGoalId' in data) || (data.linkedGoalId is string && data.linkedGoalId.size() <= 128))
+        && (!('linkedGoalActivityId' in data) || (data.linkedGoalActivityId is string && data.linkedGoalActivityId.size() <= 128))
+        && (!('linkedHabitId' in data) || (data.linkedHabitId is string && data.linkedHabitId.size() <= 128));
+    }
+
+    function isValidArchivedTask(data) {
+      return data.keys().hasAll(['userId', 'title', 'date', 'completed'])
+        && isOwner(data.userId)
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.date is string && data.date.size() <= 10
+        && data.completed is bool
+        && (!('originalDate' in data) || (data.originalDate is string && data.originalDate.size() <= 10))
+        && (!('originalTaskId' in data) || (data.originalTaskId is string && data.originalTaskId.size() <= 128))
+        && (!('archivedAt' in data) || isValidTimestamp(data.archivedAt) || (data.archivedAt is string && data.archivedAt.size() <= 50))
+        && (!('isArchived' in data) || data.isArchived is bool)
+        && (!('unit' in data) || (data.unit is string && data.unit.size() <= 50))
+        && (!('targetQuantity' in data) || data.targetQuantity is number)
+        && (!('progressQuantity' in data) || data.progressQuantity is number)
+        && (!('description' in data) || (data.description is string && data.description.size() <= 1000))
+        && (!('time' in data) || (data.time is string && data.time.size() <= 50))
+        && (!('timeEnd' in data) || (data.timeEnd is string && data.timeEnd.size() <= 50))
+        && (!('repeat' in data) || (data.repeat is string && data.repeat.size() <= 50))
+        && (!('category' in data) || (data.category is string && data.category.size() <= 50))
+        && (!('priority' in data) || (data.priority is string && data.priority.matches('^(low|medium|high)$')))
+        && (!('type' in data) || (data.type is string && data.type.matches('^(task|meeting|event|reminder)$')))
+        && (!('linkedGoalId' in data) || (data.linkedGoalId is string && data.linkedGoalId.size() <= 128))
+        && (!('linkedGoalActivityId' in data) || (data.linkedGoalActivityId is string && data.linkedGoalActivityId.size() <= 128))
+        && (!('linkedHabitId' in data) || (data.linkedHabitId is string && data.linkedHabitId.size() <= 128));
+    }
+
+    function isValidActivity(data) {
+      return data.keys().hasAll(['userId', 'name', 'durationMinutes', 'date'])
+        && isOwner(data.userId)
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.durationMinutes is number
+        && (!('durationSeconds' in data) || data.durationSeconds is number)
+        && data.date is string && data.date.size() <= 10
+        && (!('time' in data) || (data.time is string && data.time.size() <= 50))
+        && (!('startTime' in data) || (data.startTime is string && data.startTime.size() <= 50))
+        && (!('endTime' in data) || (data.endTime is string && data.endTime.size() <= 50))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000))
+        && (!('completionStatus' in data) || (data.completionStatus is string && data.completionStatus.matches('^(completed|partial|abandoned)$')))
+        && (!('linkedHabitId' in data) || (data.linkedHabitId is string && data.linkedHabitId.size() <= 128))
+        && (!('linkedGoalId' in data) || (data.linkedGoalId is string && data.linkedGoalId.size() <= 128))
+        && (!('linkedGoalActivityId' in data) || (data.linkedGoalActivityId is string && data.linkedGoalActivityId.size() <= 128))
+        && (!('linkedTaskId' in data) || (data.linkedTaskId is string && data.linkedTaskId.size() <= 128))
+        && (!('subject' in data) || (data.subject is string && data.subject.size() <= 100))
+        && (!('quantityCompleted' in data) || data.quantityCompleted is number)
+        && (!('unit' in data) || (data.unit is string && data.unit.size() <= 50));
     }
 
     function isValidReminder(data) {
@@ -261,6 +319,37 @@ service cloud.firestore {
         && isValidTask(incoming())
         && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt || isValidTimestamp(incoming().createdAt))
         && (!('updatedAt' in incoming()) || isValidTimestamp(incoming().updatedAt));
+      allow delete: if isOwner(existing().userId);
+    }
+
+    // Archived Tasks (Dedicated historical store for tasks older than 30 days)
+    match /archived_tasks/{taskId} {
+      allow get: if request.auth != null && (resource == null || isOwner(resource.data.userId));
+      allow list: if isOwner(resource.data.userId);
+      allow create: if isOwner(incoming().userId)
+        && isValidId(taskId)
+        && isValidArchivedTask(incoming())
+        && (!('createdAt' in incoming()) || isValidTimestamp(incoming().createdAt))
+        && (!('updatedAt' in incoming()) || isValidTimestamp(incoming().updatedAt));
+      allow update: if isOwner(existing().userId)
+        && isOwner(incoming().userId)
+        && isValidArchivedTask(incoming())
+        && (!('createdAt' in incoming()) || !('createdAt' in existing()) || incoming().createdAt == existing().createdAt || isValidTimestamp(incoming().createdAt))
+        && (!('updatedAt' in incoming()) || isValidTimestamp(incoming().updatedAt));
+      allow delete: if isOwner(existing().userId);
+    }
+
+    // Activities (Focus Sessions & Study Activities)
+    match /activities/{activityId} {
+      allow get: if request.auth != null && (resource == null || isOwner(resource.data.userId));
+      allow list: if isOwner(resource.data.userId);
+      allow create: if isOwner(incoming().userId)
+        && isValidId(activityId)
+        && isValidActivity(incoming())
+        && (!('createdAt' in incoming()) || isValidTimestamp(incoming().createdAt));
+      allow update: if isOwner(existing().userId)
+        && isOwner(incoming().userId)
+        && isValidActivity(incoming());
       allow delete: if isOwner(existing().userId);
     }
 

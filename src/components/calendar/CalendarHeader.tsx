@@ -1,11 +1,13 @@
 import React from 'react';
-import { Menu, Watch, CalendarDays } from 'lucide-react';
+import { Menu, Watch, CalendarDays, Archive } from 'lucide-react';
 
 interface CalendarHeaderProps {
   selectedDate: Date;
   viewMode: 'week' | 'month';
   onToggleViewMode: () => void;
   onResetToday: () => void;
+  onOpenArchive?: () => void;
+  archivedCount?: number;
   streakScore?: number;
 }
 
@@ -14,6 +16,8 @@ export function CalendarHeader({
   viewMode,
   onToggleViewMode,
   onResetToday,
+  onOpenArchive,
+  archivedCount = 0,
   streakScore = 68,
 }: CalendarHeaderProps) {
   const dayNumber = selectedDate.getDate();
@@ -59,6 +63,20 @@ export function CalendarHeader({
           </div>
 
           <div className="flex items-center gap-1">
+            {onOpenArchive && (
+              <button
+                type="button"
+                id="header-open-archive-btn"
+                onClick={onOpenArchive}
+                title="Archived Tasks (>30 days)"
+                className="relative w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                <Archive className="w-5 h-5" />
+                {archivedCount > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#38bdf8]" />
+                )}
+              </button>
+            )}
             <button
               type="button"
               onClick={onToggleViewMode}
@@ -99,14 +117,30 @@ export function CalendarHeader({
             </h1>
           </div>
 
-          <button
-            type="button"
-            onClick={onResetToday}
-            title="Jump to Today"
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          >
-            <Watch className="w-5 h-5 text-white/80" />
-          </button>
+          <div className="flex items-center gap-1">
+            {onOpenArchive && (
+              <button
+                type="button"
+                id="header-open-archive-month-btn"
+                onClick={onOpenArchive}
+                title="Archived Tasks (>30 days)"
+                className="relative w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                <Archive className="w-5 h-5" />
+                {archivedCount > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#38bdf8]" />
+                )}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onResetToday}
+              title="Jump to Today"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+            >
+              <Watch className="w-5 h-5 text-white/80" />
+            </button>
+          </div>
         </>
       )}
     </header>

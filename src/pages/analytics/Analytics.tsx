@@ -12,11 +12,11 @@ import {
   Zap,
   Target,
   BarChart3,
-  Book,
   Clock,
   Activity as ActivityIcon,
   BookOpen,
   Share2,
+  Check,
 } from 'lucide-react';
 import {
   BarChart,
@@ -26,30 +26,43 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  PieChart,
-  Pie,
+  AreaChart,
+  Area,
 } from 'recharts';
 import { readLocalHabits, readLocalLogs, getUserHabits, getHabitLogs, Habit, HabitLog } from '../../lib/habitService';
 import { readLocalTasks, getAllTasks, TaskItem } from '../../lib/taskService';
-import { readLocalGoals, getUserGoals, Goal } from '../../lib/goalService';
-import { getUserActivities, Activity, calculateStudyStatistics } from '../../lib/activityService';
-import { getUserJournal, JournalEntry } from '../../lib/journalService';
+import { readLocalGoals, getUserGoals, Goal, calculateGoalProgress } from '../../lib/goalService';
+import { getUserActivities, getLocalActivities, Activity } from '../../lib/activityService';
+import { getUserJournal, readLocalJournal, JournalEntry } from '../../lib/journalService';
 import { useAuth } from '../../lib/AuthContext';
 import { cn } from '../../lib/utils';
 import { calculateRealMilestones, MilestoneItem } from '../../lib/milestoneService';
+import { calculateStreakStats } from '../../lib/streakEngine';
 import { MilestoneCelebrationModal } from '../../components/ui/MilestoneCelebrationModal';
 import { WeeklyReviewModal } from '../../components/analytics/WeeklyReviewModal';
+import { getTodayDateKey, addDays, formatDateKey, diffDays } from '../../lib/dateUtils';
+
+export type AnalyticsTimeframe = 'today' | '7days' | '30days' | 'this_month' | 'all_time';
+
+const TIMEFRAMES: { id: AnalyticsTimeframe; label: string; shortLabel: string }[] = [
+  { id: 'today', label: 'Today', shortLabel: 'Today' },
+  { id: '7days', label: '7 Days', shortLabel: '7D' },
+  { id: '30days', label: '30 Days', shortLabel: '30D' },
+  { id: 'this_month', label: 'This Month', shortLabel: 'Month' },
+  { id: 'all_time', label: 'All Time', shortLabel: 'All' },
+];
 
 export default function Analytics() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'overall' | 'habits' | 'goals' | 'tasks' | 'study' | 'milestones' | 'journal'>('overall');
+  const [timeframe, setTimeframe] = useState<AnalyticsTimeframe>('7days');
 
   const [habits, setHabits] = useState<Habit[]>(readLocalHabits());
   const [logs, setLogs] = useState<HabitLog[]>(readLocalLogs());
   const [tasks, setTasks] = useState<TaskItem[]>(readLocalTasks());
   const [goals, setGoals] = useState<Goal[]>(readLocalGoals());
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [journals, setJournals] = useState<JournalEntry[]>([]);
+  const [activities, setActivities] = useState<Activity[]>(getLocalActivities());
+  const [journals, setJournals] = useState<JournalEntry[]>(readLocalJournal());
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
 
@@ -66,9 +79,9 @@ export default function Analytics() {
     }
   }, []);
 
-  useEffect(() => {
-    async function loadData() {
-      if (user) {
+  const loadData = async () => {
+    if (user) {
+      try {
         const [h, l, t, g, a, j] = await Promise.all([
           getUserHabits(user.uid),
           getHabitLogs(user.uid),
@@ -83,9 +96,27 @@ export default function Analytics() {
         setGoals(g);
         setActivities(a);
         setJournals(j);
+      } catch {
+        // Fallback to local
+        setHabits(readLocalHabits());
+        setLogs(readLocalLogs());
+        setTasks(readLocalTasks());
+        setGoals(readLocalGoals());
+        setActivities(getLocalActivities());
+        setJournals(readLocalJournal());
       }
-      setLoading(false);
+    } else {
+      setHabits(readLocalHabits());
+      setLogs(readLocalLogs());
+      setTasks(readLocalTasks());
+      setGoals(readLocalGoals());
+      setActivities(getLocalActivities());
+      setJournals(readLocalJournal());
     }
+    setLoading(false);
+  };
+
+  useEffect(() => {
     loadData();
 
     const onDataUpdated = () => {
@@ -96,107 +127,271 @@ export default function Analytics() {
     window.addEventListener('streak_sleep_updated', onDataUpdated);
     window.addEventListener('streak_goals_updated', onDataUpdated);
     window.addEventListener('streak_tasks_updated', onDataUpdated);
+    window.addEventListener('streak_activities_updated', onDataUpdated);
+    window.addEventListener('streak_journal_updated', onDataUpdated);
 
     return () => {
       window.removeEventListener('streak_habits_updated', onDataUpdated);
       window.removeEventListener('streak_sleep_updated', onDataUpdated);
       window.removeEventListener('streak_goals_updated', onDataUpdated);
       window.removeEventListener('streak_tasks_updated', onDataUpdated);
+      window.removeEventListener('streak_activities_updated', onDataUpdated);
+      window.removeEventListener('streak_journal_updated', onDataUpdated);
     };
   }, [user]);
 
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todayStr = getTodayDateKey();
 
-  // Study statistics calculation
-  const studyStats = useMemo(() => calculateStudyStatistics(activities), [activities]);
+  // Canonical date ranges for timeframes
+  const { startDate, endDate, dateList } = useMemo(() => {
+    let start = todayStr;
+    let end = todayStr;
+    const list: string[] = [];
 
-  // Productivity Score (0-100) Transparent Breakdown
-  const productivityScore = useMemo(() => {
-    // 1. Goals score (30 pts max)
-    const activeDailyGoals = goals.filter((g) => g.type === 'daily');
-    let goalsPts = 0;
-    if (activeDailyGoals.length > 0) {
-      let completedDaily = 0;
-      activeDailyGoals.forEach((g) => {
-        const entry = g.dailyHistory?.[todayStr];
-        if (entry && (entry.completed || entry.progress >= (g.dailyTarget || 1))) {
-          completedDaily++;
-        }
-      });
-      goalsPts = Math.round((completedDaily / activeDailyGoals.length) * 30);
+    if (timeframe === 'today') {
+      start = todayStr;
+      end = todayStr;
+      list.push(todayStr);
+    } else if (timeframe === '7days') {
+      start = addDays(todayStr, -6);
+      end = todayStr;
+      for (let i = 0; i < 7; i++) {
+        list.push(addDays(start, i));
+      }
+    } else if (timeframe === '30days') {
+      start = addDays(todayStr, -29);
+      end = todayStr;
+      for (let i = 0; i < 30; i++) {
+        list.push(addDays(start, i));
+      }
+    } else if (timeframe === 'this_month') {
+      start = `${todayStr.slice(0, 7)}-01`;
+      end = todayStr;
+      const daysCount = parseInt(todayStr.split('-')[2], 10);
+      for (let i = 0; i < daysCount; i++) {
+        list.push(addDays(start, i));
+      }
     } else {
-      goalsPts = 30; // default if no daily goals set
+      // all_time: Collect all unique dates from stored data
+      start = '1970-01-01';
+      end = '9999-12-31';
+      // For chart, show the last 14 active days if available
+      for (let i = 13; i >= 0; i--) {
+        list.push(addDays(todayStr, -i));
+      }
     }
 
-    // 2. Habits score (25 pts max)
-    const activeHabitsList = habits.filter((h) => !h.archived);
-    let habitsPts = 0;
-    if (activeHabitsList.length > 0) {
-      const todayLogs = logs.filter((l) => l.date === todayStr && l.status === 'completed');
-      habitsPts = Math.min(25, Math.round((todayLogs.length / activeHabitsList.length) * 25));
-    } else {
-      habitsPts = 25;
+    return { startDate: start, endDate: end, dateList: list };
+  }, [timeframe, todayStr]);
+
+  const isDateInTimeframe = useMemo(() => {
+    return (dateStr?: string): boolean => {
+      if (!dateStr) return false;
+      const d = dateStr.split('T')[0];
+      if (timeframe === 'all_time') return true;
+      if (timeframe === 'today') return d === todayStr;
+      return d >= startDate && d <= endDate;
+    };
+  }, [timeframe, startDate, endDate, todayStr]);
+
+  // Filtered collections based on timeframe
+  const filteredLogs = useMemo(() => {
+    return logs.filter((l) => isDateInTimeframe(l.date));
+  }, [logs, isDateInTimeframe]);
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((t) => {
+      if (timeframe === 'all_time') return true;
+      if (!t.date) return timeframe === 'today'; // undated tasks show on today
+      return isDateInTimeframe(t.date);
+    });
+  }, [tasks, timeframe, isDateInTimeframe]);
+
+  const filteredActivities = useMemo(() => {
+    return activities.filter((a) => isDateInTimeframe(a.date));
+  }, [activities, isDateInTimeframe]);
+
+  const filteredJournals = useMemo(() => {
+    return journals.filter((j) => isDateInTimeframe(j.date || j.createdAt?.slice(0, 10)));
+  }, [journals, isDateInTimeframe]);
+
+  // Focus & Study statistics for selected timeframe
+  const studyStats = useMemo(() => {
+    let totalMinutes = 0;
+    let longestSession = 0;
+    const subjectBreakdown: Record<string, { minutes: number; sessions: number }> = {};
+
+    for (const act of filteredActivities) {
+      const mins = act.durationMinutes + (act.durationSeconds ? Math.round(act.durationSeconds / 60) : 0);
+      totalMinutes += mins;
+      if (mins > longestSession) longestSession = mins;
+
+      const subj = act.subject || act.category || 'General';
+      if (!subjectBreakdown[subj]) {
+        subjectBreakdown[subj] = { minutes: 0, sessions: 0 };
+      }
+      subjectBreakdown[subj].minutes += mins;
+      subjectBreakdown[subj].sessions += 1;
     }
 
-    // 3. Tasks score (25 pts max)
-    const todayTasks = tasks.filter((t) => t.date === todayStr);
-    let tasksPts = 0;
-    if (todayTasks.length > 0) {
-      const completedToday = todayTasks.filter((t) => t.completed).length;
-      tasksPts = Math.round((completedToday / todayTasks.length) * 25);
-    } else {
-      tasksPts = 25;
-    }
-
-    // 4. Focus minutes score (20 pts max - 1 pt per 5 mins up to 100 mins)
-    const todayFocusMins = studyStats.todayStudyMinutes;
-    const focusPts = Math.min(20, Math.round(todayFocusMins / 5));
-
-    const total = goalsPts + habitsPts + tasksPts + focusPts;
+    const sessionCount = filteredActivities.length;
+    const averageSessionMinutes = sessionCount > 0 ? Math.round(totalMinutes / sessionCount) : 0;
 
     return {
-      total: Math.min(100, Math.max(0, total)),
+      totalMinutes,
+      sessionCount,
+      averageSessionMinutes,
+      longestSession,
+      subjectBreakdown,
+    };
+  }, [filteredActivities]);
+
+  // Daily Chart Trend data
+  const trendData = useMemo(() => {
+    return dateList.map((dateKey) => {
+      const dateLogs = logs.filter((l) => l.date === dateKey && l.status === 'completed');
+      const dateTasks = tasks.filter((t) => t.date === dateKey && t.completed);
+      const dateActs = activities.filter((a) => a.date === dateKey);
+      const focusMins = dateActs.reduce((acc, a) => acc + a.durationMinutes + Math.round((a.durationSeconds || 0) / 60), 0);
+
+      // Format display label: "Oct 14" or "Mon"
+      const parts = dateKey.split('-');
+      const monthNum = parseInt(parts[1], 10);
+      const dayNum = parseInt(parts[2], 10);
+      const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const displayLabel = timeframe === '7days' || timeframe === 'today'
+        ? `${shortMonths[monthNum - 1]} ${dayNum}`
+        : `${dayNum}`;
+
+      return {
+        date: dateKey,
+        label: displayLabel,
+        completions: dateLogs.length + dateTasks.length,
+        habits: dateLogs.length,
+        tasks: dateTasks.length,
+        focusMins,
+      };
+    });
+  }, [dateList, logs, tasks, activities, timeframe]);
+
+  // Productivity Score Calculation (Truthful, verified against actual records)
+  // Empty users receiving 0: Strictly enforced!
+  const productivityScore = useMemo(() => {
+    const activeHabitsList = habits.filter((h) => !h.archived);
+    const activeDailyGoals = goals.filter((g) => g.type === 'daily' && g.status !== 'archived');
+
+    const hasAnyTrackedItems =
+      activeHabitsList.length > 0 ||
+      tasks.length > 0 ||
+      goals.length > 0 ||
+      activities.length > 0;
+
+    // 1. Habits (30 pts max)
+    let habitsPts = 0;
+    if (activeHabitsList.length > 0) {
+      const completedLogs = filteredLogs.filter((l) => l.status === 'completed');
+      const daysInTimeframe = timeframe === 'today'
+        ? 1
+        : timeframe === '7days'
+        ? 7
+        : timeframe === '30days'
+        ? 30
+        : timeframe === 'this_month'
+        ? parseInt(todayStr.split('-')[2], 10)
+        : Math.max(1, new Set(logs.map((l) => l.date)).size);
+
+      const expected = activeHabitsList.length * daysInTimeframe;
+      if (expected > 0 && completedLogs.length > 0) {
+        habitsPts = Math.min(30, Math.round((completedLogs.length / expected) * 30));
+      }
+    }
+
+    // 2. Tasks (25 pts max)
+    let tasksPts = 0;
+    if (filteredTasks.length > 0) {
+      const completedTasks = filteredTasks.filter((t) => t.completed);
+      if (completedTasks.length > 0) {
+        tasksPts = Math.round((completedTasks.length / filteredTasks.length) * 25);
+      }
+    }
+
+    // 3. Goals (25 pts max)
+    let goalsPts = 0;
+    if (activeDailyGoals.length > 0) {
+      let completedEntries = 0;
+      let totalEntries = 0;
+
+      activeDailyGoals.forEach((g) => {
+        if (timeframe === 'today') {
+          totalEntries++;
+          const p = calculateGoalProgress(g, todayStr);
+          if (p.isTodayComplete) completedEntries++;
+        } else {
+          const hist = (g.dailyHistory || {}) as Record<string, { completed?: boolean; progress?: number; target?: number }>;
+          Object.entries(hist).forEach(([date, entry]) => {
+            if (isDateInTimeframe(date)) {
+              totalEntries++;
+              if (entry.completed || (entry.progress !== undefined && entry.progress >= (entry.target || g.dailyTarget || 1))) {
+                completedEntries++;
+              }
+            }
+          });
+        }
+      });
+
+      if (totalEntries > 0 && completedEntries > 0) {
+        goalsPts = Math.min(25, Math.round((completedEntries / totalEntries) * 25));
+      }
+    }
+
+    // 4. Focus minutes (20 pts max)
+    let focusPts = 0;
+    if (studyStats.totalMinutes > 0) {
+      const daysCount = timeframe === 'today' ? 1 : dateList.length;
+      const avgDailyFocus = studyStats.totalMinutes / Math.max(1, daysCount);
+      // 50 minutes average per day yields maximum 20 points
+      focusPts = Math.min(20, Math.round((avgDailyFocus / 50) * 20));
+    }
+
+    // Strict zero score for empty users or 0-activity state
+    if (!hasAnyTrackedItems || (habitsPts === 0 && tasksPts === 0 && goalsPts === 0 && focusPts === 0)) {
+      return {
+        total: 0,
+        breakdown: {
+          goals: { earned: 0, max: 25 },
+          habits: { earned: 0, max: 30 },
+          tasks: { earned: 0, max: 25 },
+          focus: { earned: 0, max: 20 },
+        },
+      };
+    }
+
+    const total = Math.min(100, Math.max(0, habitsPts + tasksPts + goalsPts + focusPts));
+
+    return {
+      total,
       breakdown: {
-        goals: { earned: goalsPts, max: 30 },
-        habits: { earned: habitsPts, max: 25 },
+        goals: { earned: goalsPts, max: 25 },
+        habits: { earned: habitsPts, max: 30 },
         tasks: { earned: tasksPts, max: 25 },
         focus: { earned: focusPts, max: 20 },
       },
     };
-  }, [goals, habits, logs, tasks, studyStats, todayStr]);
+  }, [habits, goals, tasks, activities, logs, filteredLogs, filteredTasks, studyStats, timeframe, todayStr, dateList, isDateInTimeframe]);
 
-  // Overall streak calculation
-  const uniqueDates = [...new Set<string>(logs.filter((l) => l.status === 'completed').map((l) => l.date))].sort();
-  let currentStreak = 0;
-  let bestStreak = 0;
-  let tempStreak = 0;
-  let prevDate: string | null = null;
+  // Overall Streak Stats (Truthful streak engine calculation)
+  const streakStats = useMemo(() => {
+    return calculateStreakStats(logs, 'daily', undefined, todayStr);
+  }, [logs, todayStr]);
 
-  for (const d of uniqueDates) {
-    if (!prevDate) {
-      tempStreak = 1;
-    } else {
-      const diff = Math.floor((new Date(d).getTime() - new Date(prevDate).getTime()) / (1000 * 60 * 60 * 24));
-      if (diff === 1) tempStreak++;
-      else tempStreak = 1;
-    }
-    if (tempStreak > bestStreak) bestStreak = tempStreak;
-    prevDate = d;
-  }
-
-  if (prevDate) {
-    const diff = Math.floor((new Date(todayStr).getTime() - new Date(prevDate).getTime()) / (1000 * 60 * 60 * 24));
-    if (diff <= 1) currentStreak = tempStreak;
-    else currentStreak = 0;
-  }
+  // Tasks Analysis
+  const completedTasks = filteredTasks.filter((t) => t.completed);
+  const taskCompletionRate = filteredTasks.length ? Math.round((completedTasks.length / filteredTasks.length) * 100) : 0;
+  const pendingTasksCount = filteredTasks.length - completedTasks.length;
 
   // Habits Analysis
   const activeHabits = habits.filter((h) => !h.archived);
-
-  // Tasks Analysis
-  const completedTasks = tasks.filter((t) => t.completed);
-  const taskCompletionRate = tasks.length ? Math.round((completedTasks.length / tasks.length) * 100) : 0;
-  const overdueTasks = tasks.filter((t) => !t.completed && new Date(t.date || '') < new Date());
+  const completedHabitLogsCount = filteredLogs.filter((l) => l.status === 'completed').length;
 
   // Goals Analysis
   const activeGoals = goals.filter((g) => g.status === 'in_progress');
@@ -213,6 +408,8 @@ export default function Analytics() {
     Zoology: '#fbbf24',
     Biology: '#10b981',
     Math: '#f43f5e',
+    Study: '#818cf8',
+    Reading: '#c084fc',
     General: '#94a3b8',
   };
 
@@ -226,7 +423,7 @@ export default function Analytics() {
 
   const TABS = [
     { id: 'overall', label: 'Overall' },
-    { id: 'study', label: 'Study & Subjects' },
+    { id: 'study', label: 'Study & Focus' },
     { id: 'habits', label: 'Habits' },
     { id: 'goals', label: 'Goals' },
     { id: 'tasks', label: 'Tasks' },
@@ -248,7 +445,7 @@ export default function Analytics() {
           <div>
             <h1 className="text-lg font-bold text-white tracking-tight">Analytics & Productivity</h1>
             <p className="text-[10px] text-[#7d8495] uppercase tracking-widest font-semibold mt-0.5">
-              Verified Data Insights
+              Verified Stored Records
             </p>
           </div>
         </div>
@@ -262,7 +459,28 @@ export default function Analytics() {
         </button>
       </header>
 
-      {/* Tabs */}
+      {/* Timeframe Selector Pill Bar (Phase 3 Requirement) */}
+      <div className="px-5 pt-3.5 pb-2 border-b border-white/5 bg-background/50">
+        <div className="flex items-center justify-between gap-1 bg-[#12151d] p-1 rounded-2xl border border-white/10">
+          {TIMEFRAMES.map((tf) => (
+            <button
+              key={tf.id}
+              onClick={() => setTimeframe(tf.id)}
+              className={cn(
+                'flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition-all text-center cursor-pointer',
+                timeframe === tf.id
+                  ? 'bg-accent-primary text-black shadow-sm'
+                  : 'text-[#7d8495] hover:text-white hover:bg-white/5'
+              )}
+            >
+              <span className="hidden sm:inline">{tf.label}</span>
+              <span className="sm:hidden">{tf.shortLabel}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Category Tabs */}
       <div className="px-4 py-3 overflow-x-auto hide-scrollbar border-b border-white/5">
         <div className="flex gap-2 min-w-max">
           {TABS.map((tab) => (
@@ -290,7 +508,7 @@ export default function Analytics() {
         ) : (
           <AnimatePresence mode="wait">
             <motion.div
-              key={activeTab}
+              key={`${activeTab}-${timeframe}`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
@@ -303,9 +521,14 @@ export default function Analytics() {
                   <div className="p-5 rounded-3xl bg-surface-card border border-white/10 relative overflow-hidden space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-accent-primary block mb-1">
-                          Productivity Score
-                        </span>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-accent-primary">
+                            Productivity Score
+                          </span>
+                          <span className="text-[10px] text-[#7d8495] font-semibold bg-white/5 px-2 py-0.5 rounded-full border border-white/5">
+                            {TIMEFRAMES.find((t) => t.id === timeframe)?.label}
+                          </span>
+                        </div>
                         <div className="flex items-baseline gap-2">
                           <span className="text-4xl font-black text-white">{productivityScore.total}</span>
                           <span className="text-sm font-semibold text-[#7d8495]">/ 100 pts</span>
@@ -316,14 +539,8 @@ export default function Analytics() {
                       </div>
                     </div>
 
-                    {/* Transparent Breakdown */}
+                    {/* Transparent Breakdown (0 for empty users) */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-white/5 text-xs">
-                      <div className="p-2.5 rounded-xl bg-white/[0.02]">
-                        <span className="text-[10px] text-[#7d8495] block">Goals</span>
-                        <span className="font-bold text-white">
-                          {productivityScore.breakdown.goals.earned}/{productivityScore.breakdown.goals.max} pts
-                        </span>
-                      </div>
                       <div className="p-2.5 rounded-xl bg-white/[0.02]">
                         <span className="text-[10px] text-[#7d8495] block">Habits</span>
                         <span className="font-bold text-white">
@@ -337,6 +554,12 @@ export default function Analytics() {
                         </span>
                       </div>
                       <div className="p-2.5 rounded-xl bg-white/[0.02]">
+                        <span className="text-[10px] text-[#7d8495] block">Goals</span>
+                        <span className="font-bold text-white">
+                          {productivityScore.breakdown.goals.earned}/{productivityScore.breakdown.goals.max} pts
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/[0.02]">
                         <span className="text-[10px] text-[#7d8495] block">Focus</span>
                         <span className="font-bold text-white">
                           {productivityScore.breakdown.focus.earned}/{productivityScore.breakdown.focus.max} pts
@@ -345,53 +568,110 @@ export default function Analytics() {
                     </div>
                   </div>
 
-                  {/* Streak & Consistency Metrics */}
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Summary Metric Badges */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
                       <span className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
-                        Overall Streak
+                        Habits Done
                       </span>
-                      <div className="text-3xl font-black text-white flex items-center gap-1.5">
-                        <Flame className="w-6 h-6 fill-accent-primary text-accent-primary" />
-                        <span>{currentStreak}d</span>
+                      <div className="text-2xl font-black text-white">
+                        {completedHabitLogsCount}
                       </div>
-                      <span className="text-[11px] text-[#7d8495] block">Best: {bestStreak} days</span>
+                      <span className="text-[11px] text-[#7d8495] block">completions</span>
                     </div>
 
                     <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
                       <span className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
-                        Study Time (Week)
+                        Tasks Done
                       </span>
-                      <div className="text-3xl font-black text-white flex items-center gap-1.5">
-                        <Clock className="w-6 h-6 text-blue-400" />
-                        <span>{Math.floor(studyStats.weeklyStudyMinutes / 60)}h</span>
+                      <div className="text-2xl font-black text-white">
+                        {completedTasks.length}
                       </div>
                       <span className="text-[11px] text-[#7d8495] block">
-                        {studyStats.sessionCount} total sessions logged
+                        {filteredTasks.length > 0 ? `${taskCompletionRate}% rate` : '0 tracked'}
                       </span>
                     </div>
+
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <span className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                        Focus Time
+                      </span>
+                      <div className="text-2xl font-black text-accent-primary">
+                        {studyStats.totalMinutes >= 60
+                          ? `${Math.floor(studyStats.totalMinutes / 60)}h ${studyStats.totalMinutes % 60}m`
+                          : `${studyStats.totalMinutes}m`}
+                      </div>
+                      <span className="text-[11px] text-[#7d8495] block">
+                        {studyStats.sessionCount} sessions
+                      </span>
+                    </div>
+
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <span className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                        Active Streak
+                      </span>
+                      <div className="text-2xl font-black text-white flex items-center gap-1">
+                        <Flame className="w-5 h-5 fill-accent-primary text-accent-primary" />
+                        <span>{streakStats.currentStreak}d</span>
+                      </div>
+                      <span className="text-[11px] text-[#7d8495] block">Best: {streakStats.bestStreak}d</span>
+                    </div>
                   </div>
+
+                  {/* Daily Trend Chart (Real Stored Activity) */}
+                  {trendData.length > 1 && (
+                    <div className="p-5 rounded-3xl bg-surface-card border border-white/5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                          <BarChart3 className="w-4 h-4 text-accent-primary" />
+                          Activity Trend ({TIMEFRAMES.find((t) => t.id === timeframe)?.label})
+                        </h3>
+                        <span className="text-xs text-[#7d8495]">Completions per day</span>
+                      </div>
+
+                      <div className="h-44 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={trendData}>
+                            <XAxis dataKey="label" stroke="#7d8495" fontSize={11} />
+                            <YAxis stroke="#7d8495" fontSize={11} allowDecimals={false} />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: '#12151d',
+                                borderColor: 'rgba(255,255,255,0.1)',
+                                borderRadius: '12px',
+                                fontSize: '12px',
+                              }}
+                            />
+                            <Bar dataKey="habits" name="Habits" fill="#a5ff36" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="tasks" name="Tasks" fill="#38bdf8" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* STUDY & SUBJECTS TAB */}
+              {/* STUDY & FOCUS TAB */}
               {activeTab === 'study' && (
                 <div className="space-y-5">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div className="p-4 rounded-3xl bg-surface-card border border-white/5">
                       <span className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block mb-1">
-                        Today's Focus
+                        Total Focus Time
                       </span>
                       <div className="text-2xl font-black text-accent-primary">
-                        {studyStats.todayStudyMinutes}m
+                        {studyStats.totalMinutes >= 60
+                          ? `${Math.floor(studyStats.totalMinutes / 60)}h ${studyStats.totalMinutes % 60}m`
+                          : `${studyStats.totalMinutes}m`}
                       </div>
                     </div>
                     <div className="p-4 rounded-3xl bg-surface-card border border-white/5">
                       <span className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block mb-1">
-                        Weekly Total
+                        Sessions Completed
                       </span>
                       <div className="text-2xl font-black text-white">
-                        {Math.floor(studyStats.weeklyStudyMinutes / 60)}h {studyStats.weeklyStudyMinutes % 60}m
+                        {studyStats.sessionCount}
                       </div>
                     </div>
                     <div className="p-4 rounded-3xl bg-surface-card border border-white/5 col-span-2 sm:col-span-1">
@@ -408,12 +688,12 @@ export default function Analytics() {
                   <div className="p-5 rounded-3xl bg-surface-card border border-white/5 space-y-4">
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       <BookOpen className="w-4 h-4 text-accent-primary" />
-                      Subject Time Distribution
+                      Subject Focus Distribution
                     </h3>
 
                     {subjectData.length === 0 ? (
                       <p className="text-xs text-[#7d8495] py-4 text-center">
-                        No subject study sessions logged yet. Use the focus timer during your study sessions!
+                        No focus sessions recorded for this timeframe.
                       </p>
                     ) : (
                       <div className="space-y-3">
@@ -451,6 +731,150 @@ export default function Analytics() {
                           ))}
                         </div>
                       </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* HABITS TAB */}
+              {activeTab === 'habits' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <div className="text-2xl font-black text-white">{activeHabits.length}</div>
+                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Active Habits</div>
+                    </div>
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <div className="text-2xl font-black text-white">{completedHabitLogsCount}</div>
+                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">
+                        Completions ({TIMEFRAMES.find((t) => t.id === timeframe)?.label})
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-bold text-white pl-1">Habit Consistency</h3>
+                    {activeHabits.length === 0 ? (
+                      <p className="text-xs text-[#7d8495] py-4 text-center">No active habits tracked.</p>
+                    ) : (
+                      activeHabits.map((habit) => {
+                        const habitLogs = filteredLogs.filter((l) => l.habitId === habit.id && l.status === 'completed');
+                        return (
+                          <div key={habit.id} className="p-4 rounded-2xl bg-surface-card border border-white/5 flex items-center justify-between">
+                            <div>
+                              <h4 className="text-sm font-bold text-white">{habit.name}</h4>
+                              <span className="text-[10px] text-[#7d8495]">{habitLogs.length} completed in timeframe</span>
+                            </div>
+                            <span className="text-xs font-bold text-accent-primary">
+                              {habitLogs.length > 0 ? `${habitLogs.length} logged` : '0 logged'}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* GOALS TAB */}
+              {activeTab === 'goals' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <div className="text-2xl font-black text-white">{activeGoals.length}</div>
+                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Active Goals</div>
+                    </div>
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <div className="text-2xl font-black text-white">{completedGoals.length}</div>
+                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Completed</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {goals.length === 0 ? (
+                      <p className="text-xs text-[#7d8495] py-4 text-center">No goals tracked yet.</p>
+                    ) : (
+                      goals.map((g) => {
+                        const p = calculateGoalProgress(g, todayStr);
+                        return (
+                          <div key={g.id} className="p-4 rounded-2xl bg-surface-card border border-white/5 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm font-bold text-white">{g.title}</span>
+                              <div className="flex items-center gap-2">
+                                {p.currentStreak > 0 && (
+                                  <span className="flex items-center gap-0.5 text-xs font-bold text-amber-400">
+                                    <Flame className="w-3.5 h-3.5 fill-amber-400" />
+                                    {p.currentStreak}d
+                                  </span>
+                                )}
+                                <span className="text-xs font-bold text-accent-primary">
+                                  {g.type === 'daily'
+                                    ? `${p.todayProgress}/${p.todayTarget} ${g.unit || ''}`
+                                    : `${p.overallProgress}/${p.overallTarget} ${g.unit || ''}`}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="w-full h-1.5 rounded-full bg-black/40 overflow-hidden">
+                              <div
+                                className="h-full bg-accent-primary transition-all duration-300 rounded-full"
+                                style={{ width: `${g.type === 'daily' ? p.todayPercent : p.overallPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TASKS TAB */}
+              {activeTab === 'tasks' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <div className="text-2xl font-black text-white">{filteredTasks.length}</div>
+                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Total Tasks</div>
+                    </div>
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <div className="text-2xl font-black text-white">{taskCompletionRate}%</div>
+                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Completion</div>
+                    </div>
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <div className="text-2xl font-black text-white">{completedTasks.length}</div>
+                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Done</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {filteredTasks.length === 0 ? (
+                      <p className="text-xs text-[#7d8495] py-4 text-center">No tasks recorded for this timeframe.</p>
+                    ) : (
+                      filteredTasks.map((t) => (
+                        <div
+                          key={t.id}
+                          className="p-3.5 rounded-2xl bg-surface-card border border-white/5 flex items-center justify-between"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={cn(
+                                'w-5 h-5 rounded-lg flex items-center justify-center border',
+                                t.completed
+                                  ? 'bg-accent-primary/20 border-accent-primary text-accent-primary'
+                                  : 'border-white/20'
+                              )}
+                            >
+                              {t.completed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            </div>
+                            <span className={cn('text-xs font-semibold', t.completed ? 'text-[#7d8495] line-through' : 'text-white')}>
+                              {t.title}
+                            </span>
+                          </div>
+                          {t.date && (
+                            <span className="text-[10px] text-[#7d8495] font-mono">{t.date}</span>
+                          )}
+                        </div>
+                      ))
                     )}
                   </div>
                 </div>
@@ -516,93 +940,45 @@ export default function Analytics() {
                 </div>
               )}
 
-              {/* HABITS TAB */}
-              {activeTab === 'habits' && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
-                      <div className="text-2xl font-black text-white">{activeHabits.length}</div>
-                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Active Habits</div>
-                    </div>
-                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
-                      <div className="text-2xl font-black text-white">{logs.filter((l) => l.status === 'completed').length}</div>
-                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Total Completions</div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-bold text-white pl-1">Habit Consistency</h3>
-                    {activeHabits.map((habit) => {
-                      const habitLogs = logs.filter((l) => l.habitId === habit.id && l.status === 'completed');
-                      return (
-                        <div key={habit.id} className="p-4 rounded-2xl bg-surface-card border border-white/5 flex items-center justify-between">
-                          <div>
-                            <h4 className="text-sm font-bold text-white">{habit.name}</h4>
-                            <span className="text-[10px] text-[#7d8495]">{habitLogs.length} days logged</span>
-                          </div>
-                          <span className="text-xs font-bold text-accent-primary">Active</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* GOALS TAB */}
-              {activeTab === 'goals' && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
-                      <div className="text-2xl font-black text-white">{activeGoals.length}</div>
-                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Active Goals</div>
-                    </div>
-                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
-                      <div className="text-2xl font-black text-white">{completedGoals.length}</div>
-                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Completed</div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {goals.map((g) => (
-                      <div key={g.id} className="p-4 rounded-2xl bg-surface-card border border-white/5 space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-bold text-white">{g.title}</span>
-                          <span className="text-xs font-bold text-accent-primary">
-                            {g.dailyTarget ? `${g.dailyTarget} ${g.unit}/day` : `${g.currentProgress}/${g.target} ${g.unit}`}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* TASKS TAB */}
-              {activeTab === 'tasks' && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
-                      <div className="text-2xl font-black text-white">{tasks.length}</div>
-                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Total Tasks</div>
-                    </div>
-                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
-                      <div className="text-2xl font-black text-white">{taskCompletionRate}%</div>
-                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Completion</div>
-                    </div>
-                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
-                      <div className="text-2xl font-black text-white">{completedTasks.length}</div>
-                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Done</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* JOURNAL TAB */}
               {activeTab === 'journal' && (
                 <div className="space-y-4">
-                  <div className="p-4 rounded-3xl bg-surface-card border border-white/5">
-                    <div className="text-2xl font-black text-white">{journals.length}</div>
-                    <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">Total Entries Logged</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <div className="text-2xl font-black text-white">{filteredJournals.length}</div>
+                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">
+                        Entries ({TIMEFRAMES.find((t) => t.id === timeframe)?.label})
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-3xl bg-surface-card border border-white/5 space-y-1">
+                      <div className="text-2xl font-black text-white">{journals.length}</div>
+                      <div className="text-[10px] font-semibold text-[#7d8495] uppercase tracking-wider">All-Time Entries</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {filteredJournals.length === 0 ? (
+                      <p className="text-xs text-[#7d8495] py-4 text-center">No journal entries in this timeframe.</p>
+                    ) : (
+                      filteredJournals.map((j) => (
+                        <div key={j.id} className="p-4 rounded-2xl bg-surface-card border border-white/5 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-bold text-white">{j.title || 'Untitled Entry'}</h4>
+                            <span className="text-[10px] text-[#7d8495]">{j.date}</span>
+                          </div>
+                          <p className="text-xs text-[#a1a8b9] line-clamp-2">{j.text}</p>
+                          {j.tags && j.tags.length > 0 && (
+                            <div className="flex gap-1.5 pt-1">
+                              {j.tags.map((t) => (
+                                <span key={t} className="text-[9px] px-2 py-0.5 rounded-full bg-white/5 text-[#7d8495]">
+                                  #{t}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               )}

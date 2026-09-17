@@ -15,6 +15,17 @@ import {
 } from 'firebase/firestore';
 import { trackGoalCreated, trackGoalCompleted, trackGoalUpdated, trackGoalDeleted } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
+import { isCloudSyncableUser } from './authUtils';
+import { getTodayDateKey, formatDateKey, addDays } from './dateUtils';
+import {
+  calculateGoalProgress,
+  calculateImmutableGoalStreaks,
+  calculateActivityQuantities,
+  GoalProgressResult,
+} from './goalProgressEngine';
+
+export { calculateGoalProgress, calculateImmutableGoalStreaks, calculateActivityQuantities };
+export type { GoalProgressResult };
 
 export interface Milestone {
   id: string;
@@ -102,8 +113,8 @@ const DEFAULT_GOALS: Goal[] = [
     linkToHabit: false,
     linkToTask: true,
     dailyHistory: {
-      [new Date().toLocaleDateString('en-CA')]: {
-        date: new Date().toLocaleDateString('en-CA'),
+      [getTodayDateKey()]: {
+        date: getTodayDateKey(),
         target: 4,
         progress: 3,
         completed: false,
@@ -114,7 +125,7 @@ const DEFAULT_GOALS: Goal[] = [
         for (let i = 1; i <= 14; i++) {
           const d = new Date(now);
           d.setDate(now.getDate() - i);
-          const dStr = d.toLocaleDateString('en-CA');
+          const dStr = formatDateKey(d);
           const progress = i % 4 === 0 ? 3 : 4;
           hist[dStr] = {
             date: dStr,
@@ -268,7 +279,7 @@ export async function ensureDailyGoalTasks(userId?: string) {
   const dailyTaskGoals = localGoals.filter(g => g.type === 'daily' && g.linkToTask && g.status === 'in_progress');
   if (dailyTaskGoals.length === 0) return;
 
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todayStr = getTodayDateKey();
   let updatedAny = false;
 
   try {
@@ -305,7 +316,7 @@ export async function ensureDailyGoalTasks(userId?: string) {
 
 export async function getUserGoals(userId?: string): Promise<Goal[]> {
   const local = readLocalGoals();
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     return deduplicateGoals(local);
   }
 
@@ -389,7 +400,7 @@ export async function createGoal(
   userId?: string
 ): Promise<Goal> {
   const tempId = 'temp_goal_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todayStr = getTodayDateKey();
 
   const newGoal: Goal = {
     ...goalData,
@@ -466,7 +477,7 @@ export async function createGoal(
   local.unshift(newGoal);
   saveLocalGoals(local);
 
-  if (userId && userId !== 'local' && userId !== 'default') {
+  if (isCloudSyncableUser(userId)) {
     try {
       const docRef = await addDoc(collection(db, 'goals'), {
         userId,
@@ -521,7 +532,7 @@ export async function updateGoal(
   // If editing Daily Target: Past days' history MUST NOT be modified!
   // The new target applies only from today onward.
   if (updates.dailyTarget !== undefined && updates.dailyTarget !== prevGoal.dailyTarget) {
-    const todayStr = new Date().toLocaleDateString('en-CA');
+    const todayStr = getTodayDateKey();
     const existingHistory = { ...(prevGoal.dailyHistory || {}) };
     const todayEntry = existingHistory[todayStr];
 
@@ -557,7 +568,7 @@ export async function updateGoal(
     trackGoalUpdated(updated.category);
   }
 
-  if (userId && userId !== 'local' && userId !== 'default' && !goalId.startsWith('temp_goal_')) {
+  if (isCloudSyncableUser(userId) && !goalId.startsWith('temp_goal_')) {
     try {
       await updateDoc(doc(db, 'goals', goalId), {
         ...updates,
@@ -582,7 +593,26 @@ export async function deleteGoal(goalId: string, userId?: string): Promise<boole
   const filtered = local.filter((g) => g.id !== goalId);
   saveLocalGoals(filtered);
 
-  if (userId && userId !== 'local' && userId !== 'default') {
+  // Unlink any tasks linked to this deleted goal
+  try {
+    const { readLocalTasks, saveLocalTasks } = await import('./taskService');
+    const localTasks = readLocalTasks();
+    let tasksChanged = false;
+    const updatedTasks = localTasks.map((t) => {
+      if (t.goalId === goalId || t.linkedGoalId === goalId) {
+        tasksChanged = true;
+        return { ...t, goalId: undefined, linkedGoalId: undefined };
+      }
+      return t;
+    });
+    if (tasksChanged) {
+      saveLocalTasks(updatedTasks);
+    }
+  } catch {
+    // ignore
+  }
+
+  if (isCloudSyncableUser(userId)) {
     try {
       await deleteDoc(doc(db, 'goals', goalId));
     } catch (err) {
@@ -599,7 +629,7 @@ export function subscribeToGoals(
   userId: string | undefined,
   callback: (goals: Goal[]) => void
 ): () => void {
-  if (!userId || userId === 'local' || userId === 'default') {
+  if (!isCloudSyncableUser(userId)) {
     callback(readLocalGoals());
     return () => {};
   }
@@ -674,23 +704,14 @@ export function getGoalTodayProgress(
   percent: number;
   completed: boolean;
 } {
-  const d = dateStr || new Date().toLocaleDateString('en-CA');
-  if (goal.type === 'daily') {
-    const entry = goal.dailyHistory?.[d];
-    const target = entry ? entry.target : (goal.dailyTarget || goal.target || 1);
-    const progress = entry ? entry.progress : 0;
-    const remaining = Math.max(0, target - progress);
-    const percent = Math.min(100, Math.round((progress / (target || 1)) * 100));
-    const completed = progress >= target;
-    return { target, progress, remaining, percent, completed };
-  } else {
-    const target = goal.target || 100;
-    const progress = goal.currentProgress || 0;
-    const remaining = Math.max(0, target - progress);
-    const percent = Math.min(100, Math.round((progress / (target || 1)) * 100));
-    const completed = goal.status === 'completed' || progress >= target;
-    return { target, progress, remaining, percent, completed };
-  }
+  const res = calculateGoalProgress(goal, dateStr);
+  return {
+    target: res.todayTarget,
+    progress: res.todayProgress,
+    remaining: res.todayRemaining,
+    percent: res.todayPercent,
+    completed: res.isTodayComplete,
+  };
 }
 
 export async function logDailyGoalProgress(
@@ -706,7 +727,7 @@ export async function logDailyGoalProgress(
   if (index === -1) return null;
 
   const goal = local[index];
-  const targetDate = dateStr || new Date().toLocaleDateString('en-CA');
+  const targetDate = dateStr || getTodayDateKey();
   const history = { ...(goal.dailyHistory || {}) };
   const existingEntry = history[targetDate];
 
@@ -740,7 +761,7 @@ export async function logDailyGoalProgress(
   saveLocalGoals(local);
 
   // Sync to Firestore
-  if (userId && userId !== 'local' && userId !== 'default' && !goalId.startsWith('temp_goal_')) {
+  if (isCloudSyncableUser(userId) && !goalId.startsWith('temp_goal_')) {
     try {
       await updateDoc(doc(db, 'goals', goalId), {
         dailyHistory: history,
@@ -800,75 +821,7 @@ export function calculateGoalStreak(goal: Goal): {
   averagePerDay: number;
   completionRate: number;
 } {
-  const history = goal.dailyHistory || {};
-  const entries = Object.values(history);
-  const totalTrackedDays = entries.length;
-
-  let totalCompletedUnits = 0;
-  let completedDaysCount = 0;
-
-  entries.forEach((e) => {
-    totalCompletedUnits += e.progress || 0;
-    if (e.completed || e.progress >= e.target) {
-      completedDaysCount++;
-    }
-  });
-
-  const averagePerDay = totalTrackedDays > 0 ? Math.round((totalCompletedUnits / totalTrackedDays) * 10) / 10 : 0;
-  const completionRate = totalTrackedDays > 0 ? Math.round((completedDaysCount / totalTrackedDays) * 100) : 0;
-
-  // Calculate streaks chronologically
-  const sortedCompletedDates = Object.keys(history)
-    .filter((d) => history[d].completed || history[d].progress >= history[d].target)
-    .sort();
-
-  let bestStreak = 0;
-  let tempStreak = 0;
-  let prevDate: Date | null = null;
-
-  for (const dStr of sortedCompletedDates) {
-    const curDate = new Date(dStr + 'T00:00:00');
-    if (!prevDate) {
-      tempStreak = 1;
-    } else {
-      const diff = Math.round((curDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (diff === 1) {
-        tempStreak++;
-      } else if (diff === 0) {
-        // same day
-      } else {
-        tempStreak = 1;
-      }
-    }
-    if (tempStreak > bestStreak) bestStreak = tempStreak;
-    prevDate = curDate;
-  }
-
-  // Current streak (must be today or yesterday)
-  const todayStr = new Date().toLocaleDateString('en-CA');
-  const todaySuccess = history[todayStr] && (history[todayStr].completed || history[todayStr].progress >= history[todayStr].target);
-
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toLocaleDateString('en-CA');
-  const yesterdaySuccess = history[yesterdayStr] && (history[yesterdayStr].completed || history[yesterdayStr].progress >= history[yesterdayStr].target);
-
-  let currentStreak = 0;
-  if (todaySuccess || yesterdaySuccess) {
-    currentStreak = tempStreak;
-  } else {
-    currentStreak = 0;
-  }
-
-  return {
-    currentStreak,
-    bestStreak,
-    completedDaysCount,
-    totalTrackedDays,
-    totalCompletedUnits,
-    averagePerDay,
-    completionRate,
-  };
+  return calculateImmutableGoalStreaks(goal);
 }
 
 export function getTodayGoalProgress(goal: Goal, todayStr: string): number {
@@ -1023,15 +976,16 @@ export async function addGoalActivity(
   };
 
   const updatedActivities = [...(currentEntry.activities || []), newActivity];
-  const completedCount = updatedActivities.filter(a => a.completed).length;
-  const isDayCompleted = completedCount >= currentEntry.target;
+  const quantities = calculateActivityQuantities(updatedActivities);
+  const target = currentEntry.target || goal.dailyTarget || goal.target || 1;
+  const isDayCompleted = quantities.completedQuantity >= target;
 
   history[dateStr] = {
     ...currentEntry,
     activities: updatedActivities,
-    progress: completedCount,
+    progress: quantities.completedQuantity,
     completed: isDayCompleted,
-    completedAt: isDayCompleted ? new Date().toISOString() : currentEntry.completedAt,
+    completedAt: isDayCompleted ? (currentEntry.completedAt || new Date().toISOString()) : undefined,
   };
 
   await updateGoal(goalId, { dailyHistory: history }, userId);
@@ -1075,14 +1029,16 @@ export async function updateGoalActivity(
   activities[actIndex] = updatedAct;
   dayEntry.activities = activities;
 
-  const completedActivities = activities.filter(a => a.completed).length;
-  const target = dayEntry.target || goal.dailyTarget || 1;
-  const isCompleted = completedActivities >= target;
+  const quantities = calculateActivityQuantities(activities);
+  const target = dayEntry.target || goal.dailyTarget || goal.target || 1;
+  const isCompleted = quantities.completedQuantity >= target;
 
-  dayEntry.progress = completedActivities;
+  dayEntry.progress = quantities.completedQuantity;
   dayEntry.completed = isCompleted;
   if (isCompleted && !dayEntry.completedAt) {
     dayEntry.completedAt = new Date().toISOString();
+  } else if (!isCompleted) {
+    dayEntry.completedAt = undefined;
   }
 
   history[dateStr] = dayEntry;
@@ -1140,9 +1096,14 @@ export async function deleteGoalActivity(
   const remaining = activities.filter(a => a.id !== activityId);
 
   dayEntry.activities = remaining;
-  const completedCount = remaining.filter(a => a.completed).length;
-  dayEntry.progress = completedCount;
-  dayEntry.completed = completedCount >= (dayEntry.target || goal.dailyTarget || 1);
+  const quantities = calculateActivityQuantities(remaining);
+  const target = dayEntry.target || goal.dailyTarget || goal.target || 1;
+  const isCompleted = quantities.completedQuantity >= target;
+  dayEntry.progress = quantities.completedQuantity;
+  dayEntry.completed = isCompleted;
+  if (!isCompleted) {
+    dayEntry.completedAt = undefined;
+  }
 
   history[dateStr] = dayEntry;
   await updateGoal(goalId, { dailyHistory: history }, userId);
@@ -1226,7 +1187,7 @@ export async function rescheduleGoalActivity(
 }
 
 export async function syncLocalGoalsToCloud(userId: string) {
-  if (!userId || userId === 'local' || userId === 'default') return;
+  if (!isCloudSyncableUser(userId)) return;
   const localGoals = readLocalGoals();
   for (const goal of localGoals) {
     if (!goal.userId || goal.userId === 'local' || goal.userId !== userId) {

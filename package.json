@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test": "tsx tests/timezone-consistency.test.ts",
     "verify-env": "node verify-env.js"
   },
   "dependencies": {

@@ -31,8 +31,6 @@ import {
 } from '../lib/analyticsService';
 import ConfigurationDialog from '../components/ui/ConfigurationDialog';
 
-const LOCAL_STORAGE_CHAT_KEY = 'streak_ai_coach_messages_v1';
-
 const SUGGESTED_PROMPTS = [
   '⚡ How do I build consistency?',
   '🎯 Review my active habits',
@@ -49,10 +47,15 @@ export default function AICoach() {
     return profile?.displayName || profile?.name || user?.displayName || 'there';
   }, [profile, user]);
 
+  const chatStorageKey = useMemo(() => {
+    return user?.uid ? `streak_ai_coach_messages_${user.uid}` : 'streak_ai_coach_messages_guest';
+  }, [user?.uid]);
+
   // Load chat history or initial welcome
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const initialKey = user?.uid ? `streak_ai_coach_messages_${user.uid}` : 'streak_ai_coach_messages_guest';
     try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_CHAT_KEY);
+      const saved = localStorage.getItem(initialKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -71,6 +74,30 @@ export default function AICoach() {
       },
     ];
   });
+
+  // Reload messages if user changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(chatStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load user-isolated chat:', e);
+    }
+    setMessages([
+      {
+        id: 'initial-welcome',
+        role: 'ai',
+        text: `Hey ${userName}! 👋 I'm your STREAK AI Coach.\n\nI'm here to help you build momentum through small, consistent actions every day. What habit or routine are we working on today?`,
+        timestamp: Date.now(),
+      },
+    ]);
+  }, [chatStorageKey, userName]);
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -126,11 +153,11 @@ export default function AICoach() {
   // Save conversation locally
   useEffect(() => {
     try {
-      localStorage.setItem(LOCAL_STORAGE_CHAT_KEY, JSON.stringify(messages));
+      localStorage.setItem(chatStorageKey, JSON.stringify(messages));
     } catch (e) {
       console.warn('Failed saving messages to localStorage:', e);
     }
-  }, [messages]);
+  }, [messages, chatStorageKey]);
 
   const loadConfigStatus = async () => {
     const status = await getSystemConfiguration();
@@ -291,7 +318,7 @@ export default function AICoach() {
     };
     setMessages([resetGreeting]);
     setErrorState(null);
-    localStorage.removeItem(LOCAL_STORAGE_CHAT_KEY);
+    localStorage.removeItem(chatStorageKey);
   };
 
   const handleCopy = (id: string, text: string) => {

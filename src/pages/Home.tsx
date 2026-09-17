@@ -20,6 +20,7 @@ import confetti from 'canvas-confetti';
 import { HabitConsistencyHeatmap } from '../components/ui/HabitConsistencyHeatmap';
 import { useTimer } from '../lib/timer/TimerContext';
 import { Play, Pause, Maximize2 } from 'lucide-react';
+import { getTodayDateKey, addDays } from '../lib/dateUtils';
 
 // Reference authentic default habits matching the design reference
 const DEFAULT_HABITS: Habit[] = [
@@ -104,7 +105,28 @@ export default function Home() {
     'default-3': 0,
   });
 
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  const [todayStr, setTodayStr] = useState<string>(() => getTodayDateKey());
+
+  // Check for midnight rollover and update active day
+  useEffect(() => {
+    const checkDateRollover = () => {
+      const currentKey = getTodayDateKey();
+      setTodayStr((prev) => (prev !== currentKey ? currentKey : prev));
+    };
+
+    const interval = setInterval(checkDateRollover, 60000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkDateRollover();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
 
   // Real-time task synchronization
   useEffect(() => {
@@ -154,7 +176,7 @@ export default function Home() {
       setLogs(localLogs);
 
       const progressMap: Record<string, number> = {};
-      const todayString = new Date().toLocaleDateString('en-CA');
+      const todayString = getTodayDateKey();
       localLogs.forEach((l) => {
         if (l.date === todayString) {
           progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
@@ -166,8 +188,7 @@ export default function Home() {
     }
     setIsLoading(true);
     try {
-      const today = new Date();
-      const todayString = today.toLocaleDateString('en-CA');
+      const todayString = getTodayDateKey();
 
       const [fetchedHabits, fetchedLogs] = await Promise.all([
         getUserHabits(user.uid),
@@ -484,35 +505,23 @@ export default function Home() {
       }
     });
     
-    // Sort descending
-    const sorted = Array.from(completedDates).sort((a, b) => b.localeCompare(a));
-    if (sorted.length === 0) return 0;
+    if (completedDates.size === 0) return 0;
     
-    const today = new Date().toLocaleDateString('en-CA');
-    let checkDate = new Date(today);
+    const today = getTodayDateKey();
+    const yesterdayStr = addDays(today, -1);
+    const hasToday = completedDates.has(today);
+    const hasYesterday = completedDates.has(yesterdayStr);
     
-    let currentStreak = 0;
-    const hasToday = sorted.includes(today);
-    
-    const yesterday = new Date(checkDate);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toLocaleDateString('en-CA');
-    const hasYesterday = sorted.includes(yesterdayStr);
-    
-    if (hasToday || hasYesterday) {
-      checkDate = new Date(hasToday ? today : yesterdayStr);
-    } else {
+    if (!hasToday && !hasYesterday) {
       return 0; // Streak broken
     }
     
-    while (true) {
-      const dateStr = checkDate.toLocaleDateString('en-CA');
-      if (sorted.includes(dateStr)) {
-        currentStreak++;
-        checkDate.setDate(checkDate.getDate() - 1);
-      } else {
-        break;
-      }
+    let cursor = hasToday ? today : yesterdayStr;
+    let currentStreak = 0;
+    
+    while (completedDates.has(cursor)) {
+      currentStreak++;
+      cursor = addDays(cursor, -1);
     }
     
     return currentStreak;
@@ -809,7 +818,6 @@ export default function Home() {
       {(() => {
         const dailyGoals = goals.filter((g) => g.type === 'daily' && g.status !== 'paused');
         if (dailyGoals.length === 0) return null;
-        const todayStr = new Date().toLocaleDateString('en-CA');
 
         return (
           <div className="space-y-3">
@@ -970,7 +978,7 @@ export default function Home() {
               let badge: React.ReactNode = null;
               
               if (habit.name.toLowerCase().includes('sleep')) {
-                const sleepLog = logs.find(l => l.habitId === habit.id && l.date === new Date().toLocaleDateString('en-CA'));
+                const sleepLog = logs.find(l => l.habitId === habit.id && l.date === todayStr);
                 const actualSleep = sleepLog?.progressValue || 0;
                 const bedtimeFmt = habit.sleepBedtime ? format24To12(habit.sleepBedtime) : '11:00 PM';
                 const wakeFmt = habit.sleepWakeTime ? format24To12(habit.sleepWakeTime) : '07:00 AM';
@@ -1177,12 +1185,19 @@ export default function Home() {
                     >
                       {task.title}
                     </span>
-                    {task.time && (
-                      <span className="text-[12px] font-medium text-[#7d8495] flex items-center gap-1 mt-0.5">
-                        <Clock className="w-3 h-3 text-[#7d8495]" />
-                        {task.time} {task.category ? `· ${task.category}` : ''}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2 mt-0.5 text-[12px] font-medium text-[#7d8495]">
+                      {task.time && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-[#7d8495]" />
+                          {task.time} {task.category ? `· ${task.category}` : ''}
+                        </span>
+                      )}
+                      {typeof task.targetQuantity === 'number' && task.targetQuantity > 0 && (
+                        <span className="text-accent-primary font-bold">
+                          {task.progressQuantity ?? 0}/{task.targetQuantity} {task.unit || 'units'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 

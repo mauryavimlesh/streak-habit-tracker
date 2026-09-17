@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../lib/AuthContext';
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { isCloudSyncableUser } from '../../lib/authUtils';
 import {
   Goal,
   GoalActivity,
@@ -16,6 +17,7 @@ import {
   rescheduleGoalActivity,
   readLocalGoals,
 } from '../../lib/goalService';
+import { calculateGoalProgress } from '../../lib/goalProgressEngine';
 import {
   ChevronLeft,
   Plus,
@@ -39,6 +41,8 @@ import {
 import { cn } from '../../lib/utils';
 import confetti from 'canvas-confetti';
 import { calculateSmartStudySchedule, SmartScheduleSlot, createGoogleCalendarEventUrl } from '../../lib/googleCalendarService';
+import { MilestoneIndicator } from '../../components/goals/MilestoneIndicator';
+import { getTodayDateKey } from '../../lib/dateUtils';
 
 export default function GoalDetail() {
   const { goalId } = useParams();
@@ -47,7 +51,7 @@ export default function GoalDetail() {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todayStr = getTodayDateKey();
   const [selectedDate, setSelectedDate] = useState(todayStr);
 
   // Add Activity Modal states
@@ -90,9 +94,9 @@ export default function GoalDetail() {
     loadGoal();
 
     // Setup Firestore realtime listener if available
-    const path = user?.uid && user.uid !== 'local' ? `goals/${goalId}` : null;
+    const isCloud = isCloudSyncableUser(user?.uid);
     let unsub = () => {};
-    if (path) {
+    if (isCloud) {
       try {
         unsub = onSnapshot(
           doc(db, 'goals', goalId),
@@ -154,12 +158,13 @@ export default function GoalDetail() {
   const activities = currentDayEntry.activities || [];
   const subjects = goal.subjects || [];
 
-  const totalCompletedActs = activities.filter((a) => a.completed).length;
+  const goalProgress = calculateGoalProgress(goal, selectedDate);
   const totalActs = activities.length;
-  const dayTarget = currentDayEntry.target || goal.dailyTarget || 1;
-  const isDayTargetAchieved = totalCompletedActs >= dayTarget;
-  const progressPercent = totalActs > 0 ? Math.round((totalCompletedActs / Math.max(dayTarget, totalActs)) * 100) : 0;
-  const streakStats = calculateGoalStreak(goal);
+  const streakStats = {
+    currentStreak: goalProgress.currentStreak,
+    bestStreak: goalProgress.bestStreak,
+    completedDaysCount: goalProgress.completedDaysCount,
+  };
 
   // Group activities by subject
   const groupedActivities = activities.reduce((acc, act) => {
@@ -384,13 +389,15 @@ export default function GoalDetail() {
               Target Status
             </span>
             <div className="text-2xl font-black text-white flex items-center gap-1.5">
-              <span>{totalCompletedActs} / {dayTarget}</span>
-              {isDayTargetAchieved && (
+              <span>{goalProgress.todayProgress} / {goalProgress.todayTarget}</span>
+              {goalProgress.isTodayComplete && (
                 <CheckCircle2 className="w-5 h-5 text-accent-primary shrink-0" />
               )}
             </div>
             <span className="text-[11px] text-[#7d8495] block mt-0.5">
-              {isDayTargetAchieved ? 'Target Crushed! 🔥' : `${dayTarget - totalCompletedActs} more needed`}
+              {goalProgress.isTodayComplete
+                ? 'Target Crushed! 🔥'
+                : `${goalProgress.todayRemaining} ${goal.unit || 'units'} needed`}
             </span>
           </div>
 
@@ -400,10 +407,10 @@ export default function GoalDetail() {
             </span>
             <div className="text-2xl font-black text-white flex items-center gap-1.5">
               <Flame className="w-5 h-5 fill-accent-primary text-accent-primary" />
-              <span>{streakStats?.currentStreak || 0}d</span>
+              <span>{goalProgress.currentStreak}d</span>
             </div>
             <span className="text-[11px] text-[#7d8495] block mt-0.5">
-              Best: {streakStats?.bestStreak || 0} days
+              Best: {goalProgress.bestStreak} days ({goalProgress.completedDaysCount} total)
             </span>
           </div>
 
@@ -412,13 +419,57 @@ export default function GoalDetail() {
               Daily Progress
             </span>
             <div className="text-2xl font-black text-accent-primary">
-              {progressPercent}%
+              {goalProgress.todayPercent}%
             </div>
             <span className="text-[11px] text-[#7d8495] block mt-0.5">
-              {totalActs} activities planned
+              {totalActs > 0 ? `${goalProgress.todayCompletedActivityCount}/${totalActs} activities finished` : `${goalProgress.todayProgress} ${goal.unit || 'units'} logged`}
             </span>
           </div>
         </div>
+
+        {/* Pace and Target Date Banner */}
+        {goalProgress.paceStatus !== 'no_deadline' && (
+          <div
+            className={cn(
+              'p-3.5 rounded-2xl border flex items-center justify-between text-xs',
+              goalProgress.paceStatus === 'ahead' || goalProgress.paceStatus === 'completed'
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                : goalProgress.paceStatus === 'on_track'
+                ? 'bg-accent-primary/10 border-accent-primary/20 text-accent-primary'
+                : goalProgress.paceStatus === 'at_risk'
+                ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+                : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+            )}
+          >
+            <div className="flex items-center gap-2.5">
+              <Target className="w-4 h-4 shrink-0" />
+              <div>
+                <span className="font-bold block">{goalProgress.paceMessage}</span>
+                <span className="text-[11px] opacity-80">
+                  Target Date: {goal.targetDate} ({goalProgress.remainingDays} days remaining)
+                </span>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <span className="font-extrabold text-sm block">
+                {goalProgress.overallPercent}%
+              </span>
+              <span className="text-[10px] opacity-75">
+                {goalProgress.overallProgress}/{goalProgress.overallTarget} {goal.unit || 'units'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Visual Milestone Indicator (25%, 50%, 75%, 100%) */}
+        <MilestoneIndicator
+          goalTitle={goal.title}
+          unit={goal.unit || 'units'}
+          currentQuantity={goalProgress.overallProgress}
+          targetQuantity={goalProgress.overallTarget}
+          dailyQuantity={goalProgress.todayProgress}
+          dailyTarget={goalProgress.todayTarget}
+        />
 
         {/* Subjects Filter Chips */}
         {subjects.length > 0 && (
