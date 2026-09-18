@@ -101,7 +101,7 @@ export function TaskItemCard({ task, onToggle, onEdit, onDelete, onUpdateProgres
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.18 }}
       className={cn(
-        'group relative flex items-center justify-between p-3.5 sm:p-4 rounded-[22px] transition-all duration-200 border select-none',
+        'group relative flex items-center justify-between p-3.5 sm:p-4 rounded-[22px] transition-all duration-200 border',
         task.completed
           ? 'bg-[#111318]/70 border-[#1a1d24] opacity-75'
           : 'bg-[#14161e] border-[#202532] hover:border-[#2f3647] shadow-[0_4px_16px_rgba(0,0,0,0.3)]'

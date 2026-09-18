@@ -9,7 +9,7 @@ export default function Feedback() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24">
       <SEO
         title="Feedback & Bug Reports — STREAK"
         noindex={true}

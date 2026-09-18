@@ -333,7 +333,7 @@ export default function Activity() {
     const progress = state.targetDurationMs ? Math.min(1, elapsedMs / state.targetDurationMs) : 0;
     
     return (
-      <div className="min-h-screen bg-background text-white flex flex-col select-none">
+      <div className="min-h-screen bg-background text-white flex flex-col">
         <AnimatePresence>
           {!isMaximized && (
             <motion.header 
@@ -461,7 +461,7 @@ export default function Activity() {
 
   // Setup state
   return (
-    <div className="min-h-screen bg-background text-white flex flex-col select-none">
+    <div className="min-h-screen bg-background text-white flex flex-col">
       <header className="px-5 py-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-background/95 backdrop-blur-md z-10">
         <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-full hover:bg-white/5 transition-colors">
           <ChevronLeft className="w-6 h-6" />

@@ -85,14 +85,14 @@ export function AddActionMenu({ isOpen, onClose, onSelectAction }: AddActionMenu
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 select-none">
+      <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+          className="absolute inset-0 bg-black/80 backdrop-blur-sm cursor-pointer"
         />
 
         {/* Bottom Sheet Modal */}
@@ -101,7 +101,7 @@ export function AddActionMenu({ isOpen, onClose, onSelectAction }: AddActionMenu
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 120 }}
           transition={{ type: 'spring', damping: 26, stiffness: 320 }}
-          className="relative w-full max-w-md bg-surface-card border-t sm:border border-[#212634] rounded-t-[32px] sm:rounded-[32px] p-5 shadow-[0_-12px_40px_rgba(0,0,0,0.6)] z-10 overflow-hidden mb-[74px] sm:mb-0 bottom-sheet action-sheet"
+          className="relative w-full max-w-md bg-surface-card border-t sm:border border-[#212634] rounded-t-[32px] sm:rounded-[32px] p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-5 shadow-[0_-12px_40px_rgba(0,0,0,0.6)] z-10 overflow-hidden bottom-sheet action-sheet"
         >
           {/* Top Pull Indicator on mobile */}
           <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mb-3 sm:hidden" />

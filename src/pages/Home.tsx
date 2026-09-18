@@ -18,8 +18,6 @@ import { Edit2, Trash2, Share } from 'lucide-react';
 import UserAvatar from '../components/profile/UserAvatar';
 import confetti from 'canvas-confetti';
 import { HabitConsistencyHeatmap } from '../components/ui/HabitConsistencyHeatmap';
-import { useTimer } from '../lib/timer/TimerContext';
-import { Play, Pause, Maximize2 } from 'lucide-react';
 import { getTodayDateKey, addDays } from '../lib/dateUtils';
 import { ActiveTimerWidget } from "../components/home/ActiveTimerWidget";
 
@@ -600,7 +598,7 @@ export default function Home() {
   };
 
   return (
-    <div className="p-5 max-w-md mx-auto space-y-6 select-none">
+    <div className="p-5 max-w-md mx-auto space-y-6">
       {/* Header */}
       <header className="flex items-start justify-between pt-3">
         <div>

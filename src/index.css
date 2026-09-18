@@ -23,6 +23,10 @@
 }
 
 @layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     @apply bg-[var(--app-bg)] text-text-primary antialiased selection:bg-accent-primary/30 selection:text-white min-h-screen;
     background-color: var(--app-bg);
@@ -30,6 +34,26 @@
     transition: background-color 0.3s ease, color 0.3s ease;
     -webkit-tap-highlight-color: transparent;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Ensure input fields, textareas, and contenteditable elements are always selectable, focusable, and typeable */
+  input,
+  textarea,
+  select,
+  [contenteditable="true"] {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    touch-action: auto !important;
+  }
+
+  /* Remove 300ms mobile click delay and prevent double-tap gesture interference */
+  button,
+  [role="button"],
+  a,
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"] {
+    touch-action: manipulation;
   }
 }
 

@@ -16,7 +16,7 @@ export function checkIsStandalone(): boolean {
   const standaloneMedia = window.matchMedia('(display-mode: standalone)').matches;
   const overlayMedia = window.matchMedia('(display-mode: window-controls-overlay)').matches;
   const navStandalone = (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-  const androidAppReferrer = document.referrer.includes('android-app://');
+  const androidAppReferrer = typeof document !== 'undefined' && typeof document.referrer === 'string' ? document.referrer.includes('android-app://') : false;
 
   return standaloneMedia || overlayMedia || navStandalone || androidAppReferrer;
 }

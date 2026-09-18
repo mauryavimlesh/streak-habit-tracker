@@ -386,7 +386,7 @@ export default function AICoach() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-background text-white max-w-lg mx-auto select-none">
+    <div className="flex flex-col h-[100dvh] min-h-[100dvh] bg-background text-white max-w-lg mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between px-5 py-4 border-b border-[#1f232c] bg-background/95 backdrop-blur-md sticky top-0 z-10">
         

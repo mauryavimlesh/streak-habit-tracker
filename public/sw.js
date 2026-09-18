@@ -2,7 +2,7 @@
 // Supports Versioned Precaching, Stale-While-Revalidate for Assets, Network-First for Navigation,
 // Safe Controlled Updates, Background Sync, and Notification Actions.
 
-const CACHE_VERSION = 'streak-v3.2';
+const CACHE_VERSION = 'streak-v3.3';
 const PRECACHE_NAME = `streak-precache-${CACHE_VERSION}`;
 const STATIC_CACHE = `streak-static-${CACHE_VERSION}`;
 const PAGES_CACHE = `streak-pages-${CACHE_VERSION}`;
@@ -97,7 +97,21 @@ self.addEventListener('fetch', (event) => {
   // 3. STRICT BYPASS: Never cache dynamic API routes, AI Coach, Plan Extraction, or Server health
   if (url.pathname.startsWith('/api/')) return;
 
-  // 4. STRICT BYPASS: Never cache Firebase, Firestore, Google Auth, or third-party analytical endpoints
+  // 4. STRICT BYPASS: Vite development server, HMR, unbundled modules, and sourcemaps
+  if (
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.searchParams.has('v') ||
+    url.searchParams.has('t') ||
+    url.pathname.endsWith('.ts') ||
+    url.pathname.endsWith('.tsx') ||
+    url.pathname.endsWith('.map')
+  ) {
+    return;
+  }
+
+  // 5. STRICT BYPASS: Never cache Firebase, Firestore, Google Auth, or third-party analytical endpoints
   if (
     url.hostname.includes('firestore.googleapis.com') ||
     url.hostname.includes('firebaseio.com') ||
@@ -112,7 +126,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. Navigation Requests (HTML SPA Fallback): Network-First with Cache Fallback
+  // 6. Navigation Requests (HTML SPA Fallback): Network-First with Cache Fallback
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -147,7 +161,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 6. Google Fonts (Cache-First)
+  // 7. Google Fonts (Cache-First)
   const isGoogleFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
   if (isGoogleFont) {
     event.respondWith(
@@ -165,9 +179,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 7. Same-origin Static Assets & Images: Stale-While-Revalidate
+  // 8. Same-origin Static Production Assets & Media (Stale-While-Revalidate)
   const isSameOrigin = url.origin === self.location.origin;
-  if (isSameOrigin) {
+  const isStaticAsset =
+    url.pathname.startsWith('/assets/') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css') ||
+    url.pathname.endsWith('.png') ||
+    url.pathname.endsWith('.jpg') ||
+    url.pathname.endsWith('.jpeg') ||
+    url.pathname.endsWith('.svg') ||
+    url.pathname.endsWith('.ico') ||
+    url.pathname.endsWith('.webp') ||
+    url.pathname.endsWith('.webmanifest') ||
+    url.pathname.endsWith('.woff') ||
+    url.pathname.endsWith('.woff2');
+
+  if (isSameOrigin && isStaticAsset) {
     event.respondWith(
       caches.match(request).then((cachedResponse) => {
         const fetchPromise = fetch(request)

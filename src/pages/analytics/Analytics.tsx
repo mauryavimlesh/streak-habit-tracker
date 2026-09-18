@@ -432,7 +432,7 @@ export default function Analytics() {
   ] as const;
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-white select-none pb-24">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24">
       {/* Header */}
       <header className="px-5 py-4 flex items-center justify-between border-b border-white/5 sticky top-0 bg-background/95 backdrop-blur-md z-10">
         <div className="flex items-center gap-3">

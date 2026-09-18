@@ -103,6 +103,7 @@ export const PWAInstallBanner: React.FC = () => {
       }
     }
     // For iOS or Android fallback without direct prompt, launch the guidance modal
+    setIsVisible(false);
     setIsModalOpen(true);
   };
 
@@ -153,11 +154,11 @@ export const PWAInstallBanner: React.FC = () => {
       <AnimatePresence>
         {isVisible && !isInstalled && (
           <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.98 }}
+            initial={{ opacity: 0, y: -20, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.98 }}
+            exit={{ opacity: 0, y: -20, scale: 0.98 }}
             transition={{ duration: 0.28, ease: 'easeOut' }}
-            className="fixed bottom-20 left-4 right-4 md:bottom-6 md:left-auto md:right-6 md:max-w-md z-40"
+            className="fixed top-3 left-3 right-3 sm:top-4 sm:left-auto sm:right-6 sm:max-w-md z-40"
           >
             {/* STREAK Signature Dark Theme & Vibrant Accent */}
             <div className="relative overflow-hidden rounded-2xl bg-[#0d0e12]/95 border border-[#232733] shadow-[0_12px_36px_rgba(0,0,0,0.7)] backdrop-blur-xl p-3.5 text-white">

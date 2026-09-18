@@ -171,7 +171,7 @@ export default function Journal() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24">
       {/* Header */}
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -513,7 +513,7 @@ export default function Journal() {
       <AnimatePresence>
         {viewingGallery && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md select-none"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md cursor-pointer"
             onClick={() => setViewingGallery(null)}
           >
             <motion.div

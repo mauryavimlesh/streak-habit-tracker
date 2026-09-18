@@ -196,7 +196,7 @@ export function CreateTaskBottomSheet({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center select-none">
+      <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
         {/* Backdrop blur overlay */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -204,7 +204,7 @@ export function CreateTaskBottomSheet({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
           onClick={onClose}
-          className="absolute inset-0 bg-black/75 backdrop-blur-md"
+          className="absolute inset-0 bg-black/75 backdrop-blur-md cursor-pointer"
         />
 
         {/* Glass-effect Bottom Sheet */}

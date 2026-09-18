@@ -24,6 +24,17 @@ export function registerPWA(): Promise<ServiceWorkerRegistration | null> {
     return Promise.resolve(null);
   }
 
+  // In development mode, unregister any active service worker to avoid stale asset caching and thread contention with Vite
+  if (import.meta.env.DEV) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister();
+        console.info('[PWA] Unregistered development service worker for clean Vite performance.');
+      }
+    });
+    return Promise.resolve(null);
+  }
+
   return navigator.serviceWorker
     .register('/sw.js', { scope: '/' })
     .then((reg) => {

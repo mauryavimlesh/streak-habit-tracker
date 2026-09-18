@@ -295,7 +295,7 @@ export default function GoalDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0d0e12] text-white pb-24 select-none">
+    <div className="min-h-screen bg-[#0d0e12] text-white pb-24">
       {/* Sticky Header */}
       <header className="sticky top-0 z-20 bg-[#0d0e12]/90 backdrop-blur-xl border-b border-white/5 p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">

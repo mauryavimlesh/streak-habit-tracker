@@ -45,7 +45,7 @@ export default function HelpSupport() {
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24">
       <SEO
         socialConfig={GUIDE_SOCIAL_REGISTRY['/support']}
       />

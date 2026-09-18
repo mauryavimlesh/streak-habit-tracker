@@ -22,13 +22,17 @@ export const AddToHomeScreenModal: React.FC<AddToHomeScreenModalProps> = ({ isOp
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div 
+        onClick={onClose}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm cursor-pointer"
+      >
         <motion.div
+          onClick={(e) => e.stopPropagation()}
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
           transition={{ duration: 0.2 }}
-          className="relative w-full max-w-md rounded-2xl bg-[#0d0e12] border border-[#232733] p-6 text-white shadow-2xl overflow-hidden"
+          className="relative w-full max-w-md rounded-2xl bg-[#0d0e12] border border-[#232733] p-6 text-white shadow-2xl overflow-hidden cursor-default"
         >
           {/* Subtle Ambient Glow */}
           <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#a5ff36]/10 rounded-full blur-3xl pointer-events-none" />

@@ -119,7 +119,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-white pb-24 select-none">
+    <div className="flex flex-col min-h-screen bg-background text-white pb-24">
       {/* Header */}
       <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-white/10 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">

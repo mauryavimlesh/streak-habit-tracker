@@ -100,7 +100,7 @@ export function DaySchedule({
   const hasGoalActivities = goals.some((g) => (g.dailyHistory?.[selectedDateStr]?.activities?.length || 0) > 0);
 
   return (
-    <div className="space-y-6 pt-1 pb-16 select-none">
+    <div className="space-y-6 pt-1 pb-16">
       {/* Date & Focus Status Header */}
       <div className="flex items-center gap-2.5 text-xs font-semibold text-[#8e96a8]">
         <div className="flex items-center gap-1.5 bg-[#14161e] border border-[#212634] px-3 py-1.5 rounded-full shadow-sm">
