@@ -227,11 +227,24 @@ export const createHabit = async (habitData: Omit<Habit, 'id' | 'createdAt' | 'u
   return tempId;
 };
 
-export const getUserHabits = async (userId: string): Promise<Habit[]> => {
+let habitsMemoryCache: Habit[] | null = null;
+let habitsCacheTimestamp = 0;
+const CACHE_TTL = 5 * 60 * 1000;
+
+export const clearHabitCaches = () => {
+  habitsMemoryCache = null;
+  habitLogsMemoryCache = null;
+};
+
+export const getUserHabits = async (userId: string, force = false): Promise<Habit[]> => {
   const local = readLocalHabits();
   
   if (!isCloudSyncableUser(userId)) {
     return deduplicateHabits(local);
+  }
+
+  if (!force && habitsMemoryCache && Date.now() - habitsCacheTimestamp < CACHE_TTL) {
+    return habitsMemoryCache;
   }
 
   try {
@@ -274,11 +287,15 @@ export const getUserHabits = async (userId: string): Promise<Habit[]> => {
       const clean = deduplicateHabits(firestoreHabits);
       saveLocalHabits(clean);
       localStorage.setItem(`streak_habits_initialized_${userId}`, 'true');
+      habitsMemoryCache = clean;
+      habitsCacheTimestamp = Date.now();
       return clean;
     } else {
       const isInitialized = localStorage.getItem(`streak_habits_initialized_${userId}`);
       if (isInitialized) {
         saveLocalHabits([]);
+        habitsMemoryCache = [];
+        habitsCacheTimestamp = Date.now();
         return [];
       }
       return deduplicateHabits(local);
@@ -588,7 +605,10 @@ export const seedDefaultHabits = async (userId: string): Promise<Habit[]> => {
   }
 };
 
-export const getHabitLogs = async (userId: string, startDate?: string, endDate?: string): Promise<HabitLog[]> => {
+let habitLogsMemoryCache: HabitLog[] | null = null;
+let logsCacheTimestamp = 0;
+
+export const getHabitLogs = async (userId: string, startDate?: string, endDate?: string, force = false): Promise<HabitLog[]> => {
   const local = readLocalLogs();
   if (!isCloudSyncableUser(userId)) {
     let logs = local;
@@ -596,6 +616,14 @@ export const getHabitLogs = async (userId: string, startDate?: string, endDate?:
     if (endDate) logs = logs.filter(l => l.date <= endDate);
     return logs.sort((a, b) => b.date.localeCompare(a.date));
   }
+
+  if (!force && habitLogsMemoryCache && Date.now() - logsCacheTimestamp < CACHE_TTL) {
+    let logs = habitLogsMemoryCache;
+    if (startDate) logs = logs.filter(l => l.date >= startDate);
+    if (endDate) logs = logs.filter(l => l.date <= endDate);
+    return logs.sort((a, b) => b.date.localeCompare(a.date));
+  }
+
   try {
     const q = query(
       collection(db, 'habit_logs'),
@@ -626,6 +654,8 @@ export const getHabitLogs = async (userId: string, startDate?: string, endDate?:
     });
     const merged = Array.from(map.values());
     saveLocalLogs(merged);
+    habitLogsMemoryCache = merged;
+    logsCacheTimestamp = Date.now();
     
     return merged.sort((a, b) => b.date.localeCompare(a.date));
   } catch (error) {
@@ -895,3 +925,7 @@ export const subscribeToHabitLogs = (
     }
   );
 };
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('streak_habits_updated', () => clearHabitCaches());
+}

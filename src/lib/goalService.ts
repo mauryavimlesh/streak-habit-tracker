@@ -314,10 +314,22 @@ export async function ensureDailyGoalTasks(userId?: string) {
   }
 }
 
-export async function getUserGoals(userId?: string): Promise<Goal[]> {
+let goalsMemoryCache: Goal[] | null = null;
+let goalsCacheTimestamp = 0;
+const CACHE_TTL = 5 * 60 * 1000;
+
+export function clearGoalsCache() {
+  goalsMemoryCache = null;
+}
+
+export async function getUserGoals(userId?: string, force = false): Promise<Goal[]> {
   const local = readLocalGoals();
   if (!isCloudSyncableUser(userId)) {
     return deduplicateGoals(local);
+  }
+
+  if (!force && goalsMemoryCache && Date.now() - goalsCacheTimestamp < CACHE_TTL) {
+    return goalsMemoryCache;
   }
 
   try {
@@ -380,11 +392,15 @@ export async function getUserGoals(userId?: string): Promise<Goal[]> {
       const clean = deduplicateGoals(firestoreGoals);
       saveLocalGoals(clean);
       localStorage.setItem(GOALS_INITIALIZED_KEY, 'true');
+      goalsMemoryCache = clean;
+      goalsCacheTimestamp = Date.now();
       return clean;
     } else {
       const isInit = localStorage.getItem(GOALS_INITIALIZED_KEY);
       if (isInit) {
         saveLocalGoals([]);
+        goalsMemoryCache = [];
+        goalsCacheTimestamp = Date.now();
         return [];
       }
       return deduplicateGoals(local);
@@ -1223,4 +1239,8 @@ export async function syncLocalGoalsToCloud(userId: string) {
       }
     }
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('streak_goals_updated', () => clearGoalsCache());
 }

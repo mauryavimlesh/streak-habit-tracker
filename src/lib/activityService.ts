@@ -52,6 +52,7 @@ export function saveLocalActivities(activities: Activity[]) {
 }
 
 export async function saveActivity(activity: Omit<Activity, 'id' | 'createdAt'>, userId?: string) {
+  activitiesMemoryCache = null;
   const local = getLocalActivities();
   const newActivity: Activity = { ...activity, id: 'act_' + Date.now() };
   local.unshift(newActivity);
@@ -77,15 +78,25 @@ export async function saveActivity(activity: Omit<Activity, 'id' | 'createdAt'>,
   return newActivity;
 }
 
-export async function getUserActivities(userId: string): Promise<Activity[]> {
+let activitiesMemoryCache: Activity[] | null = null;
+let activitiesCacheTimestamp = 0;
+const CACHE_TTL = 5 * 60 * 1000;
+
+export function clearActivitiesCache() { activitiesMemoryCache = null; }
+export async function getUserActivities(userId: string, force = false): Promise<Activity[]> {
   if (!isCloudSyncableUser(userId)) {
     return getLocalActivities();
+  }
+  if (!force && activitiesMemoryCache && Date.now() - activitiesCacheTimestamp < CACHE_TTL) {
+    return activitiesMemoryCache;
   }
   try {
     const q = query(collection(db, 'activities'), where('userId', '==', userId), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
     const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Activity));
     saveLocalActivities(activities);
+    activitiesMemoryCache = activities;
+    activitiesCacheTimestamp = Date.now();
     return activities;
   } catch (e) {
     return getLocalActivities();
@@ -93,6 +104,7 @@ export async function getUserActivities(userId: string): Promise<Activity[]> {
 }
 
 export async function deleteActivity(id: string, userId?: string) {
+  activitiesMemoryCache = null;
   const local = getLocalActivities().filter(a => a.id !== id);
   saveLocalActivities(local);
 
@@ -182,4 +194,14 @@ export function calculateStudyStatistics(activities: Activity[]): StudyStatistic
     studyStreakDays,
     subjectBreakdown,
   };
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('streak_activities_updated', () => {
+    // Invalidate activity cache
+    // Because activitiesMemoryCache is not exported, we need a function or just do it if we exported it
+  });
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('streak_activities_updated', () => clearActivitiesCache());
 }

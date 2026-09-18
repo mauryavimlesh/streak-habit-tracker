@@ -608,6 +608,11 @@ export async function toggleTaskComplete(taskId: string, userId?: string, skipSy
   return nextCompleted;
 }
 
+let globalTasksListener: (() => void) | null = null;
+let globalTasksCache: TaskItem[] | null = null;
+const taskSubscribers = new Set<(tasks: TaskItem[]) => void>();
+let globalUserId: string | undefined = undefined;
+
 // Subscribe to tasks with real-time Firestore sync & local storage fallback
 export function subscribeToTasks(
   userId: string | undefined,
@@ -618,18 +623,38 @@ export function subscribeToTasks(
     autoArchiveOldCompletedTasks(userId).catch(() => {});
   }, 1200);
 
-  // Immediately supply cached local tasks for instant rendering
-  const local = deduplicateTasks(readLocalTasks());
-  onUpdate(local);
-
-  if (!isCloudSyncableUser(userId)) {
-    return () => {};
+  // If user changed, tear down old listener
+  if (globalUserId !== userId) {
+    if (globalTasksListener) {
+      globalTasksListener();
+      globalTasksListener = null;
+    }
+    globalTasksCache = null;
+    globalUserId = userId;
   }
 
-  try {
-    const q = query(collection(db, 'tasks'), where('userId', '==', userId));
-    const unsubscribe = onSnapshot(
-      q,
+  taskSubscribers.add(onUpdate);
+
+  // Immediately supply cached tasks (memory if available, else local storage)
+  if (globalTasksCache) {
+    onUpdate(globalTasksCache);
+  } else {
+    const local = deduplicateTasks(readLocalTasks());
+    globalTasksCache = local;
+    onUpdate(local);
+  }
+
+  if (!isCloudSyncableUser(userId)) {
+    return () => {
+      taskSubscribers.delete(onUpdate);
+    };
+  }
+
+  if (!globalTasksListener) {
+    try {
+      const q = query(collection(db, 'tasks'), where('userId', '==', userId));
+      globalTasksListener = onSnapshot(
+        q,
       (snapshot) => {
         const rawFirestoreTasks: TaskItem[] = snapshot.docs.map((docSnap) => {
           const data = docSnap.data();
@@ -682,18 +707,28 @@ export function subscribeToTasks(
         });
         const merged = deduplicateTasks(Array.from(taskMap.values()));
         saveLocalTasks(merged);
-        onUpdate(merged);
+        globalTasksCache = merged;
+        taskSubscribers.forEach(cb => cb(merged));
       },
       (err) => {
         console.warn('Firestore tasks subscription error:', err);
       }
     );
-
-    return unsubscribe;
-  } catch (err) {
-    console.warn('Could not establish Firestore tasks subscription:', err);
-    return () => {};
+    } catch (err) {
+      console.warn('Could not establish Firestore tasks subscription:', err);
+    }
   }
+  
+  return () => {
+    taskSubscribers.delete(onUpdate);
+    setTimeout(() => {
+      if (taskSubscribers.size === 0 && globalTasksListener) {
+        globalTasksListener();
+        globalTasksListener = null;
+        globalTasksCache = null;
+      }
+    }, 1500);
+  };
 }
 
 // Delete Task (permanently deletes in local storage AND Firestore)

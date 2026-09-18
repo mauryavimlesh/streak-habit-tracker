@@ -106,10 +106,22 @@ export function saveLocalJournal(entries: JournalEntry[]): void {
   }
 }
 
-export async function getUserJournal(userId?: string): Promise<JournalEntry[]> {
+let journalMemoryCache: JournalEntry[] | null = null;
+let journalCacheTimestamp = 0;
+const CACHE_TTL = 5 * 60 * 1000;
+
+export function clearJournalCache() {
+  journalMemoryCache = null;
+}
+
+export async function getUserJournal(userId?: string, force = false): Promise<JournalEntry[]> {
   const local = readLocalJournal();
   if (!isCloudSyncableUser(userId)) {
     return deduplicateJournal(local);
+  }
+
+  if (!force && journalMemoryCache && Date.now() - journalCacheTimestamp < CACHE_TTL) {
+    return journalMemoryCache;
   }
 
   try {
@@ -164,11 +176,15 @@ export async function getUserJournal(userId?: string): Promise<JournalEntry[]> {
       const clean = deduplicateJournal(firestoreEntries);
       saveLocalJournal(clean);
       localStorage.setItem(JOURNAL_INITIALIZED_KEY, 'true');
+      journalMemoryCache = clean;
+      journalCacheTimestamp = Date.now();
       return clean;
     } else {
       const isInit = localStorage.getItem(JOURNAL_INITIALIZED_KEY);
       if (isInit) {
         saveLocalJournal([]);
+        journalMemoryCache = [];
+        journalCacheTimestamp = Date.now();
         return [];
       }
       return deduplicateJournal(local);
@@ -377,4 +393,8 @@ export function subscribeToJournal(
       callback(readLocalJournal());
     }
   );
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('streak_journal_updated', () => clearJournalCache());
 }
