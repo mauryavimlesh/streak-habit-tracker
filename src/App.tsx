@@ -50,6 +50,8 @@ import TermsOfService from './pages/public/TermsOfService';
 import { TimerProvider } from './lib/timer/TimerContext';
 import { HabitNotificationEngine } from './components/HabitNotificationEngine';
 import { PWAInstallBanner } from './components/pwa/PWAInstallBanner';
+import { PWAUpdateToast } from './components/pwa/PWAUpdateToast';
+import { OfflineStatusBanner } from './components/pwa/OfflineStatusBanner';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, profile, onboardingCompleted, loading } = useAuth();
@@ -138,6 +140,8 @@ export default function App() {
     <AuthProvider>
       <TimerProvider>
         <HabitNotificationEngine />
+        <OfflineStatusBanner />
+        <PWAUpdateToast />
         <PWAInstallBanner />
         <BrowserRouter>
         <Routes>

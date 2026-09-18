@@ -555,11 +555,11 @@ export default function Activity() {
         </div>
       </div>
       
-      <div className="p-6 bg-background/95 backdrop-blur-md border-t border-white/5 sticky bottom-0 z-10">
+      <div className="p-6 bg-background/95 backdrop-blur-md border-t border-white/5 sticky bottom-0 z-10 bottom-action-bar sticky-bottom-action">
         <button
           onClick={handleStart}
           disabled={mode === 'countdown' && !targetDurationMs}
-          className="w-full py-4 bg-accent-primary text-black font-bold rounded-2xl text-[16px] flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 shadow-[0_0_20px_rgba(165,255,54,0.15)] hover:bg-[#a5ff36]"
+          className="w-full py-4 bg-accent-primary text-black font-bold rounded-2xl text-[16px] flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100 shadow-[0_0_20px_rgba(165,255,54,0.15)] hover:bg-[#a5ff36] action-button bottom-action-button cursor-pointer"
         >
           <Play className="w-5 h-5 fill-black" /> 
           Start Focus

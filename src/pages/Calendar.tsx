@@ -511,14 +511,17 @@ export default function Calendar() {
       </div>
 
       {/* Floating Bottom Action Button with Luminous Green Aura (Matching Reference) */}
-      <div className="fixed bottom-[88px] right-5 sm:right-[max(1.25rem,calc(50%-200px))] z-40">
+      <div
+        className="fixed bottom-[88px] right-5 sm:right-[max(1.25rem,calc(50%-200px))] z-40 action-button-container floating-action-button"
+        data-action-button
+      >
         <motion.button
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.92 }}
           type="button"
           onClick={() => setIsActionMenuOpen(true)}
           aria-label="Create New"
-          className="w-14 h-14 rounded-full bg-accent-primary text-[#0a0c10] flex items-center justify-center shadow-[0_0_24px_rgba(140,238,40,0.4)] hover:shadow-[0_0_36px_rgba(140,238,40,0.65)] transition-all cursor-pointer"
+          className="w-14 h-14 rounded-full bg-accent-primary text-[#0a0c10] flex items-center justify-center shadow-[0_0_24px_rgba(140,238,40,0.4)] hover:shadow-[0_0_36px_rgba(140,238,40,0.65)] transition-all cursor-pointer action-button"
         >
           <Plus className="w-7 h-7 stroke-[2.8]" />
         </motion.button>

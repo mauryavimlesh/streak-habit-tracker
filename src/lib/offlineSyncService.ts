@@ -4,6 +4,8 @@
  * and prioritizes background synchronization when connection is restored.
  */
 
+import { registerPWA } from './pwa/pwaManager';
+
 export interface OfflineAction {
   id: string;
   type: 'LOG_HABIT' | 'CREATE_TASK' | 'UPDATE_TASK' | 'SAVE_JOURNAL' | 'LOG_GOAL';
@@ -222,14 +224,9 @@ export function initOfflineSyncManager(): () => void {
 
   // Register service worker if not already registered
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((reg) => {
-        console.info('[OfflineSync] STREAK Service Worker registered successfully, scope:', reg.scope);
-      })
-      .catch((err) => {
-        console.debug('[OfflineSync] Service Worker registration skipped or failed:', err);
-      });
+    registerPWA().catch((err) => {
+      console.debug('[OfflineSync] Service Worker registration skipped or failed:', err);
+    });
 
     // Listen for background sync triggers sent by the service worker
     const handleServiceWorkerMessage = (event: MessageEvent) => {

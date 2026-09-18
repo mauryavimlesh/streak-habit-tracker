@@ -22,6 +22,8 @@ import { VibrationPatternType } from './alarmAudio';
 export type ReminderRepeat = 'once' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'custom' | 'monthly';
 export type ReminderCategory = 'habit' | 'task' | 'general' | 'morning' | 'night';
 
+import { registerPWA } from './pwa/pwaManager';
+
 export interface ReminderItem {
   id: string;
   userId?: string;
@@ -641,13 +643,7 @@ export async function sendSystemNotification(
  * Registers STREAK PWA service worker for background reminder notifications.
  */
 export async function registerStreakServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null;
-  try {
-    return await navigator.serviceWorker.register('/sw.js');
-  } catch (err) {
-    console.warn('STREAK ServiceWorker registration notice:', err);
-    return null;
-  }
+  return await registerPWA();
 }
 
 export function subscribeToReminders(

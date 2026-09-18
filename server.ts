@@ -59,6 +59,20 @@ app.get('/sitemap.xml', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'sitemap.xml'));
 });
 
+// PWA Service Worker & Manifest routing with strict caching rules
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.sendFile(path.join(process.cwd(), 'public', 'sw.js'));
+});
+
+app.get(['/manifest.webmanifest', '/manifest.json'], (req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  res.sendFile(path.join(process.cwd(), 'public', 'manifest.webmanifest'));
+});
+
 // Smart Study Plan Extraction from handwritten or printed photos
 app.post('/api/ai-extract-plan', async (req, res) => {
   try {

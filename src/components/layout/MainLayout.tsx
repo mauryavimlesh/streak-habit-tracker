@@ -7,13 +7,13 @@ export default function MainLayout() {
   return (
     <div className="flex flex-col h-screen bg-background text-white overflow-hidden select-none">
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+84px)] scroll-smooth">
+      <main className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] pb-[calc(env(safe-area-inset-bottom,0px)+88px)] scroll-smooth app-main-content">
         <Outlet />
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 pointer-events-auto">
-        <div className="bg-[#0e1015]/95 backdrop-blur-2xl border-t border-[#1e222b] h-[74px] pb-[env(safe-area-inset-bottom)] px-2 sm:px-4 flex items-center justify-between overflow-x-auto no-scrollbar">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 pointer-events-auto bottom-nav" data-pwa-bottom-nav>
+        <div className="bg-[#0e1015]/95 backdrop-blur-2xl border-t border-[#1e222b] min-h-[70px] pb-[env(safe-area-inset-bottom,0px)] pt-1 px-2 sm:px-4 flex items-center justify-between overflow-x-auto no-scrollbar bottom-nav-inner">
           <NavItem to="/" icon={<Home className="w-5 h-5" />} label="Home" />
           <NavItem to="/calendar" icon={<CalendarIcon className="w-5 h-5" />} label="Calendar" />
           <NavItem to="/more" icon={<LayoutGrid className="w-5 h-5" />} label="More" />

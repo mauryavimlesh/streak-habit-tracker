@@ -221,7 +221,7 @@ export function CreateTaskBottomSheet({
               onClose();
             }
           }}
-          className="relative w-full max-w-lg glass-effect rounded-t-[36px] sm:rounded-[36px] p-5 sm:p-6 pb-28 sm:pb-6 z-10 max-h-[92vh] overflow-y-auto"
+          className="relative w-full max-w-lg glass-effect rounded-t-[36px] sm:rounded-[36px] p-5 sm:p-6 pb-28 sm:pb-6 z-10 max-h-[92vh] overflow-y-auto bottom-sheet"
         >
           {/* Top Drag Handle */}
           <div className="flex justify-center pb-2 cursor-grab active:cursor-grabbing">
@@ -541,11 +541,11 @@ export function CreateTaskBottomSheet({
             )}
 
             {/* Primary Action Button */}
-            <div className="pt-2 flex flex-col gap-2">
+            <div className="pt-2 flex flex-col gap-2 bottom-action-container">
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3.5 px-4 rounded-2xl bg-accent-primary text-background font-bold text-sm tracking-wide flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.4)] hover:bg-[#9eff38] hover:shadow-[0_4px_32px_rgba(140,238,40,0.6)] active:scale-[0.985] transition-all cursor-pointer disabled:opacity-50"
+                className="w-full py-3.5 px-4 rounded-2xl bg-accent-primary text-background font-bold text-sm tracking-wide flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.4)] hover:bg-[#9eff38] hover:shadow-[0_4px_32px_rgba(140,238,40,0.6)] active:scale-[0.985] transition-all cursor-pointer disabled:opacity-50 action-button bottom-action-button"
               >
                 <Check className="w-4 h-4 stroke-[3]" />
                 <span>{isSubmitting ? 'Creating Item...' : 'Create Item'}</span>

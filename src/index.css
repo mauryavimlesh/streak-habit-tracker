@@ -93,3 +93,71 @@
   /* Ensure the image doesn't skew or distort */
   object-fit: contain;
 }
+
+/* ==========================================================================
+   PWA Standalone Safe-Area Inset Adaptations
+   Active specifically when launched in PWA standalone display mode on iOS / Android.
+   Protects bottom navigation and action buttons from overlapping the home indicator
+   or gesture navigation bar.
+   ========================================================================== */
+
+@media (display-mode: standalone) {
+  /* 1. Bottom Navigation Bar */
+  /* Ensures the fixed bottom navigation and its inner container provide clearance for the gesture bar / home indicator */
+  nav.fixed.bottom-0,
+  .bottom-nav,
+  [data-pwa-bottom-nav] {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  nav.fixed.bottom-0 > div,
+  .bottom-nav > div,
+  .bottom-nav-inner,
+  .bottom-nav-content {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+    min-height: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Main scroll viewport adjustment to match the expanded bottom navigation bar */
+  main,
+  .app-main-content {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* 2. Floating Action Buttons (FABs) */
+  /* Shift floating action buttons up by the safe-area inset so they sit above the elevated navigation */
+  .floating-action-button,
+  .action-button-container,
+  [data-action-button],
+  .fixed.bottom-\[88px\],
+  div.fixed[class*="bottom-[88px]"] {
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Secondary floating alerts / toasts */
+  div.fixed[class*="bottom-[100px]"],
+  .fixed.bottom-\[100px\] {
+    bottom: calc(100px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* 3. Sticky and Fixed Bottom Action Buttons & Action Bars */
+  /* Protects full-width action buttons (e.g., Start Focus, Create Item, Save) in sticky footers and bottom sheets */
+  .bottom-action-bar,
+  .sticky-bottom-action,
+  .bottom-action-container,
+  div[class*="sticky"][class*="bottom-0"] {
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .bottom-sheet,
+  .action-sheet,
+  div[class*="items-end"] > div[class*="rounded-t-"] {
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Target buttons designated as action buttons inside bottom containers */
+  .bottom-action-button,
+  .action-button {
+    margin-bottom: max(env(safe-area-inset-bottom, 0px), 4px);
+  }
+}

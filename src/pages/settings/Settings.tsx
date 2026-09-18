@@ -56,12 +56,21 @@ export default function Settings() {
   const [hasPendingGuestData, setHasPendingGuestData] = useState(() => hasGuestDataToMigrate());
 
   // PWA, Offline, and Timezone state
-  const { isInstalled, isInstallable } = usePWAInstall();
+  const { isInstalled, isInstallable, hasNativePrompt, install } = usePWAInstall();
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isTimezoneAuditOpen, setIsTimezoneAuditOpen] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(() => getPendingOfflineActionsCount());
   const [isSyncingOffline, setIsSyncingOffline] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const handleInstallClick = async () => {
+    if (isInstalled) return;
+    if (hasNativePrompt) {
+      const accepted = await install();
+      if (accepted) return;
+    }
+    setIsInstallModalOpen(true);
+  };
 
   const handleManualOfflineSync = async () => {
     setIsSyncingOffline(true);
@@ -399,23 +408,21 @@ export default function Settings() {
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsInstallModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white flex items-center gap-1.5 transition cursor-pointer"
-            >
-              {isInstalled ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#a5ff36]" />
-                  <span>Installed</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-3.5 h-3.5 text-[#a5ff36]" />
-                  <span>Install</span>
-                </>
-              )}
-            </button>
+            {isInstalled ? (
+              <div className="px-3 py-1.5 rounded-xl bg-[#a5ff36]/10 border border-[#a5ff36]/20 text-xs font-semibold text-[#a5ff36] flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#a5ff36]" />
+                <span>Installed</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="px-3 py-1.5 rounded-xl bg-[#a5ff36] hover:bg-[#b8ff5c] text-black text-xs font-bold flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-sm"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Install</span>
+              </button>
+            )}
           </div>
 
           {/* Offline Sync Status */}
