@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import {
   getAllTasks,
@@ -9,6 +9,8 @@ import {
   toggleTaskComplete,
   updateTaskProgressQuantity,
   readLocalArchivedTasks,
+  readLocalTasks,
+  deduplicateTasks,
   TaskItem,
 } from '../lib/taskService';
 import { CalendarHeader } from '../components/calendar/CalendarHeader';
@@ -23,27 +25,27 @@ import { ArchivedTasksModal } from '../components/calendar/ArchivedTasksModal';
 import { Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { trackCalendarOpened, trackCalendarDateSelected } from '../lib/analyticsService';
-import { getHabitLogs, getUserHabits, Habit, HabitLog } from '../lib/habitService';
-import { getUserActivities, Activity } from '../lib/activityService';
-import { getUserGoals, Goal } from '../lib/goalService';
-import { getUserJournal, JournalEntry } from '../lib/journalService';
+import { getHabitLogs, getUserHabits, readLocalHabits, deduplicateHabits, readLocalLogs, Habit, HabitLog } from '../lib/habitService';
+import { getUserActivities, getLocalActivities, Activity } from '../lib/activityService';
+import { getUserGoals, readLocalGoals, Goal } from '../lib/goalService';
+import { getUserJournal, readLocalJournal, JournalEntry } from '../lib/journalService';
 import { formatDateKey } from '../lib/dateUtils';
 import { getUnifiedActivitiesForDate } from '../lib/unifiedActivityService';
 
 export default function Calendar() {
   const { user } = useAuth();
 
-  // State
+  // State initialized synchronously from local-first storage to prevent empty flash
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [viewMonthDate, setViewMonthDate] = useState<Date>(() => new Date());
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [logs, setLogs] = useState<HabitLog[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [journals, setJournals] = useState<JournalEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [tasks, setTasks] = useState<TaskItem[]>(() => deduplicateTasks(readLocalTasks()));
+  const [habits, setHabits] = useState<Habit[]>(() => deduplicateHabits(readLocalHabits()));
+  const [logs, setLogs] = useState<HabitLog[]>(() => readLocalLogs());
+  const [activities, setActivities] = useState<Activity[]>(() => getLocalActivities());
+  const [goals, setGoals] = useState<Goal[]>(() => readLocalGoals());
+  const [journals, setJournals] = useState<JournalEntry[]>(() => readLocalJournal());
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     trackCalendarOpened();
@@ -85,6 +87,13 @@ export default function Calendar() {
         setActivities(a);
         setGoals(g);
         setJournals(j);
+      } else {
+        // Guest user local refresh
+        setHabits(deduplicateHabits(readLocalHabits()));
+        setLogs(readLocalLogs());
+        setActivities(getLocalActivities());
+        setGoals(readLocalGoals());
+        setJournals(readLocalJournal());
       }
     }
     loadExtraData();
@@ -134,24 +143,24 @@ export default function Calendar() {
     setViewMonthDate(new Date(today.getFullYear(), today.getMonth(), 1));
   };
 
-  // 7 Days of the currently selected week (Monday-based)
-  const currentWeekDays = useMemo(() => {
+  // 7 Days of the currently selected week (Monday-based, memoized to preserve object references)
+  const currentWeekMondayTime = useMemo(() => {
     const d = new Date(selectedDate);
     const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    // Convert to Monday=0, Tuesday=1, ..., Sunday=6
     const mondayDiff = (dayOfWeek + 6) % 7;
+    const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - mondayDiff);
+    return monday.getTime();
+  }, [selectedDate]);
 
-    const monday = new Date(d);
-    monday.setDate(d.getDate() - mondayDiff);
-
+  const currentWeekDays = useMemo(() => {
+    const monday = new Date(currentWeekMondayTime);
     const week: Date[] = [];
     for (let i = 0; i < 7; i++) {
-      const nextDay = new Date(monday);
-      nextDay.setDate(monday.getDate() + i);
+      const nextDay = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
       week.push(nextDay);
     }
     return week;
-  }, [selectedDate]);
+  }, [currentWeekMondayTime]);
 
   // Navigate week
   const handlePrevWeek = () => {
@@ -176,6 +185,49 @@ export default function Calendar() {
   const handleNextMonth = () => {
     setViewMonthDate(new Date(viewMonthDate.getFullYear(), viewMonthDate.getMonth() + 1, 1));
   };
+
+  // Pre-index items by YYYY-MM-DD date key so day-lookups are O(1) instant
+  const tasksByDate = useMemo(() => {
+    const map = new Map<string, TaskItem[]>();
+    for (const t of tasks) {
+      const existing = map.get(t.date);
+      if (existing) existing.push(t);
+      else map.set(t.date, [t]);
+    }
+    return map;
+  }, [tasks]);
+
+  const completedLogsByDate = useMemo(() => {
+    const map = new Map<string, HabitLog[]>();
+    for (const l of logs) {
+      if (l.status === 'completed') {
+        const existing = map.get(l.date);
+        if (existing) existing.push(l);
+        else map.set(l.date, [l]);
+      }
+    }
+    return map;
+  }, [logs]);
+
+  const activitiesByDate = useMemo(() => {
+    const map = new Map<string, Activity[]>();
+    for (const a of activities) {
+      const existing = map.get(a.date);
+      if (existing) existing.push(a);
+      else map.set(a.date, [a]);
+    }
+    return map;
+  }, [activities]);
+
+  const journalsByDate = useMemo(() => {
+    const map = new Map<string, JournalEntry[]>();
+    for (const j of journals) {
+      const existing = map.get(j.date);
+      if (existing) existing.push(j);
+      else map.set(j.date, [j]);
+    }
+    return map;
+  }, [journals]);
 
   // Activity & Task map for fast indicator dots on calendar days
   const taskDatesMap = useMemo(() => {
@@ -223,25 +275,37 @@ export default function Calendar() {
     return formatDateKey(selectedDate);
   }, [selectedDate]);
 
-  // Tasks for the selected date
+  // Tasks for the selected date (O(1) lookup)
   const selectedDateTasks = useMemo(() => {
-    return tasks.filter((t) => t.date === selectedDateStr);
-  }, [tasks, selectedDateStr]);
+    return tasksByDate.get(selectedDateStr) || [];
+  }, [tasksByDate, selectedDateStr]);
+
+  const selectedDateLogs = useMemo(() => {
+    return completedLogsByDate.get(selectedDateStr) || [];
+  }, [completedLogsByDate, selectedDateStr]);
+
+  const selectedDateActivities = useMemo(() => {
+    return activitiesByDate.get(selectedDateStr) || [];
+  }, [activitiesByDate, selectedDateStr]);
+
+  const selectedDateJournals = useMemo(() => {
+    return journalsByDate.get(selectedDateStr) || [];
+  }, [journalsByDate, selectedDateStr]);
 
   // Calculate truthful score for display (reflecting real completion rate)
   const streakScore = useMemo(() => {
     const unified = getUnifiedActivitiesForDate(selectedDateStr, {
       habits,
-      logs,
-      tasks,
+      logs: selectedDateLogs,
+      tasks: selectedDateTasks,
       goals,
-      activities,
-      journals,
+      activities: selectedDateActivities,
+      journals: selectedDateJournals,
     });
     if (unified.length === 0) return 0;
     const completed = unified.filter((a) => a.completed).length;
     return Math.min(100, Math.round((completed / unified.length) * 100));
-  }, [selectedDateStr, habits, logs, tasks, goals, activities, journals]);
+  }, [selectedDateStr, habits, selectedDateLogs, selectedDateTasks, goals, selectedDateActivities, selectedDateJournals]);
 
   // Task CRUD operations
   const handleToggleTask = async (taskId: string) => {
@@ -344,22 +408,29 @@ export default function Calendar() {
     await deleteTask(id, user?.uid);
   };
 
-  // Gesture handlers for smooth swiping between compact week view and expanded month view
+  // Gesture handlers for smooth touch swiping between week and month view
   const handleDragStart = (clientX: number, clientY: number) => {
     dragStartRef.current = {
       x: clientX,
       y: clientY,
       time: Date.now(),
     };
-    setIsSwiping(true);
   };
 
   const handleDragMove = (clientX: number, clientY: number) => {
     if (!dragStartRef.current) return;
     const deltaY = clientY - dragStartRef.current.y;
-    // Provide tactile elastic resistance during pull
-    const elasticY = Math.sign(deltaY) * Math.min(24, Math.abs(deltaY) * 0.35);
-    setDragYOffset(elasticY);
+    const deltaX = clientX - dragStartRef.current.x;
+
+    if (!isSwiping && (Math.abs(deltaY) > 8 || Math.abs(deltaX) > 8)) {
+      setIsSwiping(true);
+    }
+
+    if (isSwiping) {
+      // Tactile elastic resistance during pull
+      const elasticY = Math.sign(deltaY) * Math.min(24, Math.abs(deltaY) * 0.35);
+      setDragYOffset(elasticY);
+    }
   };
 
   const handleDragEnd = (clientX: number, clientY: number) => {
@@ -367,9 +438,12 @@ export default function Calendar() {
     const deltaX = clientX - dragStartRef.current.x;
     const deltaY = clientY - dragStartRef.current.y;
     const elapsed = Date.now() - dragStartRef.current.time;
+    const wasSwiping = isSwiping;
     dragStartRef.current = null;
     setIsSwiping(false);
     setDragYOffset(0);
+
+    if (!wasSwiping) return;
 
     // Quick flick or moderate drag
     const isQuickFlick = elapsed < 350;
@@ -426,23 +500,16 @@ export default function Calendar() {
           streakScore={streakScore}
         />
 
-        {/* Interactive Calendar Section (Supports smooth slide-down / slide-up gestures & touch swiping) */}
+        {/* Interactive Calendar Section */}
         <motion.div
           animate={{ y: dragYOffset }}
           transition={{ type: 'spring', stiffness: 380, damping: 30 }}
           onTouchStart={(e) => handleDragStart(e.touches[0].clientX, e.touches[0].clientY)}
           onTouchMove={(e) => handleDragMove(e.touches[0].clientX, e.touches[0].clientY)}
           onTouchEnd={(e) => handleDragEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY)}
-          onMouseDown={(e) => handleDragStart(e.clientX, e.clientY)}
-          onMouseMove={(e) => {
-            if (isSwiping) handleDragMove(e.clientX, e.clientY);
-          }}
-          onMouseUp={(e) => {
-            if (isSwiping) handleDragEnd(e.clientX, e.clientY);
-          }}
-          className="rounded-[28px] bg-[#11131a] border border-[#1d222e] p-3 sm:p-4 shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-colors hover:border-[#2d3448] touch-pan-y select-none"
+          className="rounded-[28px] bg-[#11131a] border border-[#1d222e] p-3 sm:p-4 shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-colors hover:border-[#2d3448] touch-pan-y"
         >
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="popLayout">
             {viewMode === 'week' ? (
               <motion.div
                 key="week-strip-view"

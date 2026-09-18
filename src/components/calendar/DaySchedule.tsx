@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { TaskItem } from '../../lib/taskService';
 import { TaskItemCard } from './TaskItemCard';
@@ -68,26 +68,58 @@ export function DaySchedule({
   const [filterType, setFilterType] = useState<'all' | 'task' | 'meeting' | 'event'>('all');
   const [feedbackLiked, setFeedbackLiked] = useState<boolean | null>(null);
 
-  // Group items by type
-  const eventCount = tasks.filter((t) => t.type === 'event').length;
-  const meetingCount = tasks.filter((t) => t.type === 'meeting').length;
-  const standardTaskCount = tasks.filter((t) => !t.type || t.type === 'task' || t.type === 'reminder').length;
-  const completedCount = tasks.filter((t) => t.completed).length;
+  const selectedDateStr = useMemo(() => formatDateKey(selectedDate), [selectedDate]);
 
-  const selectedDateStr = formatDateKey(selectedDate);
-  
-  // Aggregate all events for the selected date
-  const dayLogs = logs.filter(l => l.date === selectedDateStr && l.status === 'completed');
-  const dayActivities = activities.filter(a => a.date === selectedDateStr);
-  const dayJournals = journals.filter(j => j.date === selectedDateStr);
-  const totalFocusMinutes = dayActivities.reduce((acc, a) => acc + (a.durationMinutes || 0), 0);
+  // Fast O(1) Habit lookup
+  const habitsMap = useMemo(() => {
+    const map = new Map<string, Habit>();
+    for (const h of habits) {
+      if (h.id) map.set(h.id, h);
+    }
+    return map;
+  }, [habits]);
+
+  // Aggregate day items cleanly with memoization
+  const { dayLogs, dayActivities, dayJournals, totalFocusMinutes } = useMemo(() => {
+    const dLogs = logs.filter((l) => l.date === selectedDateStr && l.status === 'completed');
+    const dActs = activities.filter((a) => a.date === selectedDateStr);
+    const dJournals = journals.filter((j) => j.date === selectedDateStr);
+    const focusMins = dActs.reduce((acc, a) => acc + (a.durationMinutes || 0), 0);
+    return {
+      dayLogs: dLogs,
+      dayActivities: dActs,
+      dayJournals: dJournals,
+      totalFocusMinutes: focusMins,
+    };
+  }, [logs, activities, journals, selectedDateStr]);
+
+  // Group items by type
+  const { eventCount, meetingCount, standardTaskCount, completedCount } = useMemo(() => {
+    let events = 0;
+    let meetings = 0;
+    let standards = 0;
+    let completed = 0;
+    for (const t of tasks) {
+      if (t.type === 'event') events++;
+      else if (t.type === 'meeting') meetings++;
+      else standards++;
+      if (t.completed) completed++;
+    }
+    return {
+      eventCount: events,
+      meetingCount: meetings,
+      standardTaskCount: standards,
+      completedCount: completed,
+    };
+  }, [tasks]);
+
   const totalItemsCount = eventCount + meetingCount + standardTaskCount + dayLogs.length + dayActivities.length;
   
-  const filteredTasks = tasks.filter((t) => {
-    if (filterType === 'all') return true;
-    if (filterType === 'task') return !t.type || t.type === 'task' || t.type === 'reminder';
-    return t.type === filterType;
-  });
+  const filteredTasks = useMemo(() => {
+    if (filterType === 'all') return tasks;
+    if (filterType === 'task') return tasks.filter((t) => !t.type || t.type === 'task' || t.type === 'reminder');
+    return tasks.filter((t) => t.type === filterType);
+  }, [tasks, filterType]);
 
   // Calculate dynamic greeting based on current local hour
   const currentHour = new Date().getHours();
@@ -296,7 +328,7 @@ export function DaySchedule({
           <div className="space-y-2 mb-4">
             <h4 className="text-xs font-bold text-[#7d8495] uppercase tracking-wider">Completed Habits</h4>
             {dayLogs.map(log => {
-              const habit = habits.find(h => h.id === log.habitId);
+              const habit = log.habitId ? habitsMap.get(log.habitId) : undefined;
               return (
                 <div key={log.id} className="p-3 rounded-2xl bg-surface-card border border-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-3">

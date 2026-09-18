@@ -24,13 +24,24 @@ export default function MainLayout() {
 }
 
 function NavItem({ to, icon, label, end }: { to: string; icon: React.ReactNode; label: string; end?: boolean }) {
+  const handleTap = () => {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(8);
+      } catch {
+        // Ignore
+      }
+    }
+  };
+
   return (
     <NavLink
       to={to}
       end={end}
+      onClick={handleTap}
       className={({ isActive }) =>
         cn(
-          "relative flex flex-col items-center justify-center min-w-[60px] flex-1 h-full transition-all duration-150 active:scale-95 cursor-pointer",
+          "relative flex flex-col items-center justify-center min-w-[60px] flex-1 h-full transition-all duration-150 active:scale-95 cursor-pointer touch-manipulation",
           isActive ? "text-accent-primary" : "text-[#737988] hover:text-[#a0a6b5]"
         )
       }

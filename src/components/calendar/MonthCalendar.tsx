@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -31,34 +31,37 @@ export function MonthCalendar({
   const year = currentMonthDate.getFullYear();
   const month = currentMonthDate.getMonth();
 
-  // Determine days in this month
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const { prevMonthDays, currentMonthDays, nextMonthDays } = useMemo(() => {
+    // Determine days in this month
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Find weekday of the 1st of this month (0=Sun, 1=Mon, ..., 6=Sat)
-  // We want Monday = 0, Tuesday = 1, ..., Sunday = 6
-  const firstDayRaw = new Date(year, month, 1).getDay();
-  const firstDayMondayBased = (firstDayRaw + 6) % 7;
+    // Find weekday of the 1st of this month (0=Sun, 1=Mon, ..., 6=Sat)
+    const firstDayRaw = new Date(year, month, 1).getDay();
+    const firstDayMondayBased = (firstDayRaw + 6) % 7;
 
-  // Previous month trailing days
-  const daysInPrevMonth = new Date(year, month, 0).getDate();
-  const prevMonthDays: number[] = [];
-  for (let i = firstDayMondayBased - 1; i >= 0; i--) {
-    prevMonthDays.push(daysInPrevMonth - i);
-  }
+    // Previous month trailing days
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+    const prev: number[] = [];
+    for (let i = firstDayMondayBased - 1; i >= 0; i--) {
+      prev.push(daysInPrevMonth - i);
+    }
 
-  // Current month days
-  const currentMonthDays: number[] = [];
-  for (let i = 1; i <= daysInMonth; i++) {
-    currentMonthDays.push(i);
-  }
+    // Current month days
+    const curr: number[] = [];
+    for (let i = 1; i <= daysInMonth; i++) {
+      curr.push(i);
+    }
 
-  // Next month leading days to complete the 7-column grid
-  const totalCellsSoFar = prevMonthDays.length + currentMonthDays.length;
-  const nextMonthDaysCount = (7 - (totalCellsSoFar % 7)) % 7;
-  const nextMonthDays: number[] = [];
-  for (let i = 1; i <= nextMonthDaysCount; i++) {
-    nextMonthDays.push(i);
-  }
+    // Next month leading days to complete the 7-column grid
+    const totalCellsSoFar = prev.length + curr.length;
+    const nextMonthDaysCount = (7 - (totalCellsSoFar % 7)) % 7;
+    const next: number[] = [];
+    for (let i = 1; i <= nextMonthDaysCount; i++) {
+      next.push(i);
+    }
+
+    return { prevMonthDays: prev, currentMonthDays: curr, nextMonthDays: next };
+  }, [currentMonthDate]);
 
   const isSameDay = (d1: Date, d2: Date) =>
     d1.getFullYear() === d2.getFullYear() &&
@@ -82,7 +85,7 @@ export function MonthCalendar({
       animate={{ opacity: 1, height: 'auto' }}
       exit={{ opacity: 0, height: 0 }}
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-      className="overflow-hidden pb-3 select-none"
+      className="overflow-hidden pb-3"
     >
       {/* Month Navigation Toolbar */}
       <div className="flex items-center justify-between px-2 py-2 mb-2 bg-[#12141c] border border-[#1e2330] rounded-2xl">

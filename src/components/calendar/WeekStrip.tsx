@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { formatDateKey } from '../../lib/dateUtils';
 
 interface WeekStripProps {
   currentWeekDays: Date[];
@@ -30,10 +31,10 @@ export function WeekStrip({
     d1.getMonth() === d2.getMonth() &&
     d1.getDate() === d2.getDate();
 
-  const getDateKey = (d: Date) => d.toISOString().split('T')[0];
+  const getDateKey = (d: Date) => formatDateKey(d);
 
   return (
-    <div className="relative select-none pb-2 pt-1">
+    <div className="relative pb-2 pt-1">
       {/* Navigation arrows (desktop & mobile accessible) */}
       <div className="flex items-center justify-between gap-1">
         <button

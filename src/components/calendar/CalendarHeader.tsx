@@ -25,7 +25,7 @@ export function CalendarHeader({
   const monthYearName = selectedDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 
   return (
-    <header className="flex items-center justify-between pt-3 pb-2 px-1 select-none">
+    <header className="flex items-center justify-between pt-3 pb-2 px-1">
       {viewMode === 'week' ? (
         /* Week View Header (matches Screen 1 in reference) */
         <>

@@ -134,10 +134,12 @@ export function ArchivedTasksModal({
   return (
     <div
       id="archived-tasks-modal-overlay"
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
     >
       <div
         id="archived-tasks-modal-container"
+        onClick={(e) => e.stopPropagation()}
         className="bg-[#11131a] border border-[#212634] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* Header */}
