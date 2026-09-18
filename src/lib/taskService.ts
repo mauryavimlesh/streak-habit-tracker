@@ -612,21 +612,27 @@ let globalTasksListener: (() => void) | null = null;
 let globalTasksCache: TaskItem[] | null = null;
 const taskSubscribers = new Set<(tasks: TaskItem[]) => void>();
 let globalUserId: string | undefined = undefined;
+let cleanupTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 // Subscribe to tasks with real-time Firestore sync & local storage fallback
 export function subscribeToTasks(
   userId: string | undefined,
   onUpdate: (tasks: TaskItem[]) => void
 ): () => void {
-  // Asynchronously schedule auto-archive check in the background
-  setTimeout(() => {
-    autoArchiveOldCompletedTasks(userId).catch(() => {});
-  }, 1200);
+  // Clear any pending teardown immediately since a new subscriber has connected
+  if (cleanupTimeoutId) {
+    clearTimeout(cleanupTimeoutId);
+    cleanupTimeoutId = null;
+  }
 
-  // If user changed, tear down old listener
+  // If user changed, tear down old listener cleanly
   if (globalUserId !== userId) {
     if (globalTasksListener) {
-      globalTasksListener();
+      try {
+        globalTasksListener();
+      } catch (err) {
+        console.warn('Error unsubscribing previous tasks listener:', err);
+      }
       globalTasksListener = null;
     }
     globalTasksCache = null;
@@ -655,79 +661,89 @@ export function subscribeToTasks(
       const q = query(collection(db, 'tasks'), where('userId', '==', userId));
       globalTasksListener = onSnapshot(
         q,
-      (snapshot) => {
-        const rawFirestoreTasks: TaskItem[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data();
-          return {
-            id: docSnap.id,
-            userId: data.userId,
-            title: data.title,
-            description: data.description,
-            date: data.date,
-            time: data.time,
-            timeEnd: data.timeEnd,
-            category: data.category,
-            priority: data.priority,
-            type: data.type || 'task',
-            completed: Boolean(data.completed),
-            repeat: data.repeat,
-            goalId: data.goalId || data.linkedGoalId,
-            unit: data.unit || undefined,
-            targetQuantity: typeof data.targetQuantity === 'number' ? data.targetQuantity : undefined,
-            progressQuantity: typeof data.progressQuantity === 'number' ? data.progressQuantity : undefined,
-            isArchived: Boolean(data.isArchived),
-            archivedAt: data.archivedAt?.toDate ? data.archivedAt.toDate().toISOString() : (data.archivedAt || undefined),
-            createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
-            updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
-          };
-        });
+        (snapshot) => {
+          const rawFirestoreTasks: TaskItem[] = snapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+            return {
+              id: docSnap.id,
+              userId: data.userId,
+              title: data.title,
+              description: data.description,
+              date: data.date,
+              time: data.time,
+              timeEnd: data.timeEnd,
+              category: data.category,
+              priority: data.priority,
+              type: data.type || 'task',
+              completed: Boolean(data.completed),
+              repeat: data.repeat,
+              goalId: data.goalId || data.linkedGoalId,
+              unit: data.unit || undefined,
+              targetQuantity: typeof data.targetQuantity === 'number' ? data.targetQuantity : undefined,
+              progressQuantity: typeof data.progressQuantity === 'number' ? data.progressQuantity : undefined,
+              isArchived: Boolean(data.isArchived),
+              archivedAt: data.archivedAt?.toDate ? data.archivedAt.toDate().toISOString() : (data.archivedAt || undefined),
+              createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : undefined,
+              updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : undefined,
+            };
+          });
 
-        const seenContent = new Set<string>();
-        const firestoreTasks: TaskItem[] = [];
-        for (const t of rawFirestoreTasks) {
-          if (t.isArchived) continue;
-          const contentKey = `${t.title.trim().toLowerCase()}_${t.date}_${(t.time || '').trim()}_${t.type || 'task'}`;
-          if (!seenContent.has(contentKey)) {
-            seenContent.add(contentKey);
-            firestoreTasks.push(t);
-          }
-        }
-
-        // Merge any newly created in-flight local tasks
-        const currentLocal = readLocalTasks();
-        const taskMap = new Map<string, TaskItem>();
-        firestoreTasks.forEach((t) => taskMap.set(t.id, t));
-        currentLocal.forEach((t) => {
-          if (!taskMap.has(t.id) && t.id.startsWith('temp_task_')) {
+          const seenContent = new Set<string>();
+          const firestoreTasks: TaskItem[] = [];
+          for (const t of rawFirestoreTasks) {
+            if (t.isArchived) continue;
             const contentKey = `${t.title.trim().toLowerCase()}_${t.date}_${(t.time || '').trim()}_${t.type || 'task'}`;
             if (!seenContent.has(contentKey)) {
-              taskMap.set(t.id, t);
+              seenContent.add(contentKey);
+              firestoreTasks.push(t);
             }
           }
-        });
-        const merged = deduplicateTasks(Array.from(taskMap.values()));
-        saveLocalTasks(merged);
-        globalTasksCache = merged;
-        taskSubscribers.forEach(cb => cb(merged));
-      },
-      (err) => {
-        console.warn('Firestore tasks subscription error:', err);
-      }
-    );
+
+          // Merge any newly created in-flight local tasks
+          const currentLocal = readLocalTasks();
+          const taskMap = new Map<string, TaskItem>();
+          firestoreTasks.forEach((t) => taskMap.set(t.id, t));
+          currentLocal.forEach((t) => {
+            if (!taskMap.has(t.id) && t.id.startsWith('temp_task_')) {
+              const contentKey = `${t.title.trim().toLowerCase()}_${t.date}_${(t.time || '').trim()}_${t.type || 'task'}`;
+              if (!seenContent.has(contentKey)) {
+                taskMap.set(t.id, t);
+              }
+            }
+          });
+          const merged = deduplicateTasks(Array.from(taskMap.values()));
+          saveLocalTasks(merged);
+          globalTasksCache = merged;
+          taskSubscribers.forEach((cb) => cb(merged));
+        },
+        (err) => {
+          console.warn('Firestore tasks subscription error:', err);
+        }
+      );
     } catch (err) {
       console.warn('Could not establish Firestore tasks subscription:', err);
     }
   }
-  
+
   return () => {
     taskSubscribers.delete(onUpdate);
-    setTimeout(() => {
-      if (taskSubscribers.size === 0 && globalTasksListener) {
-        globalTasksListener();
-        globalTasksListener = null;
-        globalTasksCache = null;
+    if (taskSubscribers.size === 0 && globalTasksListener) {
+      if (cleanupTimeoutId) {
+        clearTimeout(cleanupTimeoutId);
       }
-    }, 1500);
+      cleanupTimeoutId = setTimeout(() => {
+        if (taskSubscribers.size === 0 && globalTasksListener) {
+          try {
+            globalTasksListener();
+          } catch (err) {
+            console.warn('Error during tasks listener unsubscribe:', err);
+          }
+          globalTasksListener = null;
+          globalTasksCache = null;
+        }
+        cleanupTimeoutId = null;
+      }, 1200);
+    }
   };
 }
 

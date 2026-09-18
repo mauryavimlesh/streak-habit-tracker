@@ -16,7 +16,7 @@ interface WeekStripProps {
 
 const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-export function WeekStrip({
+export const WeekStrip = React.memo(function WeekStrip({
   currentWeekDays,
   selectedDate,
   todayDate,
@@ -145,4 +145,4 @@ export function WeekStrip({
       </div>
     </div>
   );
-}
+});

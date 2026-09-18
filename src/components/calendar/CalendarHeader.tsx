@@ -11,7 +11,7 @@ interface CalendarHeaderProps {
   streakScore?: number;
 }
 
-export function CalendarHeader({
+export const CalendarHeader = React.memo(function CalendarHeader({
   selectedDate,
   viewMode,
   onToggleViewMode,
@@ -145,4 +145,4 @@ export function CalendarHeader({
       )}
     </header>
   );
-}
+});

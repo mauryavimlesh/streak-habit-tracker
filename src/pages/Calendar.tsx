@@ -30,7 +30,7 @@ import { getUserActivities, getLocalActivities, Activity } from '../lib/activity
 import { getUserGoals, readLocalGoals, Goal } from '../lib/goalService';
 import { getUserJournal, readLocalJournal, JournalEntry } from '../lib/journalService';
 import { formatDateKey } from '../lib/dateUtils';
-import { getUnifiedActivitiesForDate } from '../lib/unifiedActivityService';
+import { buildCalendarDataIndex, selectDayData } from '../lib/calendarSelectors';
 
 export default function Calendar() {
   const { user } = useAuth();
@@ -186,126 +186,25 @@ export default function Calendar() {
     setViewMonthDate(new Date(viewMonthDate.getFullYear(), viewMonthDate.getMonth() + 1, 1));
   };
 
-  // Pre-index items by YYYY-MM-DD date key so day-lookups are O(1) instant
-  const tasksByDate = useMemo(() => {
-    const map = new Map<string, TaskItem[]>();
-    for (const t of tasks) {
-      const existing = map.get(t.date);
-      if (existing) existing.push(t);
-      else map.set(t.date, [t]);
-    }
-    return map;
-  }, [tasks]);
-
-  const completedLogsByDate = useMemo(() => {
-    const map = new Map<string, HabitLog[]>();
-    for (const l of logs) {
-      if (l.status === 'completed') {
-        const existing = map.get(l.date);
-        if (existing) existing.push(l);
-        else map.set(l.date, [l]);
-      }
-    }
-    return map;
-  }, [logs]);
-
-  const activitiesByDate = useMemo(() => {
-    const map = new Map<string, Activity[]>();
-    for (const a of activities) {
-      const existing = map.get(a.date);
-      if (existing) existing.push(a);
-      else map.set(a.date, [a]);
-    }
-    return map;
-  }, [activities]);
-
-  const journalsByDate = useMemo(() => {
-    const map = new Map<string, JournalEntry[]>();
-    for (const j of journals) {
-      const existing = map.get(j.date);
-      if (existing) existing.push(j);
-      else map.set(j.date, [j]);
-    }
-    return map;
-  }, [journals]);
-
-  // Activity & Task map for fast indicator dots on calendar days
-  const taskDatesMap = useMemo(() => {
-    const map: Record<
-      string,
-      { count: number; completedCount: number; hasHighPriority: boolean }
-    > = {};
-
-    tasks.forEach((t) => {
-      if (!map[t.date]) {
-        map[t.date] = { count: 0, completedCount: 0, hasHighPriority: false };
-      }
-      map[t.date].count += 1;
-      if (t.completed) {
-        map[t.date].completedCount += 1;
-      }
-      if (t.priority === 'high' && !t.completed) {
-        map[t.date].hasHighPriority = true;
-      }
-    });
-
-    logs.forEach((l) => {
-      if (!map[l.date]) {
-        map[l.date] = { count: 0, completedCount: 0, hasHighPriority: false };
-      }
-      map[l.date].count += 1;
-      if (l.status === 'completed') {
-        map[l.date].completedCount += 1;
-      }
-    });
-
-    activities.forEach((a) => {
-      if (!map[a.date]) {
-        map[a.date] = { count: 0, completedCount: 0, hasHighPriority: false };
-      }
-      map[a.date].count += 1;
-      map[a.date].completedCount += 1;
-    });
-
-    return map;
-  }, [tasks, logs, activities]);
-
   // Selected date key: canonical YYYY-MM-DD
   const selectedDateStr = useMemo(() => {
     return formatDateKey(selectedDate);
   }, [selectedDate]);
 
-  // Tasks for the selected date (O(1) lookup)
-  const selectedDateTasks = useMemo(() => {
-    return tasksByDate.get(selectedDateStr) || [];
-  }, [tasksByDate, selectedDateStr]);
+  // High-performance memoized Calendar Data Index (computed only when underlying collections change)
+  const calendarIndex = useMemo(() => {
+    return buildCalendarDataIndex({ tasks, habits, logs, activities, goals, journals });
+  }, [tasks, habits, logs, activities, goals, journals]);
 
-  const selectedDateLogs = useMemo(() => {
-    return completedLogsByDate.get(selectedDateStr) || [];
-  }, [completedLogsByDate, selectedDateStr]);
+  const taskDatesMap = calendarIndex.taskDatesMap;
 
-  const selectedDateActivities = useMemo(() => {
-    return activitiesByDate.get(selectedDateStr) || [];
-  }, [activitiesByDate, selectedDateStr]);
+  // Instant O(1) Day Data Query during day navigation
+  const dayData = useMemo(() => {
+    return selectDayData(calendarIndex, selectedDateStr);
+  }, [calendarIndex, selectedDateStr]);
 
-  const selectedDateJournals = useMemo(() => {
-    return journalsByDate.get(selectedDateStr) || [];
-  }, [journalsByDate, selectedDateStr]);
-
-  // Calculate truthful score for display (reflecting real completion rate)
-  const streakScore = useMemo(() => {
-    const unified = getUnifiedActivitiesForDate(selectedDateStr, {
-      habits,
-      logs: selectedDateLogs,
-      tasks: selectedDateTasks,
-      goals,
-      activities: selectedDateActivities,
-      journals: selectedDateJournals,
-    });
-    if (unified.length === 0) return 0;
-    const completed = unified.filter((a) => a.completed).length;
-    return Math.min(100, Math.round((completed / unified.length) * 100));
-  }, [selectedDateStr, habits, selectedDateLogs, selectedDateTasks, goals, selectedDateActivities, selectedDateJournals]);
+  const selectedDateTasks = dayData.tasks;
+  const streakScore = dayData.stats.streakScore;
 
   // Task CRUD operations
   const handleToggleTask = async (taskId: string) => {
@@ -563,6 +462,11 @@ export default function Calendar() {
         <DaySchedule
           selectedDate={selectedDate}
           tasks={selectedDateTasks}
+          dayLogs={dayData.completedLogs}
+          dayActivities={dayData.activities}
+          dayJournals={dayData.journals}
+          totalFocusMinutes={dayData.stats.totalFocusMinutes}
+          hasGoalActivities={dayData.stats.hasGoalActivities}
           habits={habits}
           logs={logs}
           activities={activities}

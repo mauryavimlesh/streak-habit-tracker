@@ -17,7 +17,7 @@ interface MonthCalendarProps {
 
 const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-export function MonthCalendar({
+export const MonthCalendar = React.memo(function MonthCalendar({
   currentMonthDate,
   selectedDate,
   todayDate,
@@ -243,4 +243,4 @@ export function MonthCalendar({
       </div>
     </motion.div>
   );
-}
+});

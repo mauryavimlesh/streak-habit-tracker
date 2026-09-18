@@ -41,6 +41,11 @@ interface DayScheduleProps {
   journals?: JournalEntry[];
   selectedDate: Date;
   tasks: TaskItem[];
+  dayLogs?: HabitLog[];
+  dayActivities?: Activity[];
+  dayJournals?: JournalEntry[];
+  totalFocusMinutes?: number;
+  hasGoalActivities?: boolean;
   onToggleTask: (taskId: string) => void;
   onEditTask: (task: TaskItem) => void;
   onDeleteTask: (taskId: string) => void;
@@ -49,7 +54,7 @@ interface DayScheduleProps {
   streakScore?: number;
 }
 
-export function DaySchedule({
+export const DaySchedule = React.memo(function DaySchedule({
   habits = [],
   logs = [],
   activities = [],
@@ -57,6 +62,11 @@ export function DaySchedule({
   journals = [],
   selectedDate,
   tasks,
+  dayLogs: propDayLogs,
+  dayActivities: propDayActivities,
+  dayJournals: propDayJournals,
+  totalFocusMinutes: propTotalFocusMinutes,
+  hasGoalActivities: propHasGoalActivities,
   onToggleTask,
   onEditTask,
   onDeleteTask,
@@ -79,8 +89,19 @@ export function DaySchedule({
     return map;
   }, [habits]);
 
-  // Aggregate day items cleanly with memoization
+  // Aggregate day items cleanly with O(1) memoized data or fallback
   const { dayLogs, dayActivities, dayJournals, totalFocusMinutes } = useMemo(() => {
+    if (propDayLogs && propDayActivities && propDayJournals) {
+      return {
+        dayLogs: propDayLogs,
+        dayActivities: propDayActivities,
+        dayJournals: propDayJournals,
+        totalFocusMinutes:
+          typeof propTotalFocusMinutes === 'number'
+            ? propTotalFocusMinutes
+            : propDayActivities.reduce((acc, a) => acc + (a.durationMinutes || 0), 0),
+      };
+    }
     const dLogs = logs.filter((l) => l.date === selectedDateStr && l.status === 'completed');
     const dActs = activities.filter((a) => a.date === selectedDateStr);
     const dJournals = journals.filter((j) => j.date === selectedDateStr);
@@ -91,7 +112,16 @@ export function DaySchedule({
       dayJournals: dJournals,
       totalFocusMinutes: focusMins,
     };
-  }, [logs, activities, journals, selectedDateStr]);
+  }, [
+    propDayLogs,
+    propDayActivities,
+    propDayJournals,
+    propTotalFocusMinutes,
+    logs,
+    activities,
+    journals,
+    selectedDateStr,
+  ]);
 
   // Group items by type
   const { eventCount, meetingCount, standardTaskCount, completedCount } = useMemo(() => {
@@ -129,7 +159,10 @@ export function DaySchedule({
   const isToday =
     selectedDate.toDateString() === new Date().toDateString();
 
-  const hasGoalActivities = goals.some((g) => (g.dailyHistory?.[selectedDateStr]?.activities?.length || 0) > 0);
+  const hasGoalActivities =
+    typeof propHasGoalActivities === 'boolean'
+      ? propHasGoalActivities
+      : goals.some((g) => (g.dailyHistory?.[selectedDateStr]?.activities?.length || 0) > 0);
 
   return (
     <div className="space-y-6 pt-1 pb-16">
@@ -578,4 +611,4 @@ export function DaySchedule({
       </div>
     </div>
   );
-}
+});
