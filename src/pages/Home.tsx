@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Clock, CheckCircle2, Calendar as CalendarIcon, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog, deleteHabit, readLocalHabits, readLocalLogs } from '../lib/habitService';
-import { TaskItem, subscribeToTasks, toggleTaskComplete, deleteTask } from '../lib/taskService';
-import { getUserActivities, Activity as FocusActivity } from '../lib/activityService';
+import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog, deleteHabit, readLocalHabits, readLocalLogs, deduplicateHabits } from '../lib/habitService';
+import { TaskItem, subscribeToTasks, toggleTaskComplete, deleteTask, readLocalTasks, deduplicateTasks } from '../lib/taskService';
+import { getUserActivities, Activity as FocusActivity, getLocalActivities } from '../lib/activityService';
 import { getUserGoals, Goal, readLocalGoals, logDailyGoalProgressQuick, getTodayGoalProgress, calculateGoalStreak } from '../lib/goalService';
 import { readLocalSleepSettings, format24To12 } from '../lib/sleepService';
 import { Target, Award, Sparkles, SlidersHorizontal } from 'lucide-react';
@@ -76,13 +76,25 @@ export default function Home() {
   const userName = profile?.displayName?.split(' ')[0] || profile?.userName?.split(' ')[0] || profile?.name?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Guest';
   const userInitial = userName.charAt(0).toUpperCase();
 
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [logs, setLogs] = useState<HabitLog[]>([]);
-  const [todayTasks, setTodayTasks] = useState<TaskItem[]>([]);
-  const [allTasks, setAllTasks] = useState<TaskItem[]>([]);
-  const [activities, setActivities] = useState<FocusActivity[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [todayStr, setTodayStr] = useState<string>(() => getTodayDateKey());
+
+  const [habits, setHabits] = useState<Habit[]>(() => {
+    const local = deduplicateHabits(readLocalHabits());
+    return local.length > 0 ? local : DEFAULT_HABITS;
+  });
+  const [logs, setLogs] = useState<HabitLog[]>(() => readLocalLogs());
+  const [todayTasks, setTodayTasks] = useState<TaskItem[]>(() => {
+    const local = deduplicateTasks(readLocalTasks());
+    const today = getTodayDateKey();
+    return local.filter((t) => t.date === today);
+  });
+  const [allTasks, setAllTasks] = useState<TaskItem[]>(() => deduplicateTasks(readLocalTasks()));
+  const [activities, setActivities] = useState<FocusActivity[]>(() => getLocalActivities());
+  const [goals, setGoals] = useState<Goal[]>(() => readLocalGoals());
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const local = readLocalHabits();
+    return local.length === 0;
+  });
 
   // New state variables for Habit Notes and Sync Toast
   const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
@@ -97,14 +109,22 @@ export default function Home() {
   // Sleep tracking state
   const [editingSleepHabit, setEditingSleepHabit] = useState<Habit | null>(null);
 
-  // Local progress values for instant responsive Apple OS feedback
-  const [localProgress, setLocalProgress] = useState<Record<string, number>>({
-    'default-1': 0,
-    'default-2': 1, // Matches 1 / 8 glasses from screenshot
-    'default-3': 0,
+  // Local progress values for instant responsive Apple OS feedback on first render frame
+  const [localProgress, setLocalProgress] = useState<Record<string, number>>(() => {
+    const initialLogs = readLocalLogs();
+    const today = getTodayDateKey();
+    const progressMap: Record<string, number> = {
+      'default-1': 0,
+      'default-2': 1,
+      'default-3': 0,
+    };
+    initialLogs.forEach((l) => {
+      if (l.date === today) {
+        progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
+      }
+    });
+    return progressMap;
   });
-
-  const [todayStr, setTodayStr] = useState<string>(() => getTodayDateKey());
 
   // Check for midnight rollover and update active day
   useEffect(() => {
@@ -185,7 +205,10 @@ export default function Home() {
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
+    // Only show loading placeholder if there is zero cached data
+    if (habits.length === 0) {
+      setIsLoading(true);
+    }
     try {
       const todayString = getTodayDateKey();
 
@@ -213,15 +236,13 @@ export default function Home() {
         const isInit = localStorage.getItem(`streak_habits_initialized_${user.uid}`);
         if (!isInit) {
           const seeded = await seedDefaultHabits(user.uid);
-          setHabits(seeded.length > 0 ? seeded : []);
-        } else {
-          setHabits([]);
+          if (seeded.length > 0) setHabits(seeded);
         }
       }
       setLogs(fetchedLogs);
     } catch (err) {
-      console.error(err);
-      setHabits([]);
+      console.error('Error syncing habits:', err);
+      // Keep cached local habits intact so UI does not flash or disappear
     } finally {
       setIsLoading(false);
     }

@@ -61,10 +61,8 @@ export default function Calendar() {
   const [isArchivedModalOpen, setIsArchivedModalOpen] = useState(false);
   const [archivedCount, setArchivedCount] = useState<number>(() => readLocalArchivedTasks().length);
 
-  // Gesture tracking for touch & pointer swipes
+  // Gesture tracking for touch & pointer swipes (ref-based for buttery 120fps performance without re-render lag)
   const dragStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  const [dragYOffset, setDragYOffset] = useState<number>(0);
-  const [isSwiping, setIsSwiping] = useState(false);
 
   // Real-time task synchronization via Firestore and local cache
   useEffect(() => {
@@ -125,23 +123,26 @@ export default function Calendar() {
   }, [user]);
 
   // Keep viewMonthDate in sync when user selects a date from another month
-  const handleSelectDate = (date: Date) => {
+  const handleSelectDate = useCallback((date: Date) => {
     setSelectedDate(date);
     trackCalendarDateSelected();
-    if (
-      date.getMonth() !== viewMonthDate.getMonth() ||
-      date.getFullYear() !== viewMonthDate.getFullYear()
-    ) {
-      setViewMonthDate(new Date(date.getFullYear(), date.getMonth(), 1));
-    }
-  };
+    setViewMonthDate((prev) => {
+      if (
+        date.getMonth() !== prev.getMonth() ||
+        date.getFullYear() !== prev.getFullYear()
+      ) {
+        return new Date(date.getFullYear(), date.getMonth(), 1);
+      }
+      return prev;
+    });
+  }, []);
 
   // Jump to today
-  const handleResetToday = () => {
+  const handleResetToday = useCallback(() => {
     const today = new Date();
     setSelectedDate(today);
     setViewMonthDate(new Date(today.getFullYear(), today.getMonth(), 1));
-  };
+  }, []);
 
   // 7 Days of the currently selected week (Monday-based, memoized to preserve object references)
   const currentWeekMondayTime = useMemo(() => {
@@ -163,28 +164,32 @@ export default function Calendar() {
   }, [currentWeekMondayTime]);
 
   // Navigate week
-  const handlePrevWeek = () => {
-    const newDate = new Date(selectedDate);
-    newDate.setDate(selectedDate.getDate() - 7);
-    setSelectedDate(newDate);
-    setViewMonthDate(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
-  };
+  const handlePrevWeek = useCallback(() => {
+    setSelectedDate((prev) => {
+      const newDate = new Date(prev);
+      newDate.setDate(prev.getDate() - 7);
+      setViewMonthDate(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
+      return newDate;
+    });
+  }, []);
 
-  const handleNextWeek = () => {
-    const newDate = new Date(selectedDate);
-    newDate.setDate(selectedDate.getDate() + 7);
-    setSelectedDate(newDate);
-    setViewMonthDate(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
-  };
+  const handleNextWeek = useCallback(() => {
+    setSelectedDate((prev) => {
+      const newDate = new Date(prev);
+      newDate.setDate(prev.getDate() + 7);
+      setViewMonthDate(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
+      return newDate;
+    });
+  }, []);
 
   // Navigate month
-  const handlePrevMonth = () => {
-    setViewMonthDate(new Date(viewMonthDate.getFullYear(), viewMonthDate.getMonth() - 1, 1));
-  };
+  const handlePrevMonth = useCallback(() => {
+    setViewMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  }, []);
 
-  const handleNextMonth = () => {
-    setViewMonthDate(new Date(viewMonthDate.getFullYear(), viewMonthDate.getMonth() + 1, 1));
-  };
+  const handleNextMonth = useCallback(() => {
+    setViewMonthDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  }, []);
 
   // Selected date key: canonical YYYY-MM-DD
   const selectedDateStr = useMemo(() => {
@@ -207,18 +212,11 @@ export default function Calendar() {
   const streakScore = dayData.stats.streakScore;
 
   // Task CRUD operations
-  const handleToggleTask = async (taskId: string) => {
-    const targetTask = tasks.find((t) => t.id === taskId);
-    const willBeCompleted = targetTask ? !targetTask.completed : true;
-
+  const handleToggleTask = useCallback(async (taskId: string) => {
     // Tactile 'premium OS' feedback via navigator.vibrate()
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try {
-        if (willBeCompleted) {
-          navigator.vibrate([40, 60, 40]);
-        } else {
-          navigator.vibrate(15);
-        }
+        navigator.vibrate(20);
       } catch {
         // Ignore
       }
@@ -229,9 +227,9 @@ export default function Calendar() {
       prev.map((t) => (t.id === taskId ? { ...t, completed: !t.completed } : t))
     );
     await toggleTaskComplete(taskId, user?.uid);
-  };
+  }, [user?.uid]);
 
-  const handleUpdateTaskProgress = async (taskId: string, newQty: number) => {
+  const handleUpdateTaskProgress = useCallback(async (taskId: string, newQty: number) => {
     // Tactile feedback
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try {
@@ -261,19 +259,19 @@ export default function Calendar() {
     if (updated) {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
     }
-  };
+  }, [user?.uid]);
 
-  const handleOpenAddModal = (type: 'task' | 'meeting' | 'event' | 'reminder' = 'task') => {
+  const handleOpenAddModal = useCallback((type: 'task' | 'meeting' | 'event' | 'reminder' = 'task') => {
     setEditingTask(null);
     setModalType(type);
     setIsTaskModalOpen(true);
-  };
+  }, []);
 
-  const handleEditTask = (task: TaskItem) => {
+  const handleEditTask = useCallback((task: TaskItem) => {
     setEditingTask(task);
     setModalType(task.type || 'task');
     setIsTaskModalOpen(true);
-  };
+  }, []);
 
   const handleSaveTask = async (
     taskData: Omit<TaskItem, 'id' | 'createdAt' | 'updatedAt'>
@@ -299,50 +297,29 @@ export default function Calendar() {
     }
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = useCallback(async () => {
     if (!deletingTaskId) return;
     const id = deletingTaskId;
     setDeletingTaskId(null);
     setTasks((prev) => prev.filter((t) => t.id !== id));
     await deleteTask(id, user?.uid);
-  };
+  }, [deletingTaskId, user?.uid]);
 
   // Gesture handlers for smooth touch swiping between week and month view
-  const handleDragStart = (clientX: number, clientY: number) => {
+  const handleDragStart = useCallback((clientX: number, clientY: number) => {
     dragStartRef.current = {
       x: clientX,
       y: clientY,
       time: Date.now(),
     };
-  };
+  }, []);
 
-  const handleDragMove = (clientX: number, clientY: number) => {
-    if (!dragStartRef.current) return;
-    const deltaY = clientY - dragStartRef.current.y;
-    const deltaX = clientX - dragStartRef.current.x;
-
-    if (!isSwiping && (Math.abs(deltaY) > 8 || Math.abs(deltaX) > 8)) {
-      setIsSwiping(true);
-    }
-
-    if (isSwiping) {
-      // Tactile elastic resistance during pull
-      const elasticY = Math.sign(deltaY) * Math.min(24, Math.abs(deltaY) * 0.35);
-      setDragYOffset(elasticY);
-    }
-  };
-
-  const handleDragEnd = (clientX: number, clientY: number) => {
+  const handleDragEnd = useCallback((clientX: number, clientY: number) => {
     if (!dragStartRef.current) return;
     const deltaX = clientX - dragStartRef.current.x;
     const deltaY = clientY - dragStartRef.current.y;
     const elapsed = Date.now() - dragStartRef.current.time;
-    const wasSwiping = isSwiping;
     dragStartRef.current = null;
-    setIsSwiping(false);
-    setDragYOffset(0);
-
-    if (!wasSwiping) return;
 
     // Quick flick or moderate drag
     const isQuickFlick = elapsed < 350;
@@ -379,7 +356,7 @@ export default function Calendar() {
         else handleNextMonth();
       }
     }
-  };
+  }, [viewMode, handleNextWeek, handlePrevWeek, handleNextMonth, handlePrevMonth]);
 
   const deletingTaskItem = tasks.find((t) => t.id === deletingTaskId);
 
@@ -400,13 +377,10 @@ export default function Calendar() {
         />
 
         {/* Interactive Calendar Section */}
-        <motion.div
-          animate={{ y: dragYOffset }}
-          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+        <div
           onTouchStart={(e) => handleDragStart(e.touches[0].clientX, e.touches[0].clientY)}
-          onTouchMove={(e) => handleDragMove(e.touches[0].clientX, e.touches[0].clientY)}
           onTouchEnd={(e) => handleDragEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY)}
-          className="rounded-[28px] bg-[#11131a] border border-[#1d222e] p-3 sm:p-4 shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-colors hover:border-[#2d3448] touch-pan-y"
+          className="rounded-[28px] bg-[#11131a] border border-[#1d222e] p-3 sm:p-4 shadow-[0_8px_32px_rgba(0,0,0,0.4)] transition-colors hover:border-[#2d3448] touch-pan-y gpu-layer"
         >
           <AnimatePresence mode="popLayout">
             {viewMode === 'week' ? (
@@ -456,7 +430,7 @@ export default function Calendar() {
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        </div>
 
         {/* Day Schedule & Task Details for Selected Date */}
         <DaySchedule

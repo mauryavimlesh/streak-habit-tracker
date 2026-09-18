@@ -1,30 +1,43 @@
-import React from 'react';
-import { Outlet, NavLink } from 'react-router';
-import { Home, Calendar as CalendarIcon, LayoutGrid, BarChart3, BookOpen, Target } from 'lucide-react';
+import React, { Suspense, useCallback, memo } from 'react';
+import { Outlet, NavLink, useLocation } from 'react-router';
+import { Home, Calendar as CalendarIcon, LayoutGrid } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { RouteSkeleton } from '../RouteSkeleton';
 
-export default function MainLayout() {
-  return (
-    <div className="flex flex-col h-[100dvh] min-h-[100dvh] bg-background text-white overflow-hidden">
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] pb-[calc(env(safe-area-inset-bottom,0px)+88px)] scroll-smooth app-main-content">
-        <Outlet />
-      </main>
+// Global throttle tracker to debounce rapid multi-taps during route switches
+let lastNavTimestamp = 0;
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 pointer-events-auto bottom-nav" data-pwa-bottom-nav>
-        <div className="bg-[#0e1015]/95 backdrop-blur-2xl border-t border-[#1e222b] min-h-[70px] pb-[env(safe-area-inset-bottom,0px)] pt-1 px-2 sm:px-4 flex items-center justify-between overflow-x-auto no-scrollbar bottom-nav-inner">
-          <NavItem to="/" end icon={<Home className="w-5 h-5" />} label="Home" />
-          <NavItem to="/calendar" icon={<CalendarIcon className="w-5 h-5" />} label="Calendar" />
-          <NavItem to="/more" icon={<LayoutGrid className="w-5 h-5" />} label="More" />
-        </div>
-      </nav>
-    </div>
-  );
+interface NavItemProps {
+  to: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  end?: boolean;
 }
 
-function NavItem({ to, icon, label, end }: { to: string; icon: React.ReactNode; label: string; end?: boolean }) {
-  const handleTap = () => {
+const NavItem = memo(function NavItem({ to, Icon, label, end }: NavItemProps) {
+  const location = useLocation();
+  const currentPath = location.pathname;
+  const isCurrentlyActive = end
+    ? currentPath === to
+    : (to === '/' ? currentPath === '/' : currentPath.startsWith(to));
+
+  const handleTap = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
+    const now = Date.now();
+
+    // 1. Prevent redundant mount cycle if already on this route
+    if (isCurrentlyActive) {
+      e.preventDefault();
+      return;
+    }
+
+    // 2. Debounce rapid multi-taps (260ms cooldown) to keep the transition animation uninterrupted
+    if (now - lastNavTimestamp < 260) {
+      e.preventDefault();
+      return;
+    }
+    lastNavTimestamp = now;
+
+    // Haptic feedback
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try {
         navigator.vibrate(8);
@@ -32,7 +45,7 @@ function NavItem({ to, icon, label, end }: { to: string; icon: React.ReactNode; 
         // Ignore
       }
     }
-  };
+  }, [isCurrentlyActive]);
 
   return (
     <NavLink
@@ -54,7 +67,7 @@ function NavItem({ to, icon, label, end }: { to: string; icon: React.ReactNode; 
               isActive ? "bg-[#23381c] text-accent-primary" : "bg-transparent text-[#737988]"
             )}
           >
-            {icon}
+            <Icon className="w-5 h-5" />
           </div>
           <span
             className={cn(
@@ -67,6 +80,34 @@ function NavItem({ to, icon, label, end }: { to: string; icon: React.ReactNode; 
         </div>
       )}
     </NavLink>
+  );
+});
+
+const BottomNav = memo(function BottomNav() {
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50 pointer-events-auto bottom-nav" data-pwa-bottom-nav>
+      <div className="bg-[#0e1015]/95 backdrop-blur-2xl border-t border-[#1e222b] min-h-[70px] pb-[env(safe-area-inset-bottom,0px)] pt-1 px-2 sm:px-4 flex items-center justify-between overflow-x-auto no-scrollbar bottom-nav-inner">
+        <NavItem to="/" end Icon={Home} label="Home" />
+        <NavItem to="/calendar" Icon={CalendarIcon} label="Calendar" />
+        <NavItem to="/more" Icon={LayoutGrid} label="More" />
+      </div>
+    </nav>
+  );
+});
+
+export default function MainLayout() {
+  return (
+    <div className="flex flex-col h-[100dvh] min-h-[100dvh] bg-background text-white overflow-hidden">
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] pb-[calc(env(safe-area-inset-bottom,0px)+88px)] app-main-content overscroll-contain">
+        <Suspense fallback={<RouteSkeleton />}>
+          <Outlet />
+        </Suspense>
+      </main>
+
+      {/* Memoized Bottom Navigation */}
+      <BottomNav />
+    </div>
   );
 }
 
