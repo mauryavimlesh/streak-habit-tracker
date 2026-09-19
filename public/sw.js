@@ -2,7 +2,7 @@
 // Supports Versioned Precaching, Stale-While-Revalidate for Assets, Network-First for Navigation,
 // Safe Controlled Updates, Background Sync, and Notification Actions.
 
-const CACHE_VERSION = 'streak-v3.3';
+const CACHE_VERSION = 'streak-v4.0';
 const PRECACHE_NAME = `streak-precache-${CACHE_VERSION}`;
 const STATIC_CACHE = `streak-static-${CACHE_VERSION}`;
 const PAGES_CACHE = `streak-pages-${CACHE_VERSION}`;
@@ -17,6 +17,7 @@ const PRECACHE_URLS = [
   '/manifest.json',
   '/favicon.svg',
   '/favicon.ico',
+  '/logo.png',
   '/icon-192.png',
   '/icon-512.png',
   '/icon-maskable-192.png',

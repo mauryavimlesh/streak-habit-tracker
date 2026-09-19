@@ -48,9 +48,9 @@ export const AddToHomeScreenModal: React.FC<AddToHomeScreenModalProps> = ({ isOp
 
           {/* Header */}
           <div className="flex items-center gap-3.5 mb-5">
-            <div className="relative w-14 h-14 rounded-2xl bg-zinc-900 p-2.5 border border-[#232733] flex items-center justify-center shadow-lg">
+            <div className="relative w-14 h-14 rounded-2xl bg-zinc-900 p-1.5 border border-[#232733] flex items-center justify-center shadow-lg">
               <img
-                src="/icon-192.png"
+                src="/logo.png"
                 alt="STREAK App Icon"
                 className="w-full h-full object-contain rounded-xl"
               />

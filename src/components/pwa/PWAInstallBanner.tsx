@@ -167,9 +167,9 @@ export const PWAInstallBanner: React.FC = () => {
 
               <div className="relative flex items-center gap-3">
                 {/* Brand App Icon with 192x192 asset & active pulse */}
-                <div className="relative w-11 h-11 rounded-xl bg-zinc-900 border border-[#232733] p-1.5 shrink-0 flex items-center justify-center shadow-inner">
+                <div className="relative w-11 h-11 rounded-xl bg-zinc-900 border border-[#232733] p-1 shrink-0 flex items-center justify-center shadow-inner">
                   <img
-                    src="/icon-192.png"
+                    src="/logo.png"
                     alt="STREAK"
                     className="w-full h-full object-contain rounded-lg"
                   />
