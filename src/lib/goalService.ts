@@ -579,6 +579,114 @@ export async function updateGoal(
     updatedAt: new Date().toISOString(),
   };
 
+  const todayStr = getTodayDateKey();
+
+  // Link or Unlink Habit
+  if (updated.type === 'daily' && updated.linkToHabit) {
+    if (!updated.linkedHabitId) {
+      try {
+        const { createHabit } = await import('./habitService');
+        const habitId = await createHabit({
+          name: updated.title,
+          category: updated.category.toLowerCase(),
+          targetType: 'count',
+          targetValue: updated.dailyTarget || 1,
+          targetUnit: updated.unit || 'units',
+          frequencyType: 'daily',
+          frequencyValue: [],
+          icon: 'target',
+          color: 'lime',
+          userId,
+          goalId: goalId,
+        } as any);
+        if (habitId) {
+          updated.linkedHabitId = habitId;
+          if (updates.linkedHabitId === undefined) {
+            updates.linkedHabitId = habitId;
+          }
+        }
+      } catch (e) {
+        console.warn('Could not auto-link habit during update:', e);
+      }
+    } else {
+      try {
+        const { updateHabit } = await import('./habitService');
+        await updateHabit(updated.linkedHabitId, {
+          name: updated.title,
+          category: updated.category.toLowerCase(),
+          targetValue: updated.dailyTarget || 1,
+          targetUnit: updated.unit || 'units',
+          goalId: goalId,
+        } as any);
+      } catch (e) {
+        console.warn('Could not update linked habit during goal update:', e);
+      }
+    }
+  } else if (!updated.linkToHabit && prevGoal.linkedHabitId) {
+    try {
+      const { updateHabit } = await import('./habitService');
+      await updateHabit(prevGoal.linkedHabitId, { goalId: undefined } as any);
+      updated.linkedHabitId = undefined;
+      updates.linkedHabitId = '';
+    } catch (e) {
+      console.warn('Could not unlink habit:', e);
+    }
+  }
+
+  // Link or Unlink Task
+  if (updated.type === 'daily' && updated.linkToTask) {
+    if (!updated.linkedTaskId) {
+      try {
+        const { createTask } = await import('./taskService');
+        const task = await createTask({
+          title: `${updated.title} (${updated.dailyTarget || 1} ${updated.unit || 'units'})`,
+          date: todayStr,
+          completed: false,
+          category: updated.category as any,
+          type: 'task',
+          repeat: 'daily',
+          goalId: goalId,
+        }, userId);
+        if (task?.id) {
+          updated.linkedTaskId = task.id;
+          if (updates.linkedTaskId === undefined) {
+            updates.linkedTaskId = task.id;
+          }
+        }
+      } catch (e) {
+        console.warn('Could not auto-link task during update:', e);
+      }
+    } else {
+      try {
+        const { getAllTasks, updateTask } = await import('./taskService');
+        const tasks = await getAllTasks(userId);
+        const linkedTask = tasks.find(t => t.id === updated.linkedTaskId || t.goalId === goalId);
+        if (linkedTask) {
+          await updateTask(linkedTask.id, {
+            title: `${updated.title} (${updated.dailyTarget || 1} ${updated.unit || 'units'})`,
+            category: updated.category as any,
+            goalId: goalId,
+          }, userId);
+        }
+      } catch (e) {
+        console.warn('Could not update linked task during goal update:', e);
+      }
+    }
+  } else if (!updated.linkToTask && prevGoal.linkedTaskId) {
+    try {
+      const { getAllTasks, updateTask } = await import('./taskService');
+      const tasks = await getAllTasks(userId);
+      const linkedTask = tasks.find(t => t.id === prevGoal.linkedTaskId || t.goalId === goalId);
+      if (linkedTask) {
+        await updateTask(linkedTask.id, { goalId: undefined }, userId);
+      }
+      updated.linkedTaskId = undefined;
+      updates.linkedTaskId = '';
+    } catch (e) {
+      console.warn('Could not unlink task:', e);
+    }
+  }
+
   local[index] = updated;
   saveLocalGoals(local);
 
@@ -602,6 +710,8 @@ export async function updateGoal(
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('streak_goals_updated', { detail: updated }));
+    window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
+    window.dispatchEvent(new CustomEvent('streak_habits_updated'));
   }
 
   return updated;

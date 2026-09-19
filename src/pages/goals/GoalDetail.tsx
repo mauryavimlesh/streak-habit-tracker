@@ -17,6 +17,7 @@ import {
   rescheduleGoalActivity,
   readLocalGoals,
   deleteGoal,
+  updateGoal,
 } from '../../lib/goalService';
 import { calculateGoalProgress } from '../../lib/goalProgressEngine';
 import {
@@ -82,6 +83,43 @@ export default function GoalDetail() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Edit Goal Modal states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editCategory, setEditCategory] = useState('Study');
+  const [editType, setEditType] = useState<'one_time' | 'daily'>('daily');
+  const [editTarget, setEditTarget] = useState(20);
+  const [editDailyTarget, setEditDailyTarget] = useState(20);
+  const [editUnit, setEditUnit] = useState('pages');
+  const [editTargetDate, setEditTargetDate] = useState('2026-12-31');
+  const [editPriority, setEditPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [editLinkToHabit, setEditLinkToHabit] = useState(false);
+  const [editLinkToTask, setEditLinkToTask] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [verificationSuccess, setVerificationSuccess] = useState<boolean>(false);
+  const [isVerifying, setIsVerifying] = useState<boolean>(false);
+
+  const handleOpenEditModal = () => {
+    if (!goal) return;
+    setEditTitle(goal.title);
+    setEditDesc(goal.description || '');
+    setEditCategory(goal.category || 'Study');
+    setEditType((goal.type as any) || 'daily');
+    setEditTarget(goal.target || 20);
+    setEditDailyTarget(goal.dailyTarget || goal.target || 20);
+    setEditUnit(goal.unit || 'pages');
+    setEditTargetDate(goal.targetDate || '2026-12-31');
+    setEditPriority(goal.priority || 'medium');
+    setEditLinkToHabit(Boolean(goal.linkToHabit));
+    setEditLinkToTask(Boolean(goal.linkToTask));
+    setVerificationError(null);
+    setVerificationSuccess(false);
+    setIsVerifying(false);
+    setIsEditModalOpen(true);
+  };
+
   const handleDeleteGoal = async () => {
     if (!goal) return;
     setIsDeleting(true);
@@ -91,6 +129,95 @@ export default function GoalDetail() {
     } catch (err) {
       console.error('Failed to delete goal', err);
       setIsDeleting(false);
+    }
+  };
+
+  const handleSaveEditGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!goal || !editTitle.trim() || isSavingEdit) return;
+
+    setIsSavingEdit(true);
+    setVerificationError(null);
+    setVerificationSuccess(false);
+    setIsVerifying(true);
+
+    try {
+      // 1. Update the goal
+      const updatedGoal = await updateGoal(
+        goal.id,
+        {
+          title: editTitle.trim(),
+          description: editDesc.trim() || undefined,
+          category: editCategory,
+          type: editType,
+          target: editType === 'daily' ? editDailyTarget : Number(editTarget) || 100,
+          dailyTarget: editType === 'daily' ? Number(editDailyTarget) || 1 : undefined,
+          unit: editUnit.trim() || 'units',
+          targetDate: editTargetDate,
+          priority: editPriority,
+          linkToHabit: editType === 'daily' ? editLinkToHabit : false,
+          linkToTask: editType === 'daily' ? editLinkToTask : false,
+        },
+        user?.uid || 'local'
+      );
+
+      if (!updatedGoal) {
+        throw new Error('Goal not found in database.');
+      }
+
+      // 2. Comprehensive Validation Step (Verify persistent store IDs & links)
+      // Check habit linkage validation
+      if (editType === 'daily' && editLinkToHabit) {
+        // Must have linkedHabitId in the goal object
+        if (!updatedGoal.linkedHabitId) {
+          throw new Error('Linkage Validation Failed: Goal linkedHabitId was not populated.');
+        }
+        
+        // Fetch habits from store and verify
+        const { getUserHabits } = await import('../../lib/habitService');
+        const habits = await getUserHabits(user?.uid || 'local', true);
+        const linkedHabit = habits.find(h => h.id === updatedGoal.linkedHabitId);
+        
+        if (!linkedHabit) {
+          throw new Error('Linkage Validation Failed: Linked Habit not found in store.');
+        }
+        if ((linkedHabit as any).goalId !== goal.id) {
+          throw new Error('Linkage Validation Failed: Linked Habit goalId does not match Goal ID.');
+        }
+      }
+
+      // Check task linkage validation
+      if (editType === 'daily' && editLinkToTask) {
+        // Must have linkedTaskId in the goal object
+        if (!updatedGoal.linkedTaskId) {
+          throw new Error('Linkage Validation Failed: Goal linkedTaskId was not populated.');
+        }
+
+        // Fetch tasks from store and verify
+        const { getAllTasks } = await import('../../lib/taskService');
+        const tasks = await getAllTasks(user?.uid || 'local');
+        const linkedTask = tasks.find(t => t.id === updatedGoal.linkedTaskId);
+
+        if (!linkedTask) {
+          throw new Error('Linkage Validation Failed: Linked Task not found in store.');
+        }
+        if (linkedTask.goalId !== goal.id) {
+          throw new Error('Linkage Validation Failed: Linked Task goalId does not match Goal ID.');
+        }
+      }
+
+      // Verification successful!
+      setVerificationSuccess(true);
+      setTimeout(() => {
+        setIsEditModalOpen(false);
+      }, 1500);
+      loadGoal();
+    } catch (err: any) {
+      console.error('Goal verification failed:', err);
+      setVerificationError(err?.message || 'Verification of persistent storage linkages failed.');
+    } finally {
+      setIsSavingEdit(false);
+      setIsVerifying(false);
     }
   };
 
@@ -349,6 +476,15 @@ export default function GoalDetail() {
               <span className="hidden sm:inline">Schedule</span>
             </button>
           )}
+          <button
+            id="edit-goal-btn"
+            type="button"
+            onClick={handleOpenEditModal}
+            className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 text-[#7d8495] hover:text-white border border-white/5 flex items-center justify-center transition-colors cursor-pointer"
+            title="Edit Goal"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
           <button
             id="delete-goal-btn"
             type="button"
@@ -955,6 +1091,287 @@ export default function GoalDetail() {
                   Accept Schedule
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Goal Modal */}
+      <AnimatePresence>
+        {isEditModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isSavingEdit && setIsEditModalOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-lg bg-[#16181f] border border-white/10 rounded-2xl p-6 z-10 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-accent-primary" />
+                  <span>Edit Goal Details</span>
+                </h3>
+                <button
+                  type="button"
+                  disabled={isSavingEdit}
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEditGoal} className="space-y-4 text-xs">
+                {/* Form Inputs (with State Preservation during errors) */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                    Goal Title
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none"
+                    placeholder="e.g., Learn Spanish Vocabulary"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                    Description
+                  </label>
+                  <textarea
+                    value={editDesc}
+                    onChange={(e) => setEditDesc(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none h-16 resize-none"
+                    placeholder="Details about what you want to achieve..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                      Category
+                    </label>
+                    <select
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none"
+                    >
+                      <option value="Study" className="bg-[#16181f]">Study</option>
+                      <option value="Health" className="bg-[#16181f]">Health</option>
+                      <option value="Fitness" className="bg-[#16181f]">Fitness</option>
+                      <option value="Personal" className="bg-[#16181f]">Personal</option>
+                      <option value="General" className="bg-[#16181f]">General</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                      Priority
+                    </label>
+                    <select
+                      value={editPriority}
+                      onChange={(e) => setEditPriority(e.target.value as any)}
+                      className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none"
+                    >
+                      <option value="low" className="bg-[#16181f]">Low</option>
+                      <option value="medium" className="bg-[#16181f]">Medium</option>
+                      <option value="high" className="bg-[#16181f]">High</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                    Goal Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 bg-white/[0.03] p-1 rounded-xl border border-white/5">
+                    <button
+                      type="button"
+                      onClick={() => setEditType('daily')}
+                      className={cn(
+                        "py-1.5 rounded-lg text-center font-bold transition-all cursor-pointer",
+                        editType === 'daily' ? "bg-accent-primary text-black" : "text-[#7d8495] hover:text-white"
+                      )}
+                    >
+                      Daily Target
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditType('one_time')}
+                      className={cn(
+                        "py-1.5 rounded-lg text-center font-bold transition-all cursor-pointer",
+                        editType === 'one_time' ? "bg-accent-primary text-black" : "text-[#7d8495] hover:text-white"
+                      )}
+                    >
+                      One-time Target
+                    </button>
+                  </div>
+                </div>
+
+                {editType === 'daily' ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                        Daily Target
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={editDailyTarget}
+                        onChange={(e) => setEditDailyTarget(Number(e.target.value) || 1)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                        Unit
+                      </label>
+                      <input
+                        type="text"
+                        value={editUnit}
+                        onChange={(e) => setEditUnit(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none"
+                        placeholder="e.g., pages, minutes"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                        Overall Target
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={editTarget}
+                        onChange={(e) => setEditTarget(Number(e.target.value) || 1)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                        Unit
+                      </label>
+                      <input
+                        type="text"
+                        value={editUnit}
+                        onChange={(e) => setEditUnit(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none"
+                        placeholder="e.g., % , hours"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                    Target Completion Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editTargetDate}
+                    onChange={(e) => setEditTargetDate(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none"
+                  />
+                </div>
+
+                {editType === 'daily' && (
+                  <div className="p-3 bg-white/[0.02] border border-white/5 rounded-xl space-y-3">
+                    <span className="text-[10px] font-bold text-accent-primary uppercase tracking-wider block">
+                      Automated Linkages
+                    </span>
+                    <div className="space-y-2.5">
+                      <label className="flex items-center gap-3 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={editLinkToHabit}
+                          onChange={(e) => setEditLinkToHabit(e.target.checked)}
+                          className="rounded border-white/10 text-accent-primary focus:ring-accent-primary bg-[#16181f] w-4 h-4"
+                        />
+                        <div>
+                          <span className="font-semibold text-white text-xs block">Link to Habit Tracker</span>
+                          <span className="text-[10px] text-[#7d8495] block">Create or synchronize habit with stable database mapping.</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-3 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={editLinkToTask}
+                          onChange={(e) => setEditLinkToTask(e.target.checked)}
+                          className="rounded border-white/10 text-accent-primary focus:ring-accent-primary bg-[#16181f] w-4 h-4"
+                        />
+                        <div>
+                          <span className="font-semibold text-white text-xs block">Link to Daily Task List</span>
+                          <span className="text-[10px] text-[#7d8495] block">Synchronize repeating daily tasks under goalId.</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Verification/Validation Status Feedbacks */}
+                {isVerifying && (
+                  <div className="p-3 rounded-xl bg-[#22c55e]/5 border border-[#22c55e]/20 text-[#22c55e] space-y-1.5 animate-pulse">
+                    <span className="font-bold flex items-center gap-1.5">
+                      <span className="inline-block w-2 h-2 rounded-full bg-[#22c55e] animate-ping" />
+                      Performing Persistent Store Audits...
+                    </span>
+                    <p className="text-[10px] text-[#7d8495] leading-normal">
+                      Validating goal state, checking linked records, and verifying immutable database ID mappings (`goalId` in task/habit objects).
+                    </p>
+                  </div>
+                )}
+
+                {verificationError && (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 space-y-1">
+                    <span className="font-bold">Database Verification Failed</span>
+                    <p className="text-[10px] leading-normal">{verificationError}</p>
+                  </div>
+                )}
+
+                {verificationSuccess && (
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 space-y-1">
+                    <span className="font-bold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" />
+                      Audit Verified Successfully!
+                    </span>
+                    <p className="text-[10px] leading-normal text-emerald-400/80">
+                      Immutable linkages and database IDs were correctly verified in persistent storage.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+                  <button
+                    type="button"
+                    disabled={isSavingEdit}
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 font-medium text-xs transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingEdit}
+                    className="flex-1 py-2.5 rounded-xl bg-accent-primary text-black font-bold text-xs hover:brightness-110 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingEdit ? 'Verifying...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

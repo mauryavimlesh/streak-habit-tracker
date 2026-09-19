@@ -52,13 +52,10 @@ const SNOOZE_PRESETS = [5, 10, 15];
 
 const TIME_PRESET_BUTTONS = [
   { label: '6:00 AM', val: '06:00' },
-  { label: '7:00 AM', val: '07:00' },
   { label: '8:00 AM', val: '08:00' },
-  { label: '9:00 AM', val: '09:00' },
   { label: '12:00 PM', val: '12:00' },
   { label: '6:00 PM', val: '18:00' },
   { label: '9:00 PM', val: '21:00' },
-  { label: '10:00 PM', val: '22:00' },
 ];
 
 interface AlarmReminderModalProps {
@@ -83,6 +80,51 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
   const [selectedDays, setSelectedDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
   const [date, setDate] = useState('');
   const [enabled, setEnabled] = useState(true);
+
+  // Native time selector states
+  const [selectedHour, setSelectedHour] = useState('08');
+  const [selectedMinute, setSelectedMinute] = useState('00');
+  const [selectedAmPm, setSelectedAmPm] = useState<'AM' | 'PM'>('AM');
+
+  // Progressive Disclosure states
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showToneSelector, setShowToneSelector] = useState(false);
+
+  const HOUR_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
+  const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+
+  const handlePartChange = (h12: string, m: string, ampm: 'AM' | 'PM') => {
+    let h24 = parseInt(h12, 10);
+    if (ampm === 'PM') {
+      if (h24 < 12) h24 += 12;
+    } else {
+      if (h24 === 12) h24 = 0;
+    }
+    const h24Str = String(h24).padStart(2, '0');
+    setTimeValue(`${h24Str}:${m}`);
+  };
+
+  // Keep part states synced with timeValue
+  useEffect(() => {
+    if (timeValue && timeValue.includes(':')) {
+      const [h24Str, mStr] = timeValue.split(':');
+      const h24 = parseInt(h24Str, 10) || 0;
+      const m = mStr || '00';
+      let ampm: 'AM' | 'PM' = 'AM';
+      let h12 = h24;
+      if (h24 >= 12) {
+        ampm = 'PM';
+        if (h24 > 12) h12 = h24 - 12;
+      }
+      if (h12 === 0) {
+        h12 = 12;
+      }
+      const h12Str = String(h12).padStart(2, '0');
+      setSelectedHour(h12Str);
+      setSelectedMinute(m);
+      setSelectedAmPm(ampm);
+    }
+  }, [timeValue]);
 
   // Tone & Sound State
   const [soundTone, setSoundTone] = useState<string>('streak-pulse');
@@ -356,9 +398,9 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
             </div>
 
             {/* Time Picker Card */}
-            <div className="bg-[#181c25] border border-[#262c3b] rounded-2xl p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-accent-primary">
+            <div className="bg-[#181c25] border border-[#262c3b] rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="w-10 h-10 rounded-xl bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center text-accent-primary shrink-0">
                   <Clock className="w-5 h-5" />
                 </div>
                 <div>
@@ -369,12 +411,73 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
                 </div>
               </div>
 
-              <input
-                type="time"
-                value={timeValue}
-                onChange={(e) => setTimeValue(e.target.value)}
-                className="bg-[#101217] border border-[#2b3345] rounded-xl px-3 py-2 text-sm font-semibold text-white outline-none focus:border-accent-primary cursor-pointer"
-              />
+              {/* Native-feeling Interactive Selects */}
+              <div className="flex items-center gap-2 justify-end w-full sm:w-auto">
+                <div className="flex items-center gap-1.5 bg-[#101217] border border-[#2b3345] rounded-xl px-2.5 py-1.5">
+                  <select
+                    value={selectedHour}
+                    onChange={(e) => {
+                      triggerHaptic('tap');
+                      handlePartChange(e.target.value, selectedMinute, selectedAmPm);
+                    }}
+                    className="bg-transparent text-sm font-bold text-white font-mono outline-none cursor-pointer text-center"
+                    style={{ minWidth: '2.5rem' }}
+                  >
+                    {HOUR_OPTIONS.map((h) => (
+                      <option key={h} value={h} className="bg-[#12151c] text-white">
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[#8c94a5] font-mono">:</span>
+                  <select
+                    value={selectedMinute}
+                    onChange={(e) => {
+                      triggerHaptic('tap');
+                      handlePartChange(selectedHour, e.target.value, selectedAmPm);
+                    }}
+                    className="bg-transparent text-sm font-bold text-white font-mono outline-none cursor-pointer text-center"
+                    style={{ minWidth: '2.5rem' }}
+                  >
+                    {MINUTE_OPTIONS.map((m) => (
+                      <option key={m} value={m} className="bg-[#12151c] text-white">
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex bg-[#101217] border border-[#2b3345] p-1 rounded-xl shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('tap');
+                      handlePartChange(selectedHour, selectedMinute, 'AM');
+                    }}
+                    className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      selectedAmPm === 'AM'
+                        ? 'bg-accent-primary text-black font-extrabold'
+                        : 'text-[#8c94a5] hover:text-white'
+                    }`}
+                  >
+                    AM
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('tap');
+                      handlePartChange(selectedHour, selectedMinute, 'PM');
+                    }}
+                    className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                      selectedAmPm === 'PM'
+                        ? 'bg-accent-primary text-black font-extrabold'
+                        : 'text-[#8c94a5] hover:text-white'
+                    }`}
+                  >
+                    PM
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Quick Time Presets */}
@@ -464,370 +567,394 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
             {/* Sound Selection Section */}
             <div className="bg-[#181c25] border border-[#262c3b] rounded-2xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-[#8c94a5] uppercase tracking-wider">
-                  Alarm Tone
-                </span>
-                <span className="text-xs text-accent-primary font-medium">
-                  {soundTone === 'custom' ? customAudioName || 'Custom Device Tone' : BUILT_IN_TONES.find((t) => t.id === soundTone)?.name}
-                </span>
-              </div>
-
-              {/* Built-in Tones List */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                {BUILT_IN_TONES.map((tone) => {
-                  const isSelected = soundTone === tone.id;
-                  const isPreviewing = previewingToneId === tone.id;
-
-                  return (
-                    <div
-                      key={tone.id}
-                      onClick={() => {
-                        triggerHaptic('tap');
-                        setSoundTone(tone.id);
-                      }}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-accent-primary/15 border-accent-primary/50 text-white'
-                          : 'bg-[#12151c] border-[#232836] text-[#9ba3b5] hover:border-[#30384a]'
-                      }`}
-                    >
-                      <div className="min-w-0 pr-2">
-                        <div className="text-xs font-semibold truncate text-white">{tone.name}</div>
-                        <div className="text-[10px] text-[#717a8c] truncate">{tone.description}</div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePreviewTone(tone.id);
-                        }}
-                        className={`p-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
-                          isPreviewing
-                            ? 'bg-accent-primary text-black animate-pulse'
-                            : 'bg-[#1e232f] hover:bg-[#282f3f] text-[#8c94a5] hover:text-white'
-                        }`}
-                        title={isPreviewing ? 'Stop' : 'Preview'}
-                      >
-                        {isPreviewing ? <Square className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Device Custom Audio Tone */}
-              <div className="pt-2 border-t border-[#232836]">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="audio/*"
-                  onChange={handleCustomAudioSelected}
-                  className="hidden"
-                />
-
-                {customAudioId && customAudioName ? (
-                  <div
-                    onClick={() => setSoundTone('custom')}
-                    className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
-                      soundTone === 'custom'
-                        ? 'bg-accent-primary/15 border-accent-primary/50'
-                        : 'bg-[#12151c] border-[#232836]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 pr-2">
-                      <FileAudio className="w-4 h-4 text-accent-primary shrink-0" />
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-white truncate">
-                          {customAudioName}
-                        </div>
-                        <div className="text-[10px] text-accent-primary">Local Device Audio</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePreviewTone('custom');
-                        }}
-                        className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
-                          previewingToneId === 'custom'
-                            ? 'bg-accent-primary text-black animate-pulse'
-                            : 'bg-[#1e232f] hover:bg-[#282f3f] text-[#8c94a5]'
-                        }`}
-                        title={previewingToneId === 'custom' ? 'Stop' : 'Play'}
-                      >
-                        {previewingToneId === 'custom' ? (
-                          <Square className="w-3 h-3 fill-current" />
-                        ) : (
-                          <Play className="w-3 h-3 fill-current" />
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          fileInputRef.current?.click();
-                        }}
-                        className="px-2 py-1 rounded-lg text-[10px] bg-[#1e232f] hover:bg-[#282f3f] text-white transition-colors"
-                      >
-                        Change
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveCustomAudio();
-                        }}
-                        className="p-1.5 rounded-lg text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-2.5 px-3 rounded-xl border border-dashed border-[#30384a] hover:border-accent-primary/50 text-[#8c94a5] hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer bg-[#12151c]"
-                  >
-                    <Upload className="w-3.5 h-3.5 text-accent-primary" />
-                    <span>Choose tone from device (MP3, WAV, OGG, M4A)</span>
-                  </button>
-                )}
-
-                {audioError && (
-                  <p className="text-[11px] text-red-400 mt-1.5 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 shrink-0" />
-                    {audioError}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Alarm Settings: Volume, Vibration, Snooze */}
-            <div className="bg-[#181c25] border border-[#262c3b] rounded-2xl p-4 space-y-4">
-              <span className="block text-xs font-semibold text-[#8c94a5] uppercase tracking-wider">
-                Alarm Settings
-              </span>
-
-              {/* Volume Slider */}
-              <div className="flex items-center gap-3">
+                <div>
+                  <span className="block text-xs text-[#8c94a5] uppercase tracking-wider mb-0.5">Alarm Tone</span>
+                  <span className="text-sm font-semibold text-white">
+                    {soundTone === 'custom' ? customAudioName || 'Custom Tone' : BUILT_IN_TONES.find((t) => t.id === soundTone)?.name || 'STREAK Pulse'}
+                  </span>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setVolume(volume === 0 ? 0.85 : 0)}
-                  className="text-[#8c94a5] hover:text-white"
+                  onClick={() => setShowToneSelector(!showToneSelector)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#1e232f] hover:bg-[#282f3f] text-accent-primary border border-accent-primary/20 transition-colors cursor-pointer"
                 >
-                  {volume === 0 ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-accent-primary" />}
+                  {showToneSelector ? 'Hide Tones' : 'Change'}
                 </button>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={volume}
-                  onChange={(e) => setVolume(parseFloat(e.target.value))}
-                  className="flex-1 accent-accent-primary cursor-pointer"
-                />
-                <span className="text-xs font-mono text-[#8c94a5] w-9 text-right">
-                  {Math.round(volume * 100)}%
-                </span>
               </div>
 
-              {/* Vibration Pattern Selector */}
-              <div className="pt-3 border-t border-[#232836] space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Smartphone className="w-4 h-4 text-accent-primary" />
-                    <div>
-                      <span className="text-xs font-semibold text-white block leading-none">Vibration Pattern</span>
-                      <span className="text-[11px] text-[#8c94a5]">Tactile rhythm for habit alarm</span>
-                    </div>
+              {showToneSelector && (
+                <div className="space-y-3 pt-3 border-t border-[#232836] animate-none">
+                  {/* Built-in Tones List */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {BUILT_IN_TONES.map((tone) => {
+                      const isSelected = soundTone === tone.id;
+                      const isPreviewing = previewingToneId === tone.id;
+
+                      return (
+                        <div
+                          key={tone.id}
+                          onClick={() => {
+                            triggerHaptic('tap');
+                            setSoundTone(tone.id);
+                          }}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-accent-primary/15 border-accent-primary/50 text-white'
+                              : 'bg-[#12151c] border-[#232836] text-[#9ba3b5] hover:border-[#30384a]'
+                          }`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="text-xs font-semibold truncate text-white">{tone.name}</div>
+                            <div className="text-[10px] text-[#717a8c] truncate">{tone.description}</div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePreviewTone(tone.id);
+                            }}
+                            className={`p-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 ${
+                              isPreviewing
+                                ? 'bg-accent-primary text-black animate-pulse'
+                                : 'bg-[#1e232f] hover:bg-[#282f3f] text-[#8c94a5] hover:text-white'
+                            }`}
+                            title={isPreviewing ? 'Stop' : 'Preview'}
+                          >
+                            {isPreviewing ? <Square className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      triggerHaptic('tap');
-                      if (vibrationPattern === 'off') {
-                        setVibrationPattern('default');
-                        setVibrate(true);
-                        previewVibrationPattern('default');
-                      } else {
-                        setVibrationPattern('off');
-                        setVibrate(false);
-                      }
-                    }}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                      vibrationPattern !== 'off' ? 'bg-accent-primary' : 'bg-[#282f3f]'
-                    }`}
-                  >
-                    <div
-                      className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 ${
-                        vibrationPattern !== 'off' ? 'translate-x-5' : 'translate-x-0.5'
-                      }`}
+                  {/* Device Custom Audio Tone */}
+                  <div className="pt-2 border-t border-[#232836]">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="audio/*"
+                      onChange={handleCustomAudioSelected}
+                      className="hidden"
                     />
-                  </button>
-                </div>
 
-                {/* Pattern Choices Grid */}
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  {VIBRATION_PATTERN_OPTIONS.map((option) => {
-                    const isSelected = vibrationPattern === option.id;
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => {
-                          triggerHaptic('selection');
-                          setVibrationPattern(option.id);
-                          setVibrate(option.id !== 'off');
-                          if (option.id !== 'off') {
-                            previewVibrationPattern(option.id);
-                          }
-                        }}
-                        className={`p-2.5 rounded-xl text-left transition-all border flex flex-col justify-between cursor-pointer relative ${
-                          isSelected
-                            ? 'bg-accent-primary/15 border-accent-primary/50 text-white shadow-sm'
-                            : 'bg-[#12151c] border-[#252b3a] text-[#8c94a5] hover:border-[#353d52] hover:text-[#c4cad4]'
+                    {customAudioId && customAudioName ? (
+                      <div
+                        onClick={() => setSoundTone('custom')}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+                          soundTone === 'custom'
+                            ? 'bg-accent-primary/15 border-accent-primary/50'
+                            : 'bg-[#12151c] border-[#232836]'
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className={`text-xs font-bold ${isSelected ? 'text-accent-primary' : 'text-white'}`}>
-                            {option.name}
-                          </span>
-                          {isSelected && (
-                            <div className="w-4 h-4 rounded-full bg-accent-primary text-black flex items-center justify-center">
-                              <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        <div className="flex items-center gap-2 min-w-0 pr-2">
+                          <FileAudio className="w-4 h-4 text-accent-primary shrink-0" />
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-white truncate">
+                              {customAudioName}
                             </div>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-[#7d8495] line-clamp-1 leading-tight">
-                          {option.description}
-                        </p>
-
-                        {/* Test Vibe Button if active and not off */}
-                        {isSelected && option.id !== 'off' && (
-                          <div className="mt-2 pt-1 border-t border-accent-primary/20 flex items-center justify-between">
-                            <span className="text-[9px] text-accent-primary font-medium">Active pattern</span>
-                            <span
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                triggerHaptic('selection');
-                                previewVibrationPattern(option.id);
-                              }}
-                              className="text-[10px] font-bold text-accent-primary hover:underline"
-                            >
-                              Feel vibe
-                            </span>
+                            <div className="text-[10px] text-accent-primary">Local Device Audio</div>
                           </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                        </div>
 
-              {/* Snooze Settings */}
-              <div className="pt-2 border-t border-[#232836] space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-white">Allow Snooze</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      triggerHaptic('tap');
-                      setSnoozeEnabled(!snoozeEnabled);
-                    }}
-                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                      snoozeEnabled ? 'bg-accent-primary' : 'bg-[#282f3f]'
-                    }`}
-                  >
-                    <div
-                      className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 ${
-                        snoozeEnabled ? 'translate-x-5' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
-                </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePreviewTone('custom');
+                            }}
+                            className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                              previewingToneId === 'custom'
+                                ? 'bg-accent-primary text-black animate-pulse'
+                                : 'bg-[#1e232f] hover:bg-[#282f3f] text-[#8c94a5]'
+                            }`}
+                            title={previewingToneId === 'custom' ? 'Stop' : 'Play'}
+                          >
+                            {previewingToneId === 'custom' ? (
+                              <Square className="w-3 h-3 fill-current" />
+                            ) : (
+                              <Play className="w-3 h-3 fill-current" />
+                            )}
+                          </button>
 
-                {snoozeEnabled && (
-                  <div className="flex items-center gap-1.5 pt-1">
-                    {SNOOZE_PRESETS.map((mins) => (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              fileInputRef.current?.click();
+                            }}
+                            className="px-2 py-1 rounded-lg text-[10px] bg-[#1e232f] hover:bg-[#282f3f] text-white transition-colors"
+                          >
+                            Change
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveCustomAudio();
+                            }}
+                            className="p-1.5 rounded-lg text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors"
+                            title="Remove"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
                       <button
-                        key={mins}
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full py-2.5 px-3 rounded-xl border border-dashed border-[#30384a] hover:border-accent-primary/50 text-[#8c94a5] hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer bg-[#12151c]"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-accent-primary" />
+                        <span>Choose tone from device (MP3, WAV, OGG, M4A)</span>
+                      </button>
+                    )}
+
+                    {audioError && (
+                      <p className="text-[11px] text-red-400 mt-1.5 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        {audioError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* More Options Toggle */}
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full py-2.5 rounded-xl border border-dashed border-[#262c3b] hover:border-accent-primary/40 text-[#8c94a5] hover:text-white text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer bg-[#181c25]/45"
+            >
+              <span>{showAdvanced ? 'Hide Advanced Settings ▴' : 'More Options / Alarm Settings ▾'}</span>
+            </button>
+
+            {showAdvanced && (
+              <div className="space-y-4 pt-1 animate-none">
+                {/* Alarm Settings: Volume, Vibration, Snooze */}
+                <div className="bg-[#181c25] border border-[#262c3b] rounded-2xl p-4 space-y-4">
+                  <span className="block text-xs font-semibold text-[#8c94a5] uppercase tracking-wider">
+                    Alarm Settings
+                  </span>
+
+                  {/* Volume Slider */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setVolume(volume === 0 ? 0.85 : 0)}
+                      className="text-[#8c94a5] hover:text-white"
+                    >
+                      {volume === 0 ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-accent-primary" />}
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={volume}
+                      onChange={(e) => setVolume(parseFloat(e.target.value))}
+                      className="flex-1 accent-accent-primary cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-[#8c94a5] w-9 text-right">
+                      {Math.round(volume * 100)}%
+                    </span>
+                  </div>
+
+                  {/* Vibration Pattern Selector */}
+                  <div className="pt-3 border-t border-[#232836] space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="w-4 h-4 text-accent-primary" />
+                        <div>
+                          <span className="text-xs font-semibold text-white block leading-none">Vibration Pattern</span>
+                          <span className="text-[11px] text-[#8c94a5]">Tactile rhythm for habit alarm</span>
+                        </div>
+                      </div>
+
+                      <button
                         type="button"
                         onClick={() => {
                           triggerHaptic('tap');
-                          setSnoozeMinutes(mins);
-                          setIsCustomSnooze(false);
+                          if (vibrationPattern === 'off') {
+                            setVibrationPattern('default');
+                            setVibrate(true);
+                            previewVibrationPattern('default');
+                          } else {
+                            setVibrationPattern('off');
+                            setVibrate(false);
+                          }
                         }}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                          !isCustomSnooze && snoozeMinutes === mins
-                            ? 'bg-accent-primary/20 border border-accent-primary/40 text-accent-primary'
-                            : 'bg-[#12151c] border border-[#232836] text-[#8c94a5]'
+                        className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                          vibrationPattern !== 'off' ? 'bg-accent-primary' : 'bg-[#282f3f]'
                         }`}
                       >
-                        {mins} min
+                        <div
+                          className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 ${
+                            vibrationPattern !== 'off' ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
+                        />
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        triggerHaptic('tap');
-                        setIsCustomSnooze(true);
-                      }}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                        isCustomSnooze
-                          ? 'bg-accent-primary/20 border border-accent-primary/40 text-accent-primary'
-                          : 'bg-[#12151c] border border-[#232836] text-[#8c94a5]'
+                    </div>
+
+                    {/* Pattern Choices Grid */}
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      {VIBRATION_PATTERN_OPTIONS.map((option) => {
+                        const isSelected = vibrationPattern === option.id;
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => {
+                              triggerHaptic('selection');
+                              setVibrationPattern(option.id);
+                              setVibrate(option.id !== 'off');
+                              if (option.id !== 'off') {
+                                previewVibrationPattern(option.id);
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl text-left transition-all border flex flex-col justify-between cursor-pointer relative ${
+                              isSelected
+                                ? 'bg-accent-primary/15 border-accent-primary/50 text-white shadow-sm'
+                                : 'bg-[#12151c] border-[#252b3a] text-[#8c94a5] hover:border-[#353d52] hover:text-[#c4cad4]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-xs font-bold ${isSelected ? 'text-accent-primary' : 'text-white'}`}>
+                                {option.name}
+                              </span>
+                              {isSelected && (
+                                <div className="w-4 h-4 rounded-full bg-accent-primary text-black flex items-center justify-center">
+                                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                </div>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-[#7d8495] line-clamp-1 leading-tight">
+                              {option.description}
+                            </p>
+
+                            {/* Test Vibe Button if active and not off */}
+                            {isSelected && option.id !== 'off' && (
+                              <div className="mt-2 pt-1 border-t border-accent-primary/20 flex items-center justify-between">
+                                <span className="text-[9px] text-accent-primary font-medium">Active pattern</span>
+                                <span
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    triggerHaptic('selection');
+                                    previewVibrationPattern(option.id);
+                                  }}
+                                  className="text-[10px] font-bold text-accent-primary hover:underline"
+                                >
+                                  Feel vibe
+                                </span>
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Snooze Settings */}
+                  <div className="pt-2 border-t border-[#232836] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white">Allow Snooze</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          triggerHaptic('tap');
+                          setSnoozeEnabled(!snoozeEnabled);
+                        }}
+                        className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                          snoozeEnabled ? 'bg-accent-primary' : 'bg-[#282f3f]'
+                        }`}
+                      >
+                        <div
+                          className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 ${
+                            snoozeEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    {snoozeEnabled && (
+                      <div className="flex items-center gap-1.5 pt-1">
+                        {SNOOZE_PRESETS.map((mins) => (
+                          <button
+                            key={mins}
+                            type="button"
+                            onClick={() => {
+                              triggerHaptic('tap');
+                              setSnoozeMinutes(mins);
+                              setIsCustomSnooze(false);
+                            }}
+                            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                              !isCustomSnooze && snoozeMinutes === mins
+                                ? 'bg-accent-primary/20 border border-accent-primary/40 text-accent-primary'
+                                : 'bg-[#12151c] border border-[#232836] text-[#8c94a5]'
+                            }`}
+                          >
+                            {mins} min
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            triggerHaptic('tap');
+                            setIsCustomSnooze(true);
+                          }}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                            isCustomSnooze
+                              ? 'bg-accent-primary/20 border border-accent-primary/40 text-accent-primary'
+                              : 'bg-[#12151c] border border-[#232836] text-[#8c94a5]'
+                          }`}
+                        >
+                          Custom
+                        </button>
+                      </div>
+                    )}
+
+                    {snoozeEnabled && isCustomSnooze && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="number"
+                          min="1"
+                          max="60"
+                          value={snoozeMinutes}
+                          onChange={(e) => setSnoozeMinutes(Math.max(1, Math.min(60, parseInt(e.target.value, 10) || 5)))}
+                          className="w-20 bg-[#12151c] border border-[#2b3345] rounded-xl px-3 py-1.5 text-xs text-white text-center outline-none focus:border-accent-primary"
+                        />
+                        <span className="text-xs text-[#8c94a5]">minutes (1 - 60)</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Active Toggle Switch */}
+                <div className="flex items-center justify-between p-3 bg-[#181c25] border border-[#262c3b] rounded-2xl">
+                  <span className="text-xs font-semibold text-white">Enable Alarm</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('tap');
+                      setEnabled(!enabled);
+                    }}
+                    className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                      enabled ? 'bg-accent-primary' : 'bg-[#282f3f]'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 ${
+                        enabled ? 'translate-x-5' : 'translate-x-0.5'
                       }`}
-                    >
-                      Custom
-                    </button>
-                  </div>
-                )}
-
-                {snoozeEnabled && isCustomSnooze && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="number"
-                      min="1"
-                      max="60"
-                      value={snoozeMinutes}
-                      onChange={(e) => setSnoozeMinutes(Math.max(1, Math.min(60, parseInt(e.target.value, 10) || 5)))}
-                      className="w-20 bg-[#12151c] border border-[#2b3345] rounded-xl px-3 py-1.5 text-xs text-white text-center outline-none focus:border-accent-primary"
                     />
-                    <span className="text-xs text-[#8c94a5]">minutes (1 - 60)</span>
-                  </div>
-                )}
+                  </button>
+                </div>
               </div>
-            </div>
-
-            {/* Active Toggle Switch */}
-            <div className="flex items-center justify-between p-3 bg-[#181c25] border border-[#262c3b] rounded-2xl">
-              <span className="text-xs font-semibold text-white">Enable Alarm</span>
-              <button
-                type="button"
-                onClick={() => {
-                  triggerHaptic('tap');
-                  setEnabled(!enabled);
-                }}
-                className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
-                  enabled ? 'bg-accent-primary' : 'bg-[#282f3f]'
-                }`}
-              >
-                <div
-                  className={`w-5 h-5 rounded-full bg-white transition-transform transform absolute top-0.5 ${
-                    enabled ? 'translate-x-5' : 'translate-x-0.5'
-                  }`}
-                />
-              </button>
-            </div>
+            )}
 
             {/* Submit & Cancel Buttons */}
             <div className="flex gap-3 pt-2">

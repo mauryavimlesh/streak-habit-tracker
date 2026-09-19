@@ -276,8 +276,9 @@ export default function CreateHabit() {
       }
 
       navigate(-1);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save habit:', err);
+      setError(err?.message || 'Failed to save habit. Please check your inputs and try again.');
     } finally {
       setLoading(false);
     }

@@ -71,8 +71,10 @@ export default function Goals() {
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [goalToDelete, setGoalToDelete] = useState<Goal | null>(null);
   const [isDeletingGoal, setIsDeletingGoal] = useState(false);
+  const [showAdvancedGoalOptions, setShowAdvancedGoalOptions] = useState(false);
 
   // Form states for Create / Edit
   const [goalType, setGoalType] = useState<GoalType>('daily');
@@ -135,6 +137,7 @@ export default function Goals() {
     if (!formTitle.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
+    setError(null);
     try {
       await createGoal(
         {
@@ -168,12 +171,16 @@ export default function Goals() {
       setIsCreateOpen(false);
       resetForm();
       loadGoals();
+    } catch (err: any) {
+      console.error('Failed to create goal:', err);
+      setError(err?.message || 'Failed to create goal. Please check your inputs and try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleStartEdit = (goal: Goal) => {
+    setError(null);
     setEditingGoal(goal);
     setGoalType(goal.type || 'one_time');
     setFormTitle(goal.title);
@@ -195,6 +202,7 @@ export default function Goals() {
     if (!editingGoal || !formTitle.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
+    setError(null);
     try {
       await updateGoal(
         editingGoal.id,
@@ -219,6 +227,9 @@ export default function Goals() {
       setEditingGoal(null);
       resetForm();
       loadGoals();
+    } catch (err: any) {
+      console.error('Failed to save goal:', err);
+      setError(err?.message || 'Failed to save goal updates. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -236,6 +247,7 @@ export default function Goals() {
     setMilestoneInput('');
     setFormSubjects([]);
     setSubjectInput('');
+    setShowAdvancedGoalOptions(false);
   };
 
   // Daily Goal fast log handler
@@ -1013,6 +1025,11 @@ export default function Goals() {
               )}
 
               <form onSubmit={isEditOpen ? handleSaveEdit : handleCreate} className="space-y-3.5">
+                {error && (
+                  <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+                    {error}
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs text-[#7d8495] mb-1 font-medium">Goal Name</label>
                   <input
@@ -1097,148 +1114,161 @@ export default function Goals() {
                   </div>
                 </div>
 
-                {goalType === 'daily' && (
-                  <div>
-                    <label className="block text-xs text-[#7d8495] mb-1 font-medium">Subjects (Optional)</label>
-                    <div className="flex items-center gap-2 mb-2">
-                      <input
-                        type="text"
-                        value={subjectInput}
-                        onChange={(e) => setSubjectInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (subjectInput.trim()) {
-                              setFormSubjects([...formSubjects, subjectInput.trim()]);
-                              setSubjectInput('');
-                            }
-                          }
-                        }}
-                        placeholder="e.g. Physics, Math..."
-                        className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (subjectInput.trim()) {
-                            setFormSubjects([...formSubjects, subjectInput.trim()]);
-                            setSubjectInput('');
-                          }
-                        }}
-                        className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {formSubjects.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {formSubjects.map((sub, idx) => (
-                          <div key={idx} className="flex items-center gap-1 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg text-[11px] text-white">
-                            {sub}
-                            <button
-                              type="button"
-                              onClick={() => setFormSubjects(formSubjects.filter((_, i) => i !== idx))}
-                              className="text-[#7d8495] hover:text-red-400"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
+                {/* Advanced Options Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedGoalOptions(!showAdvancedGoalOptions)}
+                  className="w-full py-2.5 rounded-xl border border-dashed border-white/10 hover:border-accent-primary/40 text-[#8c94a5] hover:text-white text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer bg-white/5"
+                >
+                  <span>{showAdvancedGoalOptions ? 'Hide Advanced Options ▴' : 'More Options (Integrations, Milestones) ▾'}</span>
+                </button>
+
+                {showAdvancedGoalOptions && (
+                  <div className="space-y-4 pt-1 border-t border-white/5 animate-none">
+                    {goalType === 'daily' && (
+                      <div>
+                        <label className="block text-xs text-[#7d8495] mb-1 font-medium">Subjects (Optional)</label>
+                        <div className="flex items-center gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={subjectInput}
+                            onChange={(e) => setSubjectInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (subjectInput.trim()) {
+                                  setFormSubjects([...formSubjects, subjectInput.trim()]);
+                                  setSubjectInput('');
+                                }
+                              }
+                            }}
+                            placeholder="e.g. Physics, Math..."
+                            className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (subjectInput.trim()) {
+                                setFormSubjects([...formSubjects, subjectInput.trim()]);
+                                setSubjectInput('');
+                              }
+                            }}
+                            className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {formSubjects.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {formSubjects.map((sub, idx) => (
+                              <div key={idx} className="flex items-center gap-1 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg text-[11px] text-white">
+                                {sub}
+                                <button
+                                  type="button"
+                                  onClick={() => setFormSubjects(formSubjects.filter((_, i) => i !== idx))}
+                                  className="text-[#7d8495] hover:text-red-400"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
 
-                {/* Daily Goal Integrations (Habit & Task) */}
-                {goalType === 'daily' && (
-                  <div className="space-y-2 pt-1">
-                    <label className="text-[11px] font-bold text-[#7d8495] uppercase tracking-wider block">
-                      Integrations
-                    </label>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-black/30 border border-white/5">
-                        <div className="flex items-center gap-2">
-                          <Flame className="w-4 h-4 text-accent-primary" />
-                          <div>
-                            <div className="text-xs font-semibold text-white">Track as Daily Habit</div>
-                            <div className="text-[10px] text-[#7d8495]">Sync progress with your habits list</div>
+                    {/* Daily Goal Integrations (Habit & Task) */}
+                    {goalType === 'daily' && (
+                      <div className="space-y-2 pt-1">
+                        <label className="text-[11px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                          Integrations
+                        </label>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between p-3 rounded-xl bg-black/30 border border-white/5">
+                            <div className="flex items-center gap-2">
+                              <Flame className="w-4 h-4 text-accent-primary" />
+                              <div>
+                                <div className="text-xs font-semibold text-white">Track as Daily Habit</div>
+                                <div className="text-[10px] text-[#7d8495]">Sync progress with your habits list</div>
+                              </div>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={formAddToHabit}
+                              onChange={(e) => setFormAddToHabit(e.target.checked)}
+                              className="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between p-3 rounded-xl bg-black/30 border border-white/5">
+                            <div className="flex items-center gap-2">
+                              <CheckSquare className="w-4 h-4 text-blue-400" />
+                              <div>
+                                <div className="text-xs font-semibold text-white">Add to Today's Tasks</div>
+                                <div className="text-[10px] text-[#7d8495]">Appears on your daily calendar & checklist</div>
+                              </div>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={formAddToTask}
+                              onChange={(e) => setFormAddToTask(e.target.checked)}
+                              className="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
+                            />
                           </div>
                         </div>
-                        <input
-                          type="checkbox"
-                          checked={formAddToHabit}
-                          onChange={(e) => setFormAddToHabit(e.target.checked)}
-                          className="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
-                        />
                       </div>
+                    )}
 
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-black/30 border border-white/5">
-                        <div className="flex items-center gap-2">
-                          <CheckSquare className="w-4 h-4 text-blue-400" />
-                          <div>
-                            <div className="text-xs font-semibold text-white">Add to Today's Tasks</div>
-                            <div className="text-[10px] text-[#7d8495]">Appears on your daily calendar & checklist</div>
-                          </div>
+                    {/* Milestones for One-Time Goal */}
+                    {goalType === 'one_time' && !isEditOpen && (
+                      <div>
+                        <label className="block text-xs text-[#7d8495] mb-1 font-medium">Milestones (Optional)</label>
+                        <div className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={milestoneInput}
+                            onChange={(e) => setMilestoneInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (milestoneInput.trim()) {
+                                  setFormMilestones([...formMilestones, milestoneInput.trim()]);
+                                  setMilestoneInput('');
+                                }
+                              }
+                            }}
+                            placeholder="Add milestone and press Enter"
+                            className="flex-1 px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (milestoneInput.trim()) {
+                                setFormMilestones([...formMilestones, milestoneInput.trim()]);
+                                setMilestoneInput('');
+                              }
+                            }}
+                            className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white text-xs cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
                         </div>
-                        <input
-                          type="checkbox"
-                          checked={formAddToTask}
-                          onChange={(e) => setFormAddToTask(e.target.checked)}
-                          className="w-4 h-4 accent-indigo-500 rounded cursor-pointer"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Milestones for One-Time Goal */}
-                {goalType === 'one_time' && !isEditOpen && (
-                  <div>
-                    <label className="block text-xs text-[#7d8495] mb-1 font-medium">Milestones (Optional)</label>
-                    <div className="flex gap-2 mb-2">
-                      <input
-                        type="text"
-                        value={milestoneInput}
-                        onChange={(e) => setMilestoneInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (milestoneInput.trim()) {
-                              setFormMilestones([...formMilestones, milestoneInput.trim()]);
-                              setMilestoneInput('');
-                            }
-                          }
-                        }}
-                        placeholder="Add milestone and press Enter"
-                        className="flex-1 px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (milestoneInput.trim()) {
-                            setFormMilestones([...formMilestones, milestoneInput.trim()]);
-                            setMilestoneInput('');
-                          }
-                        }}
-                        className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white text-xs cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {formMilestones.length > 0 && (
-                      <div className="space-y-1 mt-2">
-                        {formMilestones.map((m, i) => (
-                          <div key={i} className="flex items-center justify-between bg-black/30 px-3 py-2 rounded-lg text-xs text-white/80">
-                            <span>{m}</span>
-                            <button
-                              type="button"
-                              onClick={() => setFormMilestones(formMilestones.filter((_, idx) => idx !== i))}
-                              className="text-red-400 hover:text-red-300"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
+                        {formMilestones.length > 0 && (
+                          <div className="space-y-1 mt-2">
+                            {formMilestones.map((m, i) => (
+                              <div key={i} className="flex items-center justify-between bg-black/30 px-3 py-2 rounded-lg text-xs text-white/80">
+                                <span>{m}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setFormMilestones(formMilestones.filter((_, idx) => idx !== i))}
+                                  className="text-red-400 hover:text-red-300"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
                   </div>
