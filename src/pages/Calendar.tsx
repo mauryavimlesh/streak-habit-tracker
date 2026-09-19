@@ -248,7 +248,7 @@ export default function Calendar() {
           return {
             ...t,
             progressQuantity: newQty,
-            completed: willBeDone ? true : t.completed,
+            completed: willBeDone,
           };
         }
         return t;

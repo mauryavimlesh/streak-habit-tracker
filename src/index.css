@@ -4,22 +4,25 @@
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Plus Jakarta Sans", system-ui, sans-serif;
   
-  --color-background: var(--app-bg);
-  --color-surface-primary: var(--app-card-bg);
-  --color-surface-secondary: var(--app-surface-secondary, #1a1d25);
-  --color-surface-card: var(--app-card-bg);
-  --color-surface-border: var(--app-surface-border, #1f232c);
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-primary: var(--surface);
+  --color-surface-secondary: var(--surface-elevated);
+  --color-surface-card: var(--surface);
+  --color-surface-glass: var(--surface-glass);
+  --color-surface-border: var(--border);
+  --color-border: var(--border);
   
-  --color-text-primary: var(--app-text-primary, #FFFFFF);
-  --color-text-secondary: var(--app-text-secondary, #7d8495);
-  --color-text-muted: var(--app-text-muted, #5c6272);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
   
-  --color-accent-primary: var(--app-accent); /* Vibrant Apple Fitness Lime */
-  --color-accent-lime: var(--app-accent);
+  --color-accent-primary: var(--accent);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-accent-lime: #8cee28;
   --color-accent-cyan: #22d3ee;
-  --color-accent-violet: #a78bfa;
-  --color-accent-pink: #f472b6;
-  --color-accent-orange: #fb923c;
+  --color-accent-violet: #a855f7;
+  --color-accent-orange: #f97316;
 }
 
 @layer base {
@@ -28,10 +31,9 @@
   }
 
   body {
-    @apply bg-[var(--app-bg)] text-text-primary antialiased selection:bg-accent-primary/30 selection:text-white min-h-screen;
-    background-color: var(--app-bg);
-    color: var(--app-text-primary, #FFFFFF);
-    transition: background-color 0.3s ease, color 0.3s ease;
+    background-color: var(--background, #0d0e12);
+    color: var(--text-primary, #FFFFFF);
+    transition: background-color 0.25s ease, color 0.25s ease;
     -webkit-tap-highlight-color: transparent;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
@@ -59,43 +61,84 @@
 
 @layer components {
   .apple-card {
-    @apply bg-[var(--app-card-bg)] border border-[#1f232c] rounded-[28px] transition-all duration-200;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    box-shadow: var(--shadow);
+    transition: all 0.2s ease;
   }
   
   .apple-pill {
-    @apply h-[72px] rounded-full bg-[var(--app-card-bg)] border border-[#1f232c] transition-all duration-200;
+    height: 72px;
+    border-radius: 9999px;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    transition: all 0.2s ease;
   }
 
   .glass-effect {
-    background: rgba(19, 21, 27, 0.72);
+    background: var(--surface-glass, rgba(19, 21, 27, 0.72));
     backdrop-filter: blur(20px) saturate(190%);
     -webkit-backdrop-filter: blur(20px) saturate(190%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 
-      inset 0 1px 1px 0 rgba(255, 255, 255, 0.16),
-      inset 0 0 16px 0 rgba(255, 255, 255, 0.02),
-      0 8px 32px 0 rgba(0, 0, 0, 0.42);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    box-shadow: var(--shadow, 0 8px 32px 0 rgba(0, 0, 0, 0.42));
   }
 
   .glass-effect-interactive {
-    background: rgba(19, 21, 27, 0.72);
+    background: var(--surface-glass, rgba(19, 21, 27, 0.72));
     backdrop-filter: blur(20px) saturate(190%);
     -webkit-backdrop-filter: blur(20px) saturate(190%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 
-      inset 0 1px 1px 0 rgba(255, 255, 255, 0.16),
-      inset 0 0 16px 0 rgba(255, 255, 255, 0.02),
-      0 8px 32px 0 rgba(0, 0, 0, 0.42);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    box-shadow: var(--shadow, 0 8px 32px 0 rgba(0, 0, 0, 0.42));
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .glass-effect-interactive:hover {
     border-color: rgba(255, 255, 255, 0.22);
-    background: rgba(24, 27, 35, 0.78);
+    background: rgba(28, 34, 48, 0.85);
   }
 
   .glass-effect-interactive:active {
     transform: scale(0.985);
+  }
+
+  /* Backdrop filter utilities */
+  .backdrop-glass-sm {
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+  }
+
+  .backdrop-glass-md {
+    backdrop-filter: blur(20px) saturate(190%);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+  }
+
+  .backdrop-glass-lg {
+    backdrop-filter: blur(28px) saturate(200%);
+    -webkit-backdrop-filter: blur(28px) saturate(200%);
+  }
+
+  /* Surface glass semantic utility classes */
+  .surface-glass {
+    background-color: var(--surface-glass, rgba(255, 255, 255, 0.08));
+    backdrop-filter: blur(20px) saturate(190%);
+    -webkit-backdrop-filter: blur(20px) saturate(190%);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  }
+
+  .surface-glass-subtle {
+    background-color: var(--surface-glass, rgba(255, 255, 255, 0.04));
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  }
+
+  .surface-glass-elevated {
+    background-color: var(--surface-elevated, rgba(28, 34, 48, 0.78));
+    backdrop-filter: blur(24px) saturate(190%);
+    -webkit-backdrop-filter: blur(24px) saturate(190%);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.16));
+    box-shadow: var(--shadow, 0 12px 36px 0 rgba(0, 0, 0, 0.55));
   }
 
   /* GPU-accelerated layer compositing for buttery-smooth 60/120fps navigation */
@@ -106,6 +149,101 @@
     -webkit-backface-visibility: hidden;
     will-change: transform, opacity;
   }
+}
+
+/* Glass Theme Specific Styling */
+.glass-mode .apple-card {
+  background-color: rgba(20, 24, 33, 0.68) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.glass-mode .apple-pill {
+  background-color: rgba(20, 24, 33, 0.72) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.glass-mode .bottom-nav-inner {
+  background: rgba(14, 18, 26, 0.75) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+
+.glass-mode .action-button {
+  background: var(--accent) !important;
+  color: var(--accent-contrast) !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Light Theme High Contrast & Contrast Audit */
+.light-mode {
+  color-scheme: light;
+}
+
+.light-mode .bottom-nav-inner {
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border-top: 1px solid #e2e8f0 !important;
+  box-shadow: 0 -4px 16px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.light-mode .text-white {
+  color: var(--text-primary) !important;
+}
+
+.light-mode .text-white\/90,
+.light-mode .text-white\/80 {
+  color: var(--text-primary) !important;
+}
+
+.light-mode .text-white\/70,
+.light-mode .text-white\/60 {
+  color: var(--text-secondary) !important;
+}
+
+.light-mode .text-white\/50,
+.light-mode .text-white\/40,
+.light-mode .text-\[\#7d8495\],
+.light-mode .text-\[\#828899\],
+.light-mode .text-\[\#737988\] {
+  color: var(--text-muted) !important;
+}
+
+.light-mode .bg-white\/5,
+.light-mode .bg-white\/10 {
+  background-color: rgba(15, 23, 42, 0.05) !important;
+}
+
+.light-mode .border-white\/5,
+.light-mode .border-white\/10,
+.light-mode .border-white\/15,
+.light-mode .border-white\/20,
+.light-mode .border-\[\#1e222b\],
+.light-mode .border-\[\#212633\] {
+  border-color: var(--border) !important;
+}
+
+.light-mode .bg-\[\#161922\],
+.light-mode .bg-\[\#13151b\],
+.light-mode .bg-\[\#0e1015\] {
+  background-color: var(--surface) !important;
+}
+
+/* Explicit exceptions for colored elements where white text is required */
+.light-mode .bg-accent-primary .text-white,
+.light-mode button.bg-accent-primary,
+.light-mode [class*="bg-black"] .text-white,
+.light-mode [class*="bg-emerald-"] .text-white,
+.light-mode [class*="bg-red-"] .text-white,
+.light-mode [class*="bg-violet-"] .text-white,
+.light-mode [class*="bg-blue-"] .text-white,
+.light-mode [class*="bg-amber-"] .text-white {
+  color: #ffffff !important;
 }
 
 

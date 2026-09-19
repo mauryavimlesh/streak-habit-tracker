@@ -112,9 +112,11 @@ export function getCanonicalDayEntryProgress(
 
   if (activities.length > 0) {
     const qtyBreakdown = calculateActivityQuantities(activities);
-    // If activities exist, the day's progress is strictly the completed quantity
+    // If activities exist, the day's progress and completion are strictly derived from the database activities
     const progress = qtyBreakdown.completedQuantity;
-    const completed = progress >= target || (entry?.completed ?? false);
+    const isActivityTargetMet = progress >= target;
+    const areAllActivitiesFinished = qtyBreakdown.activityCount > 0 && qtyBreakdown.completedActivityCount === qtyBreakdown.activityCount;
+    const completed = isActivityTargetMet || areAllActivitiesFinished;
     return {
       target,
       progress,
@@ -126,9 +128,9 @@ export function getCanonicalDayEntryProgress(
     };
   }
 
-  // No sub-activities: use direct logged progress
+  // No sub-activities: use direct logged progress from single source of truth in database
   const progress = entry?.progress || 0;
-  const completed = progress >= target || (entry?.completed ?? false);
+  const completed = progress >= target;
   return {
     target,
     progress,

@@ -959,7 +959,7 @@ export async function logDailyGoalProgress(
         date: targetDate,
         status: isCompleted ? 'completed' : newProgress > 0 ? 'partial' : 'in_progress',
         progressValue: newProgress,
-      });
+      }, true);
     } catch (err) {
       console.warn('Could not sync goal to habit:', err);
     }
@@ -1006,12 +1006,19 @@ export function getTodayGoalProgress(goal: Goal, todayStr: string): number {
   return history[todayStr]?.progress || 0;
 }
 
-export async function logDailyGoalProgressQuick(goalId: string, dateStr: string, progressDelta: number, userId: string = 'local', skipSync: boolean = false) {
+export async function logDailyGoalProgressQuick(
+  goalId: string,
+  dateStr: string,
+  progressValue: number,
+  userId: string = 'local',
+  skipSync: boolean = false,
+  mode: 'add' | 'set' = 'add'
+) {
   const localGoals = readLocalGoals();
   const goal = localGoals.find(g => g.id === goalId);
   if (!goal) return null;
 
-  const history = goal.dailyHistory || {};
+  const history = { ...(goal.dailyHistory || {}) };
   const currentEntry = history[dateStr] || {
     date: dateStr,
     target: goal.dailyTarget || goal.target || 1,
@@ -1019,14 +1026,16 @@ export async function logDailyGoalProgressQuick(goalId: string, dateStr: string,
     completed: false
   };
 
-  const newProgress = Math.max(0, currentEntry.progress + progressDelta);
+  const newProgress = mode === 'set'
+    ? Math.max(0, progressValue)
+    : Math.max(0, currentEntry.progress + progressValue);
   const isCompleted = newProgress >= currentEntry.target;
   
   history[dateStr] = {
     ...currentEntry,
     progress: newProgress,
     completed: isCompleted,
-    completedAt: isCompleted ? new Date().toISOString() : undefined
+    completedAt: isCompleted ? (currentEntry.completedAt || new Date().toISOString()) : undefined
   };
 
   const currentProgress = Object.values(history).reduce((acc, curr) => acc + (curr.progress || 0), 0);
@@ -1044,7 +1053,7 @@ export async function logDailyGoalProgressQuick(goalId: string, dateStr: string,
           habitId: goal.linkedHabitId,
           userId,
           date: dateStr,
-          status: isCompleted ? 'completed' : 'in_progress',
+          status: isCompleted ? 'completed' : newProgress > 0 ? 'in_progress' : 'in_progress',
           progressValue: newProgress
         }, true);
         if (typeof window !== 'undefined') {
@@ -1058,7 +1067,10 @@ export async function logDailyGoalProgressQuick(goalId: string, dateStr: string,
     if (goal.linkedTaskId) {
       try {
         const { updateTask } = await import('./taskService');
-        await updateTask(goal.linkedTaskId, { completed: isCompleted }, userId);
+        await updateTask(goal.linkedTaskId, { 
+          completed: isCompleted,
+          progressQuantity: newProgress
+        }, userId);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
         }

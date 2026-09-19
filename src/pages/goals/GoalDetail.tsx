@@ -100,6 +100,7 @@ export default function GoalDetail() {
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [verificationSuccess, setVerificationSuccess] = useState<boolean>(false);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [showEditAdvancedOptions, setShowEditAdvancedOptions] = useState(false);
 
   const handleOpenEditModal = () => {
     if (!goal) return;
@@ -117,6 +118,7 @@ export default function GoalDetail() {
     setVerificationError(null);
     setVerificationSuccess(false);
     setIsVerifying(false);
+    setShowEditAdvancedOptions(false);
     setIsEditModalOpen(true);
   };
 
@@ -1274,51 +1276,64 @@ export default function GoalDetail() {
                   </div>
                 )}
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
-                    Target Completion Date
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={editTargetDate}
-                    onChange={(e) => setEditTargetDate(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none"
-                  />
-                </div>
+                {/* Advanced Options Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowEditAdvancedOptions(!showEditAdvancedOptions)}
+                  className="w-full py-2.5 rounded-xl border border-dashed border-white/10 hover:border-accent-primary/40 text-[#8c94a5] hover:text-white text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer bg-white/5"
+                >
+                  <span>{showEditAdvancedOptions ? 'Hide Advanced Options ▴' : 'More Options (Integrations, Target Date) ▾'}</span>
+                </button>
 
-                {editType === 'daily' && (
-                  <div className="p-3 bg-white/[0.02] border border-white/5 rounded-xl space-y-3">
-                    <span className="text-[10px] font-bold text-accent-primary uppercase tracking-wider block">
-                      Automated Linkages
-                    </span>
-                    <div className="space-y-2.5">
-                      <label className="flex items-center gap-3 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={editLinkToHabit}
-                          onChange={(e) => setEditLinkToHabit(e.target.checked)}
-                          className="rounded border-white/10 text-accent-primary focus:ring-accent-primary bg-[#16181f] w-4 h-4"
-                        />
-                        <div>
-                          <span className="font-semibold text-white text-xs block">Link to Habit Tracker</span>
-                          <span className="text-[10px] text-[#7d8495] block">Create or synchronize habit with stable database mapping.</span>
-                        </div>
+                {showEditAdvancedOptions && (
+                  <div className="space-y-4 pt-1 border-t border-white/5 animate-none">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-[#7d8495] uppercase tracking-wider block">
+                        Target Completion Date
                       </label>
-
-                      <label className="flex items-center gap-3 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={editLinkToTask}
-                          onChange={(e) => setEditLinkToTask(e.target.checked)}
-                          className="rounded border-white/10 text-accent-primary focus:ring-accent-primary bg-[#16181f] w-4 h-4"
-                        />
-                        <div>
-                          <span className="font-semibold text-white text-xs block">Link to Daily Task List</span>
-                          <span className="text-[10px] text-[#7d8495] block">Synchronize repeating daily tasks under goalId.</span>
-                        </div>
-                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={editTargetDate}
+                        onChange={(e) => setEditTargetDate(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-white focus:border-accent-primary focus:outline-none"
+                      />
                     </div>
+
+                    {editType === 'daily' && (
+                      <div className="p-3 bg-white/[0.02] border border-white/5 rounded-xl space-y-3">
+                        <span className="text-[10px] font-bold text-accent-primary uppercase tracking-wider block">
+                          Automated Linkages
+                        </span>
+                        <div className="space-y-2.5">
+                          <label className="flex items-center gap-3 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={editLinkToHabit}
+                              onChange={(e) => setEditLinkToHabit(e.target.checked)}
+                              className="rounded border-white/10 text-accent-primary focus:ring-accent-primary bg-[#16181f] w-4 h-4"
+                            />
+                            <div>
+                              <span className="font-semibold text-white text-xs block">Link to Habit Tracker</span>
+                              <span className="text-[10px] text-[#7d8495] block">Create or synchronize habit with stable database mapping.</span>
+                            </div>
+                          </label>
+
+                          <label className="flex items-center gap-3 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={editLinkToTask}
+                              onChange={(e) => setEditLinkToTask(e.target.checked)}
+                              className="rounded border-white/10 text-accent-primary focus:ring-accent-primary bg-[#16181f] w-4 h-4"
+                            />
+                            <div>
+                              <span className="font-semibold text-white text-xs block">Link to Daily Task List</span>
+                              <span className="text-[10px] text-[#7d8495] block">Synchronize repeating daily tasks under goalId.</span>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

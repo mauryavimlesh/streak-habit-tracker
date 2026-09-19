@@ -592,11 +592,15 @@ export async function toggleTaskComplete(taskId: string, userId?: string, skipSy
   if (nextCompleted) {
     trackTaskCompleted(task.category);
   }
-  await updateTask(taskId, { completed: nextCompleted }, userId);
+  const taskUpdates: Partial<TaskItem> = { completed: nextCompleted };
+  if (typeof task.targetQuantity === 'number' && task.targetQuantity > 0) {
+    taskUpdates.progressQuantity = nextCompleted ? task.targetQuantity : 0;
+  }
+  await updateTask(taskId, taskUpdates, userId);
   
   if (!skipSync && task.goalId) {
     try {
-      const { readLocalGoals, logDailyGoalProgressQuick, updateGoalActivity } = await import('./goalService');
+      const { readLocalGoals, logDailyGoalProgress, updateGoalActivity } = await import('./goalService');
       const localGoals = readLocalGoals();
       const linkedGoal = localGoals.find(g => g.id === task.goalId);
       
@@ -604,8 +608,8 @@ export async function toggleTaskComplete(taskId: string, userId?: string, skipSy
       if (linkedGoal && (task as any).activityId) {
         await updateGoalActivity(linkedGoal.id, task.date, (task as any).activityId, { completed: nextCompleted }, userId);
       } else if (linkedGoal && linkedGoal.type === 'daily') {
-        const delta = nextCompleted ? (linkedGoal.dailyTarget || linkedGoal.target || 1) : -(linkedGoal.dailyTarget || linkedGoal.target || 1);
-        await logDailyGoalProgressQuick(linkedGoal.id, task.date, delta, userId, true);
+        const targetValue = nextCompleted ? (linkedGoal.dailyTarget || linkedGoal.target || 1) : 0;
+        await logDailyGoalProgress(linkedGoal.id, targetValue, 'set', userId, task.date);
       }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('streak_goals_updated'));

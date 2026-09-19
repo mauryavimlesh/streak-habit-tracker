@@ -37,6 +37,7 @@ import {
   deleteCustomAudioTone,
 } from '../lib/customAudioStorage';
 import { triggerHaptic } from '../lib/haptics';
+import { readLocalHabits, Habit } from '../lib/habitService';
 
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -80,6 +81,10 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
   const [selectedDays, setSelectedDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
   const [date, setDate] = useState('');
   const [enabled, setEnabled] = useState(true);
+
+  // Linked items states
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [linkedHabitId, setLinkedHabitId] = useState<string>('');
 
   // Native time selector states
   const [selectedHour, setSelectedHour] = useState('08');
@@ -153,6 +158,9 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
       return;
     }
 
+    // Load list of available habits
+    setHabits(readLocalHabits());
+
     if (initialData) {
       setTitle(initialData.title || '');
       setDescription(initialData.description || '');
@@ -161,6 +169,7 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
       setSelectedDays(initialData.days?.length ? initialData.days : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
       setDate(initialData.date || '');
       setEnabled(initialData.enabled ?? true);
+      setLinkedHabitId(initialData.linkedHabitId || '');
       setSoundTone(initialData.soundTone || 'streak-pulse');
       setCustomAudioId(initialData.customAudioId);
       setCustomAudioName(initialData.customAudioName);
@@ -191,6 +200,7 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
       setSelectedDays(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
       setDate('');
       setEnabled(true);
+      setLinkedHabitId(habitContext?.id || '');
       setSoundTone('streak-pulse');
       setCustomAudioId(undefined);
       setCustomAudioName(undefined);
@@ -303,6 +313,8 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
       if (repeat === 'weekdays') effectiveDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
       if (repeat === 'weekends') effectiveDays = ['Sat', 'Sun'];
 
+      const selectedHabit = habits.find(h => h.id === linkedHabitId);
+
       const payload: Omit<ReminderItem, 'id' | 'createdAt'> = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -313,8 +325,8 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
         enabled,
         notificationEnabled: true,
         category: (habitContext ? 'habit' : initialData?.category || 'habit') as ReminderCategory,
-        linkedHabitId: habitContext?.id || initialData?.linkedHabitId,
-        linkedEntityName: habitContext?.name || initialData?.linkedEntityName,
+        linkedHabitId: habitContext?.id || linkedHabitId || undefined,
+        linkedEntityName: habitContext?.name || (selectedHabit ? selectedHabit.name : undefined),
         soundTone,
         customAudioId,
         customAudioName,
@@ -563,6 +575,30 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Link to Habit Option */}
+            {!habitContext && (
+              <div>
+                <label className="block text-xs font-semibold text-[#8c94a5] uppercase tracking-wider mb-1.5">
+                  Link to Habit (Optional)
+                </label>
+                <select
+                  value={linkedHabitId}
+                  onChange={(e) => {
+                    triggerHaptic('tap');
+                    setLinkedHabitId(e.target.value);
+                  }}
+                  className="w-full bg-[#181c25] border border-[#262c3b] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-accent-primary/60 transition-colors cursor-pointer"
+                >
+                  <option value="" className="bg-[#12151c] text-[#7d8495]">No Habit Linked</option>
+                  {habits.map((h) => (
+                    <option key={h.id} value={h.id} className="bg-[#12151c] text-white">
+                      {h.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Sound Selection Section */}
             <div className="bg-[#181c25] border border-[#262c3b] rounded-2xl p-4 space-y-3">

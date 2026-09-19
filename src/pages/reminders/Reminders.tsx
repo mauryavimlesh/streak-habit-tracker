@@ -36,6 +36,7 @@ import {
   sendSystemNotification,
   formatTimeDisplay,
 } from '../../lib/reminderService';
+import { reconcileAlarmsState } from '../../lib/alarmService';
 import { readLocalHabits, getUserHabits, Habit } from '../../lib/habitService';
 import { BUILT_IN_TONES } from '../../lib/alarmAudio';
 import { useAuth } from '../../lib/AuthContext';
@@ -83,6 +84,7 @@ export default function Reminders() {
 
   useEffect(() => {
     async function loadData() {
+      reconcileAlarmsState();
       setReminders(readLocalReminders());
       setHabits(readLocalHabits());
       if (user) {

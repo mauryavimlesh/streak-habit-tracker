@@ -20,6 +20,7 @@ import confetti from 'canvas-confetti';
 import { HabitConsistencyHeatmap } from '../components/ui/HabitConsistencyHeatmap';
 import { getTodayDateKey, addDays } from '../lib/dateUtils';
 import { ActiveTimerWidget } from "../components/home/ActiveTimerWidget";
+import { StreakLogo } from '../components/ui/StreakLogo';
 
 // Reference authentic default habits matching the design reference
 const DEFAULT_HABITS: Habit[] = [
@@ -198,7 +199,11 @@ export default function Home() {
       const todayString = getTodayDateKey();
       localLogs.forEach((l) => {
         if (l.date === todayString) {
-          progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
+          const habit = habitsToUse.find((h) => h.id === l.habitId);
+          const target = habit?.targetValue || 1;
+          progressMap[l.habitId] = typeof l.progressValue === 'number'
+            ? l.progressValue
+            : (l.status === 'completed' ? target : 0);
         }
       });
       setLocalProgress((prev) => ({ ...prev, ...progressMap }));
@@ -224,7 +229,11 @@ export default function Home() {
         const noteMap: Record<string, string> = {};
         fetchedLogs.forEach((l) => {
           if (l.date === todayString) {
-            progressMap[l.habitId] = l.progressValue ?? (l.status === 'completed' ? 1 : 0);
+            const habit = fetchedHabits.find((h) => h.id === l.habitId);
+            const target = habit?.targetValue || 1;
+            progressMap[l.habitId] = typeof l.progressValue === 'number'
+              ? l.progressValue
+              : (l.status === 'completed' ? target : 0);
             if (l.note) {
                noteMap[l.habitId] = l.note;
             }
@@ -384,8 +393,19 @@ export default function Home() {
         status: newStatus,
         progressValue: nextVal,
       });
+      setLogs((prev) => {
+        const idx = prev.findIndex((l) => l.habitId === habitId && l.date === todayStr);
+        if (idx !== -1) {
+          const copy = [...prev];
+          copy[idx] = { ...copy[idx], status: newStatus, progressValue: nextVal };
+          return copy;
+        }
+        return [...prev, { habitId, date: todayStr, status: newStatus, progressValue: nextVal } as any];
+      });
     } catch (err) {
       console.error('Failed to log habit:', err);
+      // Rollback optimistic state to database truth
+      setLocalProgress((prev) => ({ ...prev, [habitId]: current }));
     }
   };
 
@@ -477,6 +497,8 @@ export default function Home() {
       });
     } catch (err) {
       console.error('Failed to log habit:', err);
+      // Rollback optimistic state to database truth
+      setLocalProgress((prev) => ({ ...prev, [habitId]: current }));
     }
   };
 
@@ -621,22 +643,29 @@ export default function Home() {
   return (
     <div className="p-5 max-w-md mx-auto space-y-6">
       {/* Header */}
-      <header className="flex items-start justify-between pt-3">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <p className="text-[14px] font-medium text-[#7d8495] tracking-tight">
-              {formattedDate}
-            </p>
-            {isGuest && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-primary/10 border border-accent-primary/20 text-[10px] font-semibold text-accent-primary">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
-                Guest Session
-              </span>
-            )}
+      <header className="flex items-center justify-between pt-3">
+        <div className="flex items-center gap-3.5">
+          <StreakLogo
+            size={48}
+            className="w-12 h-12 shrink-0 drop-shadow-md cursor-pointer active:scale-95 transition-transform"
+            onClick={() => navigate('/more')}
+          />
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <p className="text-[13px] font-medium text-[#7d8495] tracking-tight">
+                {formattedDate}
+              </p>
+              {isGuest && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-primary/10 border border-accent-primary/20 text-[10px] font-semibold text-accent-primary">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
+                  Guest Session
+                </span>
+              )}
+            </div>
+            <h1 className="text-[28px] leading-[1.15] font-bold text-white tracking-tight">
+              {getGreeting()},<br />{userName}
+            </h1>
           </div>
-          <h1 className="text-[34px] leading-[1.12] font-bold text-white tracking-tight">
-            {getGreeting()},<br />{userName}
-          </h1>
         </div>
 
         {/* Right Avatar Button */}
@@ -645,7 +674,7 @@ export default function Home() {
           name={userName}
           size="md"
           onClick={() => navigate('/more')}
-          className="cursor-pointer active:scale-95 transition-transform"
+          className="cursor-pointer active:scale-95 transition-transform shrink-0"
         />
       </header>
 
@@ -836,10 +865,13 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={async () => {
-                            const needed = Math.max(0, dailyTarget - todayProgress);
-                            await logDailyGoalProgressQuick(goal.id, todayStr, needed > 0 ? needed : 1, user?.uid);
+                            // Toggle: if already completed, reset to 0; otherwise set to dailyTarget
+                            const targetValue = isCompleted ? 0 : dailyTarget;
+                            await logDailyGoalProgressQuick(goal.id, todayStr, targetValue, user?.uid, false, 'set');
                             fetchExtraData();
-                            confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
+                            if (!isCompleted) {
+                              confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
+                            }
                           }}
                           className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
                             isCompleted

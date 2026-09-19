@@ -96,11 +96,26 @@ export function getUnifiedActivitiesForDate(
 
   const result: UnifiedActivityItem[] = [];
 
+  // Track explicit entity references to deduplicate linked actions on the same date
+  const coveredGoalActivities = new Set<string>(); // "goalId_activityId"
+  const coveredHabits = new Set<string>(); // "habitId"
+  const coveredTasks = new Set<string>(); // "taskId"
+
   // 1. Focus / Study Activities on this date
   activities
     .filter((a) => a.date === dateKey)
     .forEach((a) => {
       const dur = a.durationMinutes + (a.durationSeconds ? Math.round(a.durationSeconds / 60) : 0);
+      if (a.goalId && a.activityId) {
+        coveredGoalActivities.add(`${a.goalId}_${a.activityId}`);
+      }
+      if (a.linkedHabitId) {
+        coveredHabits.add(a.linkedHabitId);
+      }
+      if ((a as any).taskId) {
+        coveredTasks.add((a as any).taskId);
+      }
+
       result.push({
         id: `focus_${a.id || Date.now()}`,
         sourceType: 'focus',
@@ -121,10 +136,29 @@ export function getUnifiedActivitiesForDate(
       });
     });
 
-  // 2. Tasks on this date
+  // 2. Tasks on this date (skip if already covered by an identical linked focus activity)
   tasks
     .filter((t) => t.date === dateKey)
     .forEach((t) => {
+      const actKey = t.linkedGoalId && (t.linkedGoalActivityId || (t as any).activityId)
+        ? `${t.linkedGoalId}_${t.linkedGoalActivityId || (t as any).activityId}`
+        : null;
+
+      if (coveredTasks.has(t.id)) {
+        return; // Already represented by focus session
+      }
+      if (actKey && coveredGoalActivities.has(actKey)) {
+        return; // Already represented by focus session on this goal activity
+      }
+
+      if (actKey) {
+        coveredGoalActivities.add(actKey);
+      }
+      if (t.linkedHabitId) {
+        coveredHabits.add(t.linkedHabitId);
+      }
+      coveredTasks.add(t.id);
+
       result.push({
         id: `task_${t.id}`,
         sourceType: 'task',
@@ -146,7 +180,7 @@ export function getUnifiedActivitiesForDate(
       });
     });
 
-  // 3. Habits logged on this date
+  // 3. Habits logged on this date (skip if already covered by linked task or focus session)
   const habitMap = new Map<string, Habit>();
   habits.forEach((h) => {
     if (h.id) habitMap.set(h.id, h);
@@ -155,6 +189,11 @@ export function getUnifiedActivitiesForDate(
   logs
     .filter((l) => l.date === dateKey)
     .forEach((l) => {
+      if (coveredHabits.has(l.habitId)) {
+        return; // Action already represented by linked task or focus session
+      }
+      coveredHabits.add(l.habitId);
+
       const habit = habitMap.get(l.habitId);
       const isCompleted = l.status === 'completed';
       result.push({
@@ -175,33 +214,33 @@ export function getUnifiedActivitiesForDate(
       });
     });
 
-  // 4. Goal activities in dailyHistory for this date
+  // 4. Goal activities in dailyHistory for this date (skip if already covered)
   goals.forEach((goal) => {
     const dayEntry = goal.dailyHistory?.[dateKey];
     if (dayEntry?.activities && Array.isArray(dayEntry.activities)) {
       dayEntry.activities.forEach((act) => {
-        // Avoid duplicate if already represented by a task with this activityId
-        const existingTask = tasks.find(
-          (t) => t.date === dateKey && (t as any).activityId === act.id
-        );
-        if (!existingTask) {
-          result.push({
-            id: `goal_${goal.id}_${act.id}`,
-            sourceType: 'goal',
-            sourceId: act.id,
-            title: act.title,
-            date: dateKey,
-            time: act.scheduledTime ? formatTime12(act.scheduledTime) : undefined,
-            durationMinutes: act.plannedDurationMinutes || act.estimatedDuration,
-            completed: Boolean(act.completed),
-            status: act.completed ? 'completed' : 'pending',
-            category: goal.category || 'Goal',
-            subject: act.subject,
-            goalId: goal.id,
-            activityId: act.id,
-            notes: act.notes,
-          });
+        const actKey = `${goal.id}_${act.id}`;
+        if (coveredGoalActivities.has(actKey)) {
+          return; // Already represented by focus session or task
         }
+        coveredGoalActivities.add(actKey);
+
+        result.push({
+          id: `goal_${goal.id}_${act.id}`,
+          sourceType: 'goal',
+          sourceId: act.id,
+          title: act.title,
+          date: dateKey,
+          time: act.scheduledTime ? formatTime12(act.scheduledTime) : undefined,
+          durationMinutes: act.plannedDurationMinutes || act.estimatedDuration,
+          completed: Boolean(act.completed),
+          status: act.completed ? 'completed' : 'pending',
+          category: goal.category || 'Goal',
+          subject: act.subject,
+          goalId: goal.id,
+          activityId: act.id,
+          notes: act.notes,
+        });
       });
     }
   });
@@ -338,9 +377,19 @@ export function calculatePeriodStats(
 
   const goalProgressRate = dailyGoalsTracked > 0 ? Math.round((dailyGoalsMet / dailyGoalsTracked) * 100) : 0;
 
-  // 5. Total items tracked
-  const totalTrackedItems = tasksScheduled + (activeHabits.length > 0 ? habitsScheduled : 0) + dailyGoalsTracked;
-  const totalCompletedItems = tasksCompleted + habitsCompleted + dailyGoalsMet;
+  // 5. Total items tracked (deduplicate items that are explicitly linked to daily goals)
+  const linkedHabitIdSet = new Set(goals.map((g) => g.linkedHabitId).filter(Boolean));
+  const linkedTaskIdSet = new Set(goals.map((g) => g.linkedTaskId).filter(Boolean));
+
+  const standaloneHabits = activeHabits.filter((h) => !linkedHabitIdSet.has(h.id));
+  const standaloneHabitsScheduled = standaloneHabits.length * (period === 'all' ? Math.max(1, periodLogs.length) : days);
+  const standaloneHabitsCompleted = periodLogs.filter((l) => l.status === 'completed' && !linkedHabitIdSet.has(l.habitId)).length;
+
+  const standaloneTasksScheduled = periodTasks.filter((t) => !linkedTaskIdSet.has(t.id) && !t.linkedGoalId).length;
+  const standaloneTasksCompleted = periodTasks.filter((t) => t.completed && !linkedTaskIdSet.has(t.id) && !t.linkedGoalId).length;
+
+  const totalTrackedItems = standaloneTasksScheduled + (standaloneHabits.length > 0 ? standaloneHabitsScheduled : 0) + dailyGoalsTracked;
+  const totalCompletedItems = standaloneTasksCompleted + standaloneHabitsCompleted + dailyGoalsMet;
   const overallCompletionRate = totalTrackedItems > 0 ? Math.round((totalCompletedItems / totalTrackedItems) * 100) : 0;
 
   // Check if completely empty

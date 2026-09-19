@@ -127,7 +127,7 @@ export default function Goals() {
     setGoalType('daily');
     setFormTitle(preset.title);
     setFormDailyTarget(preset.target);
-    setFormTarget(preset.target);
+    setFormTarget(preset.target * 20); // 20 days default overall target
     setFormUnit(preset.unit);
     setFormCategory(preset.category);
   };
@@ -145,7 +145,7 @@ export default function Goals() {
           description: formDesc.trim() || undefined,
           category: formCategory,
           type: goalType,
-          target: goalType === 'daily' ? formDailyTarget : Number(formTarget) || 100,
+          target: Number(formTarget) || 100,
           dailyTarget: goalType === 'daily' ? Number(formDailyTarget) || 1 : undefined,
           currentProgress: 0,
           unit: formUnit.trim() || 'units',
@@ -211,7 +211,7 @@ export default function Goals() {
           description: formDesc.trim() || undefined,
           category: formCategory,
           type: goalType,
-          target: goalType === 'daily' ? formDailyTarget : Number(formTarget) || 100,
+          target: Number(formTarget) || 100,
           dailyTarget: goalType === 'daily' ? Number(formDailyTarget) || 1 : undefined,
           unit: formUnit.trim() || 'units',
           subjects: formSubjects.length > 0 ? formSubjects : undefined,
@@ -262,9 +262,13 @@ export default function Goals() {
   const handleCompleteDaily = async (goal: Goal) => {
     const dailyTarget = goal.dailyTarget || goal.target || 1;
     const todayProgress = getTodayGoalProgress(goal, todayStr);
-    const needed = Math.max(0, dailyTarget - todayProgress);
-    await logDailyGoalProgressQuick(goal.id, todayStr, needed > 0 ? needed : 1, user?.uid || 'local');
-    confetti({ particleCount: 50, spread: 70, origin: { y: 0.7 } });
+    const isCurrentlyDone = todayProgress >= dailyTarget;
+    // Toggle: if already completed, reset to 0; otherwise set exactly to dailyTarget
+    const targetValue = isCurrentlyDone ? 0 : dailyTarget;
+    await logDailyGoalProgressQuick(goal.id, todayStr, targetValue, user?.uid || 'local', false, 'set');
+    if (!isCurrentlyDone) {
+      confetti({ particleCount: 50, spread: 70, origin: { y: 0.7 } });
+    }
     loadGoals();
   };
 
@@ -1081,38 +1085,63 @@ export default function Goals() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs text-[#7d8495] mb-1 font-medium">
-                      {goalType === 'daily' ? 'Daily Target' : 'Total Target'}
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={goalType === 'daily' ? formDailyTarget : formTarget}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        if (goalType === 'daily') {
-                          setFormDailyTarget(val);
-                          setFormTarget(val);
-                        } else {
-                          setFormTarget(val);
-                        }
-                      }}
-                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
-                    />
+                {goalType === 'daily' ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs text-[#7d8495] mb-1 font-medium">Daily Target</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formDailyTarget}
+                        onChange={(e) => setFormDailyTarget(Number(e.target.value) || 1)}
+                        className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#7d8495] mb-1 font-medium">Overall Target</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formTarget}
+                        onChange={(e) => setFormTarget(Number(e.target.value) || 1)}
+                        className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[#7d8495] text-xs mb-1 font-medium">Unit</label>
+                      <input
+                        type="text"
+                        value={formUnit}
+                        onChange={(e) => setFormUnit(e.target.value)}
+                        placeholder="e.g. pages, hours"
+                        className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs text-[#7d8495] mb-1 font-medium">Unit</label>
-                    <input
-                      type="text"
-                      value={formUnit}
-                      onChange={(e) => setFormUnit(e.target.value)}
-                      placeholder="e.g. pages, hours, glasses"
-                      className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
-                    />
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-[#7d8495] mb-1 font-medium">Total Target</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formTarget}
+                        onChange={(e) => setFormTarget(Number(e.target.value) || 1)}
+                        className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#7d8495] mb-1 font-medium">Unit</label>
+                      <input
+                        type="text"
+                        value={formUnit}
+                        onChange={(e) => setFormUnit(e.target.value)}
+                        placeholder="e.g. books, runs"
+                        className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white text-xs focus:outline-none focus:border-accent-primary"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Advanced Options Toggle */}
                 <button
@@ -1292,16 +1321,19 @@ export default function Goals() {
         onClose={() => setIsShareModalOpen(false)}
         fileName={`goal-${selectedGoal?.title?.replace(/\s+/g, '-').toLowerCase() || 'progress'}`}
       >
-        {(format) => (
-          <StreakShareCard
-            streak={selectedGoal ? selectedGoal.currentProgress : 0}
-            userName={profile?.userName?.split(' ')[0] || profile?.name?.split(' ')[0] || 'Vimlesh'}
-            totalHabits={selectedGoal ? selectedGoal.target : 0}
-            completedHabits={selectedGoal ? selectedGoal.currentProgress : 0}
-            goalTitle={selectedGoal?.title}
-            format={format}
-          />
-        )}
+        {(format) => {
+          const goalStats = selectedGoal ? calculateGoalProgress(selectedGoal) : null;
+          return (
+            <StreakShareCard
+              streak={goalStats ? goalStats.currentStreak : 0}
+              userName={profile?.userName?.split(' ')[0] || profile?.name?.split(' ')[0] || 'User'}
+              totalHabits={selectedGoal ? selectedGoal.target : 0}
+              completedHabits={goalStats ? goalStats.todayProgress : 0}
+              goalTitle={selectedGoal?.title}
+              format={format}
+            />
+          );
+        }}
       </ShareModal>
 
       {/* Smart Study Plan Photo Import Modal */}

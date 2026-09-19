@@ -54,6 +54,7 @@ import { HabitNotificationEngine } from './components/HabitNotificationEngine';
 import { PWAInstallBanner } from './components/pwa/PWAInstallBanner';
 import { PWAUpdateToast } from './components/pwa/PWAUpdateToast';
 import { OfflineStatusBanner } from './components/pwa/OfflineStatusBanner';
+import { SplashScreen } from './components/ui/SplashScreen';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, profile, onboardingCompleted, loading } = useAuth();
@@ -271,6 +272,7 @@ export default function App() {
   return (
     <AuthProvider>
       <TimerProvider>
+        <SplashScreen />
         <HabitNotificationEngine />
         <OfflineStatusBanner />
         <PWAUpdateToast />

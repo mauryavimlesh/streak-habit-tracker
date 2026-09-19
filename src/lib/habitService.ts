@@ -488,12 +488,14 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
 
   if (!skipSync && wasCompleted !== isNowCompleted) {
     try {
-      const { readLocalGoals, logDailyGoalProgressQuick } = await import('./goalService');
+      const { readLocalGoals, logDailyGoalProgress } = await import('./goalService');
       const localGoals = readLocalGoals();
       const linkedGoal = localGoals.find(g => g.linkedHabitId === logData.habitId);
       if (linkedGoal && linkedGoal.type === 'daily') {
-        const delta = isNowCompleted ? (linkedGoal.dailyTarget || linkedGoal.target || 1) : -(linkedGoal.dailyTarget || linkedGoal.target || 1);
-        await logDailyGoalProgressQuick(linkedGoal.id, logData.date, delta, logData.userId, true);
+        const targetValue = typeof logData.progressValue === 'number'
+          ? logData.progressValue
+          : (isNowCompleted ? (linkedGoal.dailyTarget || linkedGoal.target || 1) : 0);
+        await logDailyGoalProgress(linkedGoal.id, targetValue, 'set', logData.userId, logData.date);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('streak_goals_updated'));
         }

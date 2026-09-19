@@ -55,7 +55,7 @@ const NavItem = memo(function NavItem({ to, Icon, label, end }: NavItemProps) {
       className={({ isActive }) =>
         cn(
           "relative flex flex-col items-center justify-center min-w-[60px] flex-1 h-full transition-all duration-150 active:scale-95 cursor-pointer touch-manipulation",
-          isActive ? "text-accent-primary" : "text-[#737988] hover:text-[#a0a6b5]"
+          isActive ? "text-accent-primary" : "text-text-muted hover:text-text-secondary"
         )
       }
     >
@@ -64,7 +64,7 @@ const NavItem = memo(function NavItem({ to, Icon, label, end }: NavItemProps) {
           <div
             className={cn(
               "w-12 h-8 rounded-xl flex items-center justify-center transition-all duration-200",
-              isActive ? "bg-[#23381c] text-accent-primary" : "bg-transparent text-[#737988]"
+              isActive ? "bg-accent-primary/15 text-accent-primary" : "bg-transparent text-text-muted"
             )}
           >
             <Icon className="w-5 h-5" />
@@ -72,7 +72,7 @@ const NavItem = memo(function NavItem({ to, Icon, label, end }: NavItemProps) {
           <span
             className={cn(
               "text-[11px] font-medium tracking-tight mt-0.5",
-              isActive ? "text-accent-primary font-semibold" : "text-[#737988]"
+              isActive ? "text-accent-primary font-semibold" : "text-text-muted"
             )}
           >
             {label}
@@ -86,7 +86,7 @@ const NavItem = memo(function NavItem({ to, Icon, label, end }: NavItemProps) {
 const BottomNav = memo(function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 pointer-events-auto bottom-nav" data-pwa-bottom-nav>
-      <div className="bg-[#0e1015]/95 backdrop-blur-2xl border-t border-[#1e222b] min-h-[70px] pb-[env(safe-area-inset-bottom,0px)] pt-1 px-2 sm:px-4 flex items-center justify-between overflow-x-auto no-scrollbar bottom-nav-inner">
+      <div className="bg-surface/90 backdrop-blur-2xl border-t border-border min-h-[70px] pb-[env(safe-area-inset-bottom,0px)] pt-1 px-2 sm:px-4 flex items-center justify-between overflow-x-auto no-scrollbar bottom-nav-inner">
         <NavItem to="/" end Icon={Home} label="Home" />
         <NavItem to="/calendar" Icon={CalendarIcon} label="Calendar" />
         <NavItem to="/more" Icon={LayoutGrid} label="More" />
@@ -97,7 +97,7 @@ const BottomNav = memo(function BottomNav() {
 
 export default function MainLayout() {
   return (
-    <div className="flex flex-col h-[100dvh] min-h-[100dvh] bg-background text-white overflow-hidden">
+    <div className="flex flex-col h-[100dvh] min-h-[100dvh] bg-background text-text-primary overflow-hidden">
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] pb-[calc(env(safe-area-inset-bottom,0px)+88px)] app-main-content overscroll-contain">
         <Suspense fallback={<RouteSkeleton />}>
