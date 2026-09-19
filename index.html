@@ -31,9 +31,10 @@
     <meta name="twitter:image:alt" content="STREAK Habit Tracker, Goals and Productivity App" />
 
     <!-- Icons & PWA Manifest -->
+    <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/logo.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
 
     <!-- Mobile & PWA Configuration -->
@@ -180,7 +181,12 @@
     </script>
   </head>
   <body class="bg-[#0d0e12] text-white antialiased">
-    <div id="root"></div>
+    <div id="root">
+      <div id="initial-pre-splash" style="position:fixed;inset:0;background:#000000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:99999;">
+        <img src="/logo.png" alt="STREAK Logo" width="104" height="104" style="width:104px;height:104px;aspect-ratio:1/1;object-fit:contain;animation:streak-splash-in 0.6s cubic-bezier(0.16,1,0.3,1) forwards;" />
+        <span style="font-size:12px;font-weight:700;letter-spacing:0.25em;color:rgba(255,255,255,0.55);text-transform:uppercase;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">STREAK</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

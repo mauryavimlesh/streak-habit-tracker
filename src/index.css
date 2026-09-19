@@ -10,6 +10,9 @@
   --color-surface-secondary: var(--surface-elevated);
   --color-surface-card: var(--surface);
   --color-surface-glass: var(--surface-glass);
+  --color-surface-glass-subtle: var(--surface-glass-subtle);
+  --color-surface-glass-elevated: var(--surface-glass-elevated);
+  --color-surface-glass-border: var(--surface-glass-border);
   --color-surface-border: var(--border);
   --color-border: var(--border);
   
@@ -151,32 +154,149 @@
   }
 }
 
-/* Glass Theme Specific Styling */
-.glass-mode .apple-card {
-  background-color: rgba(20, 24, 33, 0.68) !important;
-  backdrop-filter: blur(24px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
+/* ==========================================================================
+   SplashScreen Performance-Optimized CSS Keyframes
+   ========================================================================== */
+@keyframes streak-splash-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+    filter: drop-shadow(0 0 0 rgba(140, 238, 40, 0));
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.02);
+    filter: drop-shadow(0 0 24px rgba(140, 238, 40, 0.4));
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(0 0 16px rgba(140, 238, 40, 0.25));
+  }
 }
 
-.glass-mode .apple-pill {
-  background-color: rgba(20, 24, 33, 0.72) !important;
-  backdrop-filter: blur(20px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
+@keyframes streak-splash-fadeout {
+  0% {
+    opacity: 1;
+    visibility: visible;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
 }
 
-.glass-mode .bottom-nav-inner {
-  background: rgba(14, 18, 26, 0.75) !important;
-  backdrop-filter: blur(24px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+.streak-splash-logo-anim {
+  animation: streak-splash-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity, filter;
 }
 
-.glass-mode .action-button {
+.streak-splash-fadeout {
+  animation: streak-splash-fadeout 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Glass Theme (Selective Backdrop Filter with Performance-Optimized Fallback)
+   ========================================================================== */
+
+/* 1. Base Fallback for non-supported browsers or low-power rendering */
+.theme-glass,
+.glass-mode,
+[data-theme="glass"],
+[data-resolved-theme="glass"] {
+  --surface-glass: rgba(20, 24, 33, 0.68);
+  --surface-glass-subtle: rgba(255, 255, 255, 0.04);
+  --surface-glass-border: rgba(255, 255, 255, 0.14);
+  --surface-glass-elevated: rgba(28, 34, 48, 0.78);
+  --surface-fallback: #11141c;
+  --surface-elevated-fallback: #181d28;
+  --border-fallback: #222938;
+}
+
+.theme-glass .apple-card,
+.glass-mode .apple-card,
+[data-theme="glass"] .apple-card {
+  background-color: var(--surface-fallback) !important;
+  border-color: var(--border-fallback) !important;
+}
+
+.theme-glass .apple-pill,
+.glass-mode .apple-pill,
+[data-theme="glass"] .apple-pill {
+  background-color: var(--surface-fallback) !important;
+  border-color: var(--border-fallback) !important;
+}
+
+.theme-glass .bottom-nav-inner,
+.glass-mode .bottom-nav-inner,
+[data-theme="glass"] .bottom-nav-inner {
+  background: var(--surface-fallback) !important;
+  border-top: 1px solid var(--border-fallback) !important;
+}
+
+.theme-glass .action-button,
+.glass-mode .action-button,
+[data-theme="glass"] .action-button {
   background: var(--accent) !important;
   color: var(--accent-contrast) !important;
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* 2. Selective Backdrop Filter & Transparent Surfaces for Supported Browsers */
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .theme-glass .apple-card,
+  .glass-mode .apple-card,
+  [data-theme="glass"] .apple-card {
+    background-color: var(--surface-glass, rgba(20, 24, 33, 0.68)) !important;
+    backdrop-filter: blur(20px) saturate(185%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(185%) !important;
+    border-color: var(--surface-glass-border, rgba(255, 255, 255, 0.12)) !important;
+  }
+
+  .theme-glass .apple-pill,
+  .glass-mode .apple-pill,
+  [data-theme="glass"] .apple-pill {
+    background-color: var(--surface-glass, rgba(20, 24, 33, 0.72)) !important;
+    backdrop-filter: blur(18px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
+    border-color: var(--surface-glass-border, rgba(255, 255, 255, 0.12)) !important;
+  }
+
+  .theme-glass .bottom-nav-inner,
+  .glass-mode .bottom-nav-inner,
+  [data-theme="glass"] .bottom-nav-inner {
+    background: rgba(14, 18, 26, 0.75) !important;
+    backdrop-filter: blur(24px) saturate(190%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+    border-top: 1px solid var(--surface-glass-border, rgba(255, 255, 255, 0.12)) !important;
+  }
+
+  /* Selective hover states on interactive cards */
+  .theme-glass .apple-card:hover,
+  .glass-mode .apple-card:hover,
+  [data-theme="glass"] .apple-card:hover {
+    background-color: rgba(28, 34, 48, 0.78) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+}
+
+/* 3. Accessibility override for users requesting reduced transparency */
+@media (prefers-reduced-transparency: reduce) {
+  .theme-glass .apple-card,
+  .glass-mode .apple-card,
+  [data-theme="glass"] .apple-card,
+  .theme-glass .apple-pill,
+  .glass-mode .apple-pill,
+  [data-theme="glass"] .apple-pill,
+  .theme-glass .bottom-nav-inner,
+  .glass-mode .bottom-nav-inner,
+  [data-theme="glass"] .bottom-nav-inner {
+    background: #10131b !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: #212836 !important;
+  }
 }
 
 /* Light Theme High Contrast & Contrast Audit */

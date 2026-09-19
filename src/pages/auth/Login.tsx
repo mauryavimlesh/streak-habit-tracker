@@ -118,11 +118,14 @@ export default function Login() {
         className="w-full max-w-sm"
       >
         <div className="mb-10 text-center">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-accent-primary to-accent-cyan flex items-center justify-center mx-auto mb-6 shadow-[0_0_40px_rgba(163,230,53,0.3)]">
-            <div className="w-14 h-14 bg-background rounded-full flex items-center justify-center">
-               <div className="w-8 h-8 rounded-full border-2 border-accent-primary" />
-            </div>
-          </div>
+          <img
+            src="/logo.png"
+            alt="STREAK Official Logo"
+            width={64}
+            height={64}
+            className="w-16 h-16 aspect-square object-contain mx-auto mb-6 select-none drop-shadow-[0_0_24px_rgba(140,238,40,0.35)]"
+            loading="eager"
+          />
           <h1 className="text-3xl font-semibold mb-2">STREAK</h1>
           <p className="text-text-secondary">Small actions. Every day.</p>
         </div>

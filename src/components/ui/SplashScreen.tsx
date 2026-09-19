@@ -1,81 +1,63 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { StreakLogo } from './StreakLogo';
 
 interface SplashScreenProps {
   onComplete?: () => void;
 }
 
-const SPLASH_SESSION_KEY = 'streak_splash_shown_v1';
-
+/**
+ * High-performance, compositor-accelerated STREAK Splash Screen.
+ * Displays the original STREAK brand asset centered with native aspect ratio.
+ * Free of any distorted containers, masks, or octagonal framing.
+ * Preserves the existing smooth fade-out animation sequence.
+ */
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
-  const [isVisible, setIsVisible] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    // Show on initial launch per browser session
-    try {
-      return !sessionStorage.getItem(SPLASH_SESSION_KEY);
-    } catch {
-      return true;
-    }
-  });
+  const [isRendered, setIsRendered] = useState(true);
+  const [isFadingOut, setIsFadingOut] = useState(false);
 
   useEffect(() => {
-    if (!isVisible) {
-      if (onComplete) onComplete();
-      return;
-    }
+    // Hold splash screen briefly before initiating smooth fade-out
+    const fadeTimer = setTimeout(() => {
+      setIsFadingOut(true);
+    }, 600);
 
-    // Fast, subtle display duration (450ms), then trigger fade-out
-    const timer = setTimeout(() => {
-      try {
-        sessionStorage.setItem(SPLASH_SESSION_KEY, 'true');
-      } catch {
-        // Ignore
-      }
-      setIsVisible(false);
+    // Unmount and notify completion after fade-out transition concludes
+    const removeTimer = setTimeout(() => {
+      setIsRendered(false);
       if (onComplete) onComplete();
-    }, 450);
+    }, 880);
 
-    return () => clearTimeout(timer);
-  }, [isVisible, onComplete]);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(removeTimer);
+    };
+  }, [onComplete]);
+
+  if (!isRendered) return null;
 
   return (
-    <AnimatePresence>
-      {isVisible && (
-        <motion.div
-          key="streak-splash-screen"
-          initial={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-          className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#000000] select-none touch-none"
-          aria-hidden="true"
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{
-              duration: 0.35,
-              ease: [0.16, 1, 0.3, 1],
-            }}
-            className="flex flex-col items-center justify-center gap-4"
-          >
-            {/* Provided Original STREAK Branding Asset retaining authentic aspect ratio and design */}
-            <img
-              src="/logo.png"
-              alt="STREAK Logo"
-              width={104}
-              height={104}
-              className="w-24 h-24 sm:w-28 sm:h-28 aspect-square object-contain select-none pointer-events-none drop-shadow-2xl"
-              loading="eager"
-              decoding="sync"
-            />
-            <span className="text-xs font-bold tracking-[0.25em] text-white/50 uppercase select-none">
-              STREAK
-            </span>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div
+      id="streak-app-splash"
+      className={`fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#000000] select-none touch-none ${
+        isFadingOut ? 'streak-splash-fadeout' : ''
+      }`}
+      aria-hidden="true"
+    >
+      <div className="flex flex-col items-center justify-center gap-4">
+        {/* Original STREAK Brand Asset - Centered, native 1:1 aspect ratio, unclipped */}
+        <img
+          src="/logo.png"
+          alt="STREAK"
+          width={104}
+          height={104}
+          className="w-24 h-24 sm:w-28 sm:h-28 aspect-square object-contain select-none pointer-events-none streak-splash-logo-anim drop-shadow-[0_0_24px_rgba(140,238,40,0.35)]"
+          loading="eager"
+          decoding="sync"
+        />
+        <span className="text-xs font-bold tracking-[0.25em] text-white/60 uppercase select-none font-sans">
+          STREAK
+        </span>
+      </div>
+    </div>
   );
 };
 

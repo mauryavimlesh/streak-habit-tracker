@@ -200,24 +200,17 @@ export default function Onboarding() {
               className="px-6 pt-6 pb-6 flex-1 flex flex-col justify-between"
             >
               <div>
-                {/* Visual Halo & Torus Ring */}
-                <div className="relative w-[130px] h-[130px] mx-auto mt-2 flex items-center justify-center shrink-0">
-                  <div
-                    className="absolute inset-0 rounded-full blur-[26px] opacity-40 pointer-events-none"
-                    style={{
-                      background:
-                        'conic-gradient(from 180deg at 50% 50%, var(--app-accent) 0deg, var(--app-accent) 115deg, #38bdf8 190deg, #6366f1 280deg, var(--app-accent) 360deg)',
-                    }}
+                {/* Official STREAK Brand Asset */}
+                <div className="relative w-[112px] h-[112px] mx-auto mt-2 flex items-center justify-center shrink-0">
+                  <div className="absolute inset-0 rounded-full blur-[24px] opacity-40 bg-accent-primary pointer-events-none" />
+                  <img
+                    src="/logo.png"
+                    alt="STREAK Official Logo"
+                    width={112}
+                    height={112}
+                    className="relative w-28 h-28 aspect-square object-contain select-none drop-shadow-[0_0_28px_rgba(140,238,40,0.35)]"
+                    loading="eager"
                   />
-                  <div
-                    className="relative w-full h-full rounded-full p-[18px] shadow-[0_0_32px_rgba(140,238,40,0.25)]"
-                    style={{
-                      background:
-                        'conic-gradient(from 180deg at 50% 50%, var(--app-accent) 0deg, var(--app-accent) 115deg, #38bdf8 190deg, #6366f1 280deg, var(--app-accent) 360deg)',
-                    }}
-                  >
-                    <div className="w-full h-full rounded-full bg-background" />
-                  </div>
                 </div>
 
                 {/* Typography */}

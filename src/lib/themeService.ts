@@ -57,6 +57,9 @@ export interface ThemeTokens {
   surface: string;
   surfaceElevated: string;
   surfaceGlass: string;
+  surfaceGlassSubtle: string;
+  surfaceGlassBorder: string;
+  surfaceGlassElevated?: string;
   border: string;
   textPrimary: string;
   textSecondary: string;
@@ -75,6 +78,9 @@ export const THEME_CONFIGS: Record<Exclude<ThemeMode, 'system'>, ThemeTokens> = 
     surface: '#13151b',
     surfaceElevated: '#1a1d25',
     surfaceGlass: 'rgba(19, 21, 27, 0.85)',
+    surfaceGlassSubtle: 'rgba(19, 21, 27, 0.55)',
+    surfaceGlassElevated: '#1e222c',
+    surfaceGlassBorder: 'rgba(255, 255, 255, 0.08)',
     border: '#1f232c',
     textPrimary: '#ffffff',
     textSecondary: '#94a3b8',
@@ -88,7 +94,10 @@ export const THEME_CONFIGS: Record<Exclude<ThemeMode, 'system'>, ThemeTokens> = 
     bg: '#f5f5f7',
     surface: '#ffffff',
     surfaceElevated: '#f9fafb',
-    surfaceGlass: 'rgba(255, 255, 255, 0.92)',
+    surfaceGlass: 'rgba(255, 255, 255, 0.88)',
+    surfaceGlassSubtle: 'rgba(255, 255, 255, 0.65)',
+    surfaceGlassElevated: '#ffffff',
+    surfaceGlassBorder: 'rgba(0, 0, 0, 0.08)',
     border: '#e2e8f0',
     textPrimary: '#0f172a',
     textSecondary: '#475569',
@@ -101,9 +110,12 @@ export const THEME_CONFIGS: Record<Exclude<ThemeMode, 'system'>, ThemeTokens> = 
     name: 'Frosted Glass',
     desc: 'Translucent layered depth',
     bg: '#07090e',
-    surface: 'rgba(20, 24, 33, 0.72)',
+    surface: 'rgba(20, 24, 33, 0.70)',
     surfaceElevated: 'rgba(28, 34, 48, 0.78)',
-    surfaceGlass: 'rgba(255, 255, 255, 0.08)',
+    surfaceGlass: 'rgba(20, 24, 33, 0.68)',
+    surfaceGlassSubtle: 'rgba(255, 255, 255, 0.04)',
+    surfaceGlassElevated: 'rgba(28, 34, 48, 0.78)',
+    surfaceGlassBorder: 'rgba(255, 255, 255, 0.14)',
     border: 'rgba(255, 255, 255, 0.12)',
     textPrimary: '#ffffff',
     textSecondary: '#cbd5e1',
@@ -119,6 +131,9 @@ export const THEME_CONFIGS: Record<Exclude<ThemeMode, 'system'>, ThemeTokens> = 
     surface: '#090a0d',
     surfaceElevated: '#121318',
     surfaceGlass: 'rgba(9, 10, 13, 0.92)',
+    surfaceGlassSubtle: 'rgba(255, 255, 255, 0.03)',
+    surfaceGlassElevated: '#121318',
+    surfaceGlassBorder: 'rgba(255, 255, 255, 0.07)',
     border: '#1a1c24',
     textPrimary: '#ffffff',
     textSecondary: '#94a3b8',
@@ -133,6 +148,9 @@ export const THEME_CONFIGS: Record<Exclude<ThemeMode, 'system'>, ThemeTokens> = 
     surface: '#0b1c24',
     surfaceElevated: '#112732',
     surfaceGlass: 'rgba(11, 28, 36, 0.85)',
+    surfaceGlassSubtle: 'rgba(126, 192, 204, 0.08)',
+    surfaceGlassElevated: '#112732',
+    surfaceGlassBorder: 'rgba(126, 192, 204, 0.18)',
     border: '#163342',
     textPrimary: '#e6f7f9',
     textSecondary: '#7ec0cc',
@@ -147,6 +165,9 @@ export const THEME_CONFIGS: Record<Exclude<ThemeMode, 'system'>, ThemeTokens> = 
     surface: '#0f152b',
     surfaceElevated: '#161e3d',
     surfaceGlass: 'rgba(15, 21, 43, 0.85)',
+    surfaceGlassSubtle: 'rgba(147, 163, 214, 0.08)',
+    surfaceGlassElevated: '#161e3d',
+    surfaceGlassBorder: 'rgba(147, 163, 214, 0.16)',
     border: '#1e284f',
     textPrimary: '#eef2ff',
     textSecondary: '#93a3d6',
@@ -161,6 +182,9 @@ export const THEME_CONFIGS: Record<Exclude<ThemeMode, 'system'>, ThemeTokens> = 
     surface: '#ffffff',
     surfaceElevated: '#f2efe9',
     surfaceGlass: 'rgba(255, 255, 255, 0.92)',
+    surfaceGlassSubtle: 'rgba(0, 0, 0, 0.03)',
+    surfaceGlassElevated: '#ffffff',
+    surfaceGlassBorder: 'rgba(0, 0, 0, 0.08)',
     border: '#e6e2d8',
     textPrimary: '#1c1917',
     textSecondary: '#57534e',
@@ -176,6 +200,9 @@ export const THEME_CONFIGS: Record<Exclude<ThemeMode, 'system'>, ThemeTokens> = 
     surface: '#0d1e13',
     surfaceElevated: '#132b1c',
     surfaceGlass: 'rgba(13, 30, 19, 0.85)',
+    surfaceGlassSubtle: 'rgba(133, 185, 149, 0.08)',
+    surfaceGlassElevated: '#132b1c',
+    surfaceGlassBorder: 'rgba(133, 185, 149, 0.18)',
     border: '#1a3b26',
     textPrimary: '#eaf5ee',
     textSecondary: '#85b995',
@@ -190,6 +217,9 @@ export const THEME_CONFIGS: Record<Exclude<ThemeMode, 'system'>, ThemeTokens> = 
     surface: '#170e28',
     surfaceElevated: '#21143a',
     surfaceGlass: 'rgba(23, 14, 40, 0.85)',
+    surfaceGlassSubtle: 'rgba(183, 158, 220, 0.08)',
+    surfaceGlassElevated: '#21143a',
+    surfaceGlassBorder: 'rgba(183, 158, 220, 0.18)',
     border: '#2e1c50',
     textPrimary: '#f5eefc',
     textSecondary: '#b79edc',
@@ -353,11 +383,11 @@ export function applyAppearanceSettings(settings: AppearanceSettings): void {
   root.setAttribute('data-resolved-theme', resolvedMode);
   root.setAttribute('data-accent', settings.accent);
 
-  root.classList.remove('light-mode', 'dark-mode', 'glass-mode');
+  root.classList.remove('light-mode', 'dark-mode', 'glass-mode', 'theme-glass');
   if (tokens.isLight) {
     root.classList.add('light-mode');
   } else if (resolvedMode === 'glass') {
-    root.classList.add('glass-mode', 'dark-mode');
+    root.classList.add('glass-mode', 'theme-glass', 'dark-mode');
   } else {
     root.classList.add('dark-mode');
   }
@@ -370,6 +400,9 @@ export function applyAppearanceSettings(settings: AppearanceSettings): void {
   root.style.setProperty('--surface-elevated', tokens.surfaceElevated);
   root.style.setProperty('--app-surface-secondary', tokens.surfaceElevated);
   root.style.setProperty('--surface-glass', tokens.surfaceGlass);
+  root.style.setProperty('--surface-glass-subtle', tokens.surfaceGlassSubtle || 'rgba(255, 255, 255, 0.04)');
+  root.style.setProperty('--surface-glass-elevated', tokens.surfaceGlassElevated || tokens.surfaceElevated);
+  root.style.setProperty('--surface-glass-border', tokens.surfaceGlassBorder || tokens.border);
   root.style.setProperty('--border', tokens.border);
   root.style.setProperty('--surface-border', tokens.border);
   root.style.setProperty('--app-surface-border', tokens.border);

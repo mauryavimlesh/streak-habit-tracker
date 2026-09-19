@@ -22,11 +22,13 @@ export function PublicHeader() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         {/* Brand Logo */}
         <Link to="/" className="flex items-center gap-2.5 group">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-accent-primary to-accent-cyan flex items-center justify-center shadow-[0_0_20px_rgba(163,230,53,0.25)] group-hover:scale-105 transition-transform">
-            <div className="w-7 h-7 bg-[#0d0e12] rounded-full flex items-center justify-center">
-              <Flame className="w-4 h-4 text-accent-primary fill-accent-primary" />
-            </div>
-          </div>
+          <img
+            src="/logo.png"
+            alt="STREAK Logo"
+            width={32}
+            height={32}
+            className="w-8 h-8 aspect-square object-contain select-none group-hover:scale-105 transition-transform drop-shadow-[0_0_12px_rgba(140,238,40,0.3)]"
+          />
           <span className="font-bold text-lg tracking-wider text-white">STREAK</span>
         </Link>
 

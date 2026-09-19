@@ -26,7 +26,8 @@ export const StreakLogo: React.FC<StreakLogoProps> = ({
       height={typeof size === 'number' ? size : undefined}
       style={{ width: dimension, height: dimension }}
       className={cn(
-        'aspect-square object-contain select-none shrink-0 pointer-events-none',
+        'aspect-square object-contain select-none shrink-0',
+        props.onClick ? 'cursor-pointer active:scale-95 transition-transform' : '',
         className
       )}
       loading="eager"

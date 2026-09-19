@@ -10,9 +10,13 @@ export function PublicFooter() {
           {/* Column 1: Brand & Philosophy */}
           <div className="col-span-2 md:col-span-1 space-y-3">
             <Link to="/" className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-accent-primary/20 flex items-center justify-center">
-                <Flame className="w-3.5 h-3.5 text-accent-primary fill-accent-primary" />
-              </div>
+              <img
+                src="/logo.png"
+                alt="STREAK Logo"
+                width={24}
+                height={24}
+                className="w-6 h-6 aspect-square object-contain select-none"
+              />
               <span className="font-bold text-white tracking-wide">STREAK</span>
             </Link>
             <p className="text-xs text-text-muted leading-relaxed">
