@@ -71,6 +71,8 @@ export default function Goals() {
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [goalToDelete, setGoalToDelete] = useState<Goal | null>(null);
+  const [isDeletingGoal, setIsDeletingGoal] = useState(false);
 
   // Form states for Create / Edit
   const [goalType, setGoalType] = useState<GoalType>('daily');
@@ -305,11 +307,22 @@ export default function Goals() {
     }
   };
 
-  const handleDelete = async (goalId: string) => {
-    if (confirm('Delete this goal permanently?')) {
-      await deleteGoal(goalId, user?.uid || 'local');
+  const handleDelete = (goal: Goal) => {
+    setGoalToDelete(goal);
+  };
+
+  const confirmDeleteGoal = async () => {
+    if (!goalToDelete) return;
+    setIsDeletingGoal(true);
+    try {
+      await deleteGoal(goalToDelete.id, user?.uid || 'local');
+      setGoalToDelete(null);
       setSelectedGoal(null);
-      loadGoals();
+      await loadGoals();
+    } catch (err) {
+      console.error('Failed to delete goal:', err);
+    } finally {
+      setIsDeletingGoal(false);
     }
   };
 
@@ -510,6 +523,17 @@ export default function Goals() {
                         >
                           <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                         </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(goal);
+                          }}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Delete Goal"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   </motion.div>
@@ -553,11 +577,24 @@ export default function Goals() {
                       )}
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-base font-extrabold text-white">{percent}%</span>
-                      <p className="text-[11px] text-[#7d8495]">
-                        {goal.currentProgress}/{goal.target} {goal.unit}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <span className="text-base font-extrabold text-white">{percent}%</span>
+                        <p className="text-[11px] text-[#7d8495]">
+                          {goal.currentProgress}/{goal.target} {goal.unit}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(goal);
+                        }}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-white/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Delete Goal"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 
@@ -880,7 +917,7 @@ export default function Goals() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(selectedGoal.id)}
+                  onClick={() => handleDelete(selectedGoal)}
                   className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 cursor-pointer"
                   title="Delete Goal"
                 >
@@ -1247,6 +1284,59 @@ export default function Goals() {
           navigate(`/goals/${newGoalId}`);
         }}
       />
+
+      {/* Delete Goal Confirmation Modal */}
+      <AnimatePresence>
+        {goalToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isDeletingGoal && setGoalToDelete(null)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-sm bg-[#16181f] border border-white/10 rounded-2xl p-5 z-10 space-y-4 shadow-xl"
+            >
+              <div className="flex items-center gap-3 text-red-400">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Delete Goal</h3>
+                  <p className="text-xs text-[#7d8495]">This action cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-xs text-white/70 leading-relaxed">
+                Are you sure you want to permanently delete <span className="font-semibold text-white">"{goalToDelete.title}"</span>? All associated progress and linkages will be removed.
+              </p>
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeletingGoal}
+                  onClick={() => setGoalToDelete(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 font-medium text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  id="confirm-delete-goal-btn"
+                  disabled={isDeletingGoal}
+                  onClick={confirmDeleteGoal}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-colors shadow-lg shadow-red-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  {isDeletingGoal ? 'Deleting...' : 'Delete Goal'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -50,6 +50,17 @@ const REPEAT_OPTIONS: { id: ReminderRepeat; label: string }[] = [
 
 const SNOOZE_PRESETS = [5, 10, 15];
 
+const TIME_PRESET_BUTTONS = [
+  { label: '6:00 AM', val: '06:00' },
+  { label: '7:00 AM', val: '07:00' },
+  { label: '8:00 AM', val: '08:00' },
+  { label: '9:00 AM', val: '09:00' },
+  { label: '12:00 PM', val: '12:00' },
+  { label: '6:00 PM', val: '18:00' },
+  { label: '9:00 PM', val: '21:00' },
+  { label: '10:00 PM', val: '22:00' },
+];
+
 interface AlarmReminderModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -364,6 +375,32 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
                 onChange={(e) => setTimeValue(e.target.value)}
                 className="bg-[#101217] border border-[#2b3345] rounded-xl px-3 py-2 text-sm font-semibold text-white outline-none focus:border-accent-primary cursor-pointer"
               />
+            </div>
+
+            {/* Quick Time Presets */}
+            <div>
+              <span className="block text-[11px] font-semibold text-[#8c94a5] uppercase tracking-wider mb-1.5">
+                Quick Time Presets
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {TIME_PRESET_BUTTONS.map((p) => (
+                  <button
+                    key={p.val}
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('tap');
+                      setTimeValue(p.val);
+                    }}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      timeValue === p.val
+                        ? 'bg-accent-primary text-black font-bold shadow-sm'
+                        : 'bg-[#181c25] text-[#8c94a5] border border-[#262c3b] hover:text-white'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Repeat Presets */}

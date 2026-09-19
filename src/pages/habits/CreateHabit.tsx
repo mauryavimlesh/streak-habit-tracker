@@ -59,6 +59,7 @@ export default function CreateHabit() {
   const [editingReminder, setEditingReminder] = useState<ReminderItem | null>(null);
 
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (editId && user) {
@@ -188,7 +189,11 @@ export default function CreateHabit() {
   };
 
   const handleSaveHabit = async () => {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setError('Habit name is required.');
+      return;
+    }
+    setError(null);
     setLoading(true);
 
     try {
@@ -317,6 +322,13 @@ export default function CreateHabit() {
       </header>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-32 max-w-md mx-auto w-full">
+        {error && (
+          <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
+            <Plus className="w-4 h-4 shrink-0 rotate-45 text-red-400" />
+            <span>{error}</span>
+          </div>
+        )}
+
         {/* Basic Info */}
         <div className="space-y-4">
           <div>
@@ -629,11 +641,23 @@ export default function CreateHabit() {
           <button
             type="button"
             onClick={handleOpenNewAlarm}
-            className="w-full py-3.5 px-4 rounded-2xl bg-[#161a22] hover:bg-[#1f2532] border border-dashed border-[#2d3444] hover:border-accent-primary/60 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+            className="w-full py-3.5 px-4 rounded-2xl bg-[#161a22] hover:bg-[#1f2532] border border-dashed border-[#2d3444] hover:border-accent-primary/60 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer mb-6"
           >
             <Plus className="w-4 h-4 text-accent-primary" />
             <span>Add Alarm / Reminder</span>
           </button>
+
+          {/* Bottom Save Button for Mobile Accessibility */}
+          <div className="pt-4 border-t border-white/5">
+            <button
+              type="button"
+              onClick={handleSaveHabit}
+              disabled={loading}
+              className="w-full py-4 px-4 rounded-2xl bg-accent-primary hover:bg-[#9eff38] text-background font-bold text-sm tracking-wide flex items-center justify-center gap-2 shadow-[0_4px_24px_rgba(140,238,40,0.3)] active:scale-[0.985] transition-all cursor-pointer disabled:opacity-50"
+            >
+              <span>{loading ? 'Saving Habit...' : editId ? 'Update Habit' : 'Create Habit'}</span>
+            </button>
+          </div>
         </div>
       </div>
 

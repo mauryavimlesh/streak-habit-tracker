@@ -36,6 +36,40 @@ const TYPES: { label: string; value: 'task' | 'meeting' | 'event' | 'reminder' }
 
 const COMMON_UNITS = ['pages', 'minutes', 'questions', 'reps', 'problems', 'chapters'];
 
+function to24h(timeStr: string): string {
+  if (!timeStr) return '';
+  if (/^\d{2}:\d{2}$/.test(timeStr)) return timeStr;
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+  if (!match) return '';
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2].padStart(2, '0');
+  const modifier = (match[3] || '').toUpperCase();
+  if (modifier === 'PM' && hours < 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+  return `${String(hours).padStart(2, '0')}:${minutes}`;
+}
+
+function to12h(time24: string): string {
+  if (!time24) return '';
+  const [hStr, mStr] = time24.split(':');
+  let h = parseInt(hStr, 10);
+  if (isNaN(h)) return time24;
+  const m = mStr || '00';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m} ${ampm}`;
+}
+
+const TASK_TIME_PRESETS = [
+  '8:00 AM',
+  '9:00 AM',
+  '12:00 PM',
+  '2:00 PM',
+  '5:00 PM',
+  '8:00 PM',
+];
+
 export function TaskModal({
   isOpen,
   onClose,
@@ -154,14 +188,14 @@ export function TaskModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-black/80 backdrop-blur-md">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="absolute inset-0 bg-black/80 backdrop-blur-md cursor-pointer"
+          className="fixed inset-0 cursor-pointer"
         />
 
         {/* Modal Window */}
@@ -170,10 +204,10 @@ export function TaskModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 16 }}
           transition={{ type: 'spring', damping: 25, stiffness: 320 }}
-          className="relative w-full max-w-lg glass-effect rounded-[32px] p-6 shadow-[0_16px_48px_rgba(0,0,0,0.6)] z-10 overflow-hidden"
+          className="relative w-full max-w-lg glass-effect rounded-[28px] sm:rounded-[32px] p-5 sm:p-6 shadow-[0_16px_48px_rgba(0,0,0,0.6)] z-10 my-auto max-h-[92vh] flex flex-col border border-white/10"
         >
           {/* Top Header */}
-          <div className="flex items-center justify-between pb-4 border-b border-white/5">
+          <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-white/5 shrink-0">
             <div>
               <h3 className="text-lg font-bold text-white tracking-tight">
                 {initialTask ? 'Edit Task' : type === 'meeting' ? 'New Meeting' : type === 'event' ? 'New Event' : 'New Task'}
@@ -191,7 +225,7 @@ export function TaskModal({
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+          <form onSubmit={handleSubmit} className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
             {error && (
               <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -273,20 +307,45 @@ export function TaskModal({
                 </label>
                 <div className="flex items-center gap-2">
                   <input
-                    type="text"
-                    value={time}
-                    onChange={(e) => setTime(e.target.value)}
-                    placeholder="1:30 PM"
-                    className="w-1/2 px-3 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60 transition-colors"
+                    type="time"
+                    value={to24h(time)}
+                    onChange={(e) => setTime(to12h(e.target.value))}
+                    className="w-1/2 px-3 py-2 bg-[#0a0c10] border border-[#202532] rounded-xl text-xs text-white focus:outline-none focus:border-accent-primary/60 cursor-pointer"
                   />
                   <span className="text-[#525766] text-xs">–</span>
                   <input
-                    type="text"
-                    value={timeEnd}
-                    onChange={(e) => setTimeEnd(e.target.value)}
-                    placeholder="2:00 PM"
-                    className="w-1/2 px-3 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60 transition-colors"
+                    type="time"
+                    value={to24h(timeEnd)}
+                    onChange={(e) => setTimeEnd(to12h(e.target.value))}
+                    className="w-1/2 px-3 py-2 bg-[#0a0c10] border border-[#202532] rounded-xl text-xs text-white focus:outline-none focus:border-accent-primary/60 cursor-pointer"
                   />
+                </div>
+                {/* Preset Chips */}
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {TASK_TIME_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setTime(preset)}
+                      className={cn(
+                        'px-2 py-0.5 rounded-lg text-[11px] font-medium border transition-all cursor-pointer',
+                        time === preset
+                          ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/50 font-bold'
+                          : 'bg-white/5 text-[#7d8495] border-white/5 hover:text-white'
+                      )}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                  {time && (
+                    <button
+                      type="button"
+                      onClick={() => { setTime(''); setTimeEnd(''); }}
+                      className="px-2 py-0.5 rounded-lg text-[11px] text-[#7d8495] hover:text-red-400 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -301,7 +360,7 @@ export function TaskModal({
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as any)}
-                  className="w-full px-3.5 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-xs text-white focus:outline-none focus:border-accent-primary/60 transition-colors"
+                  className="w-full px-3.5 py-2.5 bg-[#0a0c10] border border-[#202532] rounded-2xl text-xs text-white focus:outline-none focus:border-accent-primary/60 transition-colors cursor-pointer"
                 >
                   {CATEGORIES.map((cat) => (
                     <option key={cat} value={cat} className="bg-[#12141b] text-white">
@@ -399,37 +458,102 @@ export function TaskModal({
                       />
                     </div>
 
-                    {/* Target Quantity */}
+                    {/* Target Quantity with steppers and presets */}
                     <div>
                       <label className="block text-[11px] font-semibold text-[#8b93a6] mb-1">
                         Target Quantity
                       </label>
-                      <input
-                        type="number"
-                        min="1"
-                        step="any"
-                        value={targetQuantity}
-                        onChange={(e) => setTargetQuantity(e.target.value)}
-                        placeholder="e.g. 50"
-                        required={hasUnitTracking}
-                        className="w-full px-3 py-2 bg-[#12151d] border border-[#202532] rounded-xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60"
-                      />
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setTargetQuantity(String(Math.max(1, (parseFloat(targetQuantity) || 0) - 5)))}
+                          className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-white font-bold text-xs flex items-center justify-center shrink-0 cursor-pointer"
+                        >
+                          -5
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          step="any"
+                          value={targetQuantity}
+                          onChange={(e) => setTargetQuantity(e.target.value)}
+                          placeholder="e.g. 50"
+                          required={hasUnitTracking}
+                          className="w-full px-2 py-1.5 bg-[#12151d] border border-[#202532] rounded-xl text-xs text-white text-center focus:outline-none focus:border-accent-primary/60"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setTargetQuantity(String((parseFloat(targetQuantity) || 0) + 5))}
+                          className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-white font-bold text-xs flex items-center justify-center shrink-0 cursor-pointer"
+                        >
+                          +5
+                        </button>
+                      </div>
+                      <div className="flex gap-1 mt-1">
+                        {['10', '25', '50', '100'].map((val) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setTargetQuantity(val)}
+                            className={cn(
+                              'flex-1 py-0.5 rounded text-[10px] font-medium border transition-colors cursor-pointer',
+                              targetQuantity === val
+                                ? 'bg-accent-primary/20 text-accent-primary border-accent-primary/40 font-bold'
+                                : 'bg-white/5 text-[#7d8495] border-white/5 hover:text-white'
+                            )}
+                          >
+                            {val}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
-                    {/* Current Progress Quantity */}
+                    {/* Current Progress Quantity with steppers */}
                     <div>
                       <label className="block text-[11px] font-semibold text-[#8b93a6] mb-1">
                         Current Done
                       </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={progressQuantity}
-                        onChange={(e) => setProgressQuantity(e.target.value)}
-                        placeholder="0"
-                        className="w-full px-3 py-2 bg-[#12151d] border border-[#202532] rounded-xl text-xs text-white placeholder-[#525766] focus:outline-none focus:border-accent-primary/60"
-                      />
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setProgressQuantity(String(Math.max(0, (parseFloat(progressQuantity) || 0) - 1)))}
+                          className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-white font-bold text-xs flex items-center justify-center shrink-0 cursor-pointer"
+                        >
+                          -1
+                        </button>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={progressQuantity}
+                          onChange={(e) => setProgressQuantity(e.target.value)}
+                          placeholder="0"
+                          className="w-full px-2 py-1.5 bg-[#12151d] border border-[#202532] rounded-xl text-xs text-white text-center focus:outline-none focus:border-accent-primary/60"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setProgressQuantity(String((parseFloat(progressQuantity) || 0) + 1))}
+                          className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-white font-bold text-xs flex items-center justify-center shrink-0 cursor-pointer"
+                        >
+                          +1
+                        </button>
+                      </div>
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => setProgressQuantity('0')}
+                          className="flex-1 py-0.5 rounded text-[10px] bg-white/5 text-[#7d8495] hover:text-white border border-white/5 cursor-pointer"
+                        >
+                          0
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProgressQuantity(targetQuantity)}
+                          className="flex-1 py-0.5 rounded text-[10px] bg-accent-primary/15 text-accent-primary border border-accent-primary/30 font-bold cursor-pointer"
+                        >
+                          Done
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <p className="text-[10px] text-[#7d8495]">
@@ -440,7 +564,7 @@ export function TaskModal({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/5 mt-6">
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/5 mt-6 shrink-0">
               <button
                 type="button"
                 onClick={onClose}

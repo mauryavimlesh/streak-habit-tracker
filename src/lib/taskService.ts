@@ -251,6 +251,17 @@ export function saveLocalTasks(tasks: TaskItem[]) {
     const clean = deduplicateTasks(tasks);
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(clean));
     updateGuestTasksNamespace(clean);
+    globalTasksCache = clean;
+    taskSubscribers.forEach((cb) => {
+      try {
+        cb(clean);
+      } catch (e) {
+        console.warn(e);
+      }
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('streak_tasks_updated', { detail: clean }));
+    }
   } catch (err) {
     console.error('Error saving local tasks:', err);
   }
@@ -425,15 +436,19 @@ export async function createTask(
     return duplicate;
   }
 
-  const tempId = typeof crypto !== 'undefined' && crypto.randomUUID 
-    ? `task_${crypto.randomUUID()}` 
-    : `temp_task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${Math.random().toString(36).substring(2, 9)}`;
+  const isCloud = isCloudSyncableUser(userId);
+  const taskDocRef = isCloud ? doc(collection(db, 'tasks')) : null;
+  const stableId = taskDocRef
+    ? taskDocRef.id
+    : typeof crypto !== 'undefined' && crypto.randomUUID 
+      ? `task_${crypto.randomUUID()}` 
+      : `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   const newTask: TaskItem = {
     ...taskData,
     title: cleanTitle,
     date: cleanDate,
-    id: tempId,
+    id: stableId,
     userId,
     unit: taskData.unit?.trim() || undefined,
     targetQuantity: typeof taskData.targetQuantity === 'number' && taskData.targetQuantity > 0 ? taskData.targetQuantity : undefined,
@@ -449,7 +464,7 @@ export async function createTask(
   saveLocalTasks(local);
 
   // 2. Sync with Firestore if authenticated
-  if (isCloudSyncableUser(userId)) {
+  if (isCloud && taskDocRef) {
     try {
       const taskPayload: Record<string, any> = {
         userId,
@@ -471,12 +486,7 @@ export async function createTask(
       if (typeof newTask.targetQuantity === 'number') taskPayload.targetQuantity = newTask.targetQuantity;
       if (typeof newTask.progressQuantity === 'number') taskPayload.progressQuantity = newTask.progressQuantity;
 
-      const docRef = await addDoc(collection(db, 'tasks'), taskPayload);
-      // Update local task with firestore doc ID
-      newTask.id = docRef.id;
-      const currentLocal = readLocalTasks();
-      const updatedLocal = currentLocal.map((t) => (t.id === tempId ? newTask : t));
-      saveLocalTasks(updatedLocal);
+      await setDoc(taskDocRef, taskPayload);
     } catch (err) {
       console.warn('Could not sync created task to Firestore:', err);
       handleFirestoreError(err, OperationType.CREATE, 'tasks');
@@ -750,8 +760,31 @@ export function subscribeToTasks(
 // Delete Task (permanently deletes in local storage AND Firestore)
 export async function deleteTask(taskId: string, userId?: string): Promise<boolean> {
   const local = readLocalTasks();
+  const taskToDelete = local.find((t) => t.id === taskId);
   const filtered = local.filter((t) => t.id !== taskId);
   saveLocalTasks(filtered);
+  localStorage.setItem(TASKS_INITIALIZED_KEY, 'true');
+
+  // Unlink from Goal if this task was linked to a goal
+  if (taskToDelete?.goalId) {
+    try {
+      const { readLocalGoals, saveLocalGoals } = await import('./goalService');
+      const localGoals = readLocalGoals();
+      let goalsChanged = false;
+      const updatedGoals = localGoals.map((g) => {
+        if (g.linkedTaskId === taskId) {
+          goalsChanged = true;
+          return { ...g, linkedTaskId: undefined };
+        }
+        return g;
+      });
+      if (goalsChanged) {
+        saveLocalGoals(updatedGoals);
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   if (isCloudSyncableUser(userId)) {
     try {
@@ -760,6 +793,10 @@ export async function deleteTask(taskId: string, userId?: string): Promise<boole
       console.warn('Could not delete task in Firestore:', err);
       handleFirestoreError(err, OperationType.DELETE, `tasks/${taskId}`);
     }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
   }
 
   return true;

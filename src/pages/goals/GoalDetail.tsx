@@ -16,6 +16,7 @@ import {
   deleteGoalActivity,
   rescheduleGoalActivity,
   readLocalGoals,
+  deleteGoal,
 } from '../../lib/goalService';
 import { calculateGoalProgress } from '../../lib/goalProgressEngine';
 import {
@@ -76,6 +77,22 @@ export default function GoalDetail() {
   // Reschedule single activity
   const [reschedulingActId, setReschedulingActId] = useState<string | null>(null);
   const [rescheduleTargetDate, setRescheduleTargetDate] = useState(todayStr);
+
+  // Goal deletion modal states
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteGoal = async () => {
+    if (!goal) return;
+    setIsDeleting(true);
+    try {
+      await deleteGoal(goal.id, user?.uid || 'local');
+      navigate('/goals');
+    } catch (err) {
+      console.error('Failed to delete goal', err);
+      setIsDeleting(false);
+    }
+  };
 
   // Load and subscribe to Goal
   const loadGoal = async () => {
@@ -332,6 +349,15 @@ export default function GoalDetail() {
               <span className="hidden sm:inline">Schedule</span>
             </button>
           )}
+          <button
+            id="delete-goal-btn"
+            type="button"
+            onClick={() => setIsDeleteModalOpen(true)}
+            className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 flex items-center justify-center transition-colors cursor-pointer"
+            title="Delete Goal"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
@@ -927,6 +953,59 @@ export default function GoalDetail() {
                   className="flex-1 py-2.5 rounded-2xl bg-accent-primary text-black font-bold text-xs hover:brightness-110 transition-all cursor-pointer"
                 >
                   Accept Schedule
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Goal Confirmation Modal */}
+      <AnimatePresence>
+        {isDeleteModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isDeleting && setIsDeleteModalOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-sm bg-[#16181f] border border-white/10 rounded-2xl p-5 z-10 space-y-4 shadow-xl"
+            >
+              <div className="flex items-center gap-3 text-red-400">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Delete Goal</h3>
+                  <p className="text-xs text-[#7d8495]">This action cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-xs text-white/70 leading-relaxed">
+                Are you sure you want to permanently delete <span className="font-semibold text-white">"{goal.title}"</span>? All associated activities and linkages will be removed.
+              </p>
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 font-medium text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  id="confirm-delete-goal-btn"
+                  disabled={isDeleting}
+                  onClick={handleDeleteGoal}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-colors shadow-lg shadow-red-600/20 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete Goal'}
                 </button>
               </div>
             </motion.div>

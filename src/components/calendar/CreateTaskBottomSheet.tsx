@@ -84,6 +84,31 @@ const TIME_PRESETS = [
   { label: '7:00 PM', value: '7:00 PM' },
 ];
 
+function to24h(timeStr: string): string {
+  if (!timeStr) return '';
+  if (/^\d{2}:\d{2}$/.test(timeStr)) return timeStr;
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+  if (!match) return '';
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2].padStart(2, '0');
+  const modifier = (match[3] || '').toUpperCase();
+  if (modifier === 'PM' && hours < 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+  return `${String(hours).padStart(2, '0')}:${minutes}`;
+}
+
+function to12h(time24: string): string {
+  if (!time24) return '';
+  const [hStr, mStr] = time24.split(':');
+  let h = parseInt(hStr, 10);
+  if (isNaN(h)) return time24;
+  const m = mStr || '00';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m} ${ampm}`;
+}
+
 const QUICK_PRESETS = [
   { title: '⚡ Deep Work Sprint', category: 'Work' as const, time: '9:00 AM', priority: 'high' as const, type: 'task' as const },
   { title: '🏃 Zone-2 Cardio Run', category: 'Fitness' as const, time: '7:00 AM', priority: 'medium' as const, type: 'task' as const },
@@ -381,11 +406,10 @@ export function CreateTaskBottomSheet({
                   ))}
                 </div>
                 <input
-                  type="text"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  placeholder="Custom"
-                  className="w-24 px-2 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white text-center focus:outline-none focus:border-accent-primary"
+                  type="time"
+                  value={to24h(time)}
+                  onChange={(e) => setTime(to12h(e.target.value))}
+                  className="w-28 px-2 py-1.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white text-center focus:outline-none focus:border-accent-primary cursor-pointer"
                 />
               </div>
             </div>

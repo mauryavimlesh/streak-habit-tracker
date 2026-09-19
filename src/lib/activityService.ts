@@ -105,8 +105,12 @@ export async function getUserActivities(userId: string, force = false): Promise<
 
 export async function deleteActivity(id: string, userId?: string) {
   activitiesMemoryCache = null;
-  const local = getLocalActivities().filter(a => a.id !== id);
+  const local = getLocalActivities().filter((a) => a.id !== id);
   saveLocalActivities(local);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_activities_updated'));
+  }
 
   if (isCloudSyncableUser(userId) && !id.startsWith('act_')) {
     try {

@@ -268,6 +268,8 @@ export function saveLocalGoals(goals: Goal[]): void {
     const clean = deduplicateGoals(goals);
     localStorage.setItem(LOCAL_GOALS_KEY, JSON.stringify(clean));
     updateGuestGoalsNamespace(clean);
+    goalsMemoryCache = clean;
+    goalsCacheTimestamp = Date.now();
   } catch {
     // Ignore storage issues
   }
@@ -415,12 +417,14 @@ export async function createGoal(
   goalData: Omit<Goal, 'id' | 'createdAt' | 'updatedAt'>,
   userId?: string
 ): Promise<Goal> {
-  const tempId = 'temp_goal_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  const isCloud = isCloudSyncableUser(userId);
+  const goalDocRef = isCloud ? doc(collection(db, 'goals')) : null;
+  const stableId = goalDocRef ? goalDocRef.id : ('goal_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9));
   const todayStr = getTodayDateKey();
 
   const newGoal: Goal = {
     ...goalData,
-    id: tempId,
+    id: stableId,
     userId,
     type: goalData.type || 'one_time',
     status: goalData.status || 'in_progress',
@@ -458,8 +462,9 @@ export async function createGoal(
           frequencyValue: [],
           icon: 'target',
           color: 'lime',
-          userId
-        }
+          userId,
+          goalId: stableId,
+        } as any
       );
       newGoal.linkedHabitId = habitId;
     } catch (e) {
@@ -479,7 +484,7 @@ export async function createGoal(
           category: newGoal.category as any,
           type: 'task',
           repeat: 'daily',
-          goalId: newGoal.id,
+          goalId: stableId,
         },
         userId
       );
@@ -493,9 +498,9 @@ export async function createGoal(
   local.unshift(newGoal);
   saveLocalGoals(local);
 
-  if (isCloudSyncableUser(userId)) {
+  if (isCloud && goalDocRef) {
     try {
-      const docRef = await addDoc(collection(db, 'goals'), {
+      await setDoc(goalDocRef, {
         userId,
         title: newGoal.title,
         description: newGoal.description || '',
@@ -518,9 +523,6 @@ export async function createGoal(
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      newGoal.id = docRef.id;
-      const updatedLocal = readLocalGoals().map((g) => (g.id === tempId ? newGoal : g));
-      saveLocalGoals(updatedLocal);
     } catch (err) {
       console.warn('Could not sync goal to Firestore:', err);
       handleFirestoreError(err, OperationType.CREATE, 'goals');
@@ -530,6 +532,8 @@ export async function createGoal(
   trackGoalCreated(newGoal.category);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('streak_goals_updated', { detail: newGoal }));
+    window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
+    window.dispatchEvent(new CustomEvent('streak_habits_updated'));
   }
   return newGoal;
 }
@@ -605,9 +609,10 @@ export async function updateGoal(
 
 export async function deleteGoal(goalId: string, userId?: string): Promise<boolean> {
   const local = readLocalGoals();
-  const goal = local.find(g => g.id === goalId);
   const filtered = local.filter((g) => g.id !== goalId);
   saveLocalGoals(filtered);
+  localStorage.setItem(GOALS_INITIALIZED_KEY, 'true');
+  clearGoalsCache();
 
   // Unlink any tasks linked to this deleted goal
   try {
@@ -628,6 +633,44 @@ export async function deleteGoal(goalId: string, userId?: string): Promise<boole
     // ignore
   }
 
+  // Unlink any habits linked to this deleted goal
+  try {
+    const { readLocalHabits, saveLocalHabits } = await import('./habitService');
+    const localHabits = readLocalHabits();
+    let habitsChanged = false;
+    const updatedHabits = localHabits.map((h) => {
+      if ((h as any).goalId === goalId || (h as any).linkedGoalId === goalId) {
+        habitsChanged = true;
+        return { ...h, goalId: undefined, linkedGoalId: undefined };
+      }
+      return h;
+    });
+    if (habitsChanged) {
+      saveLocalHabits(updatedHabits);
+    }
+  } catch {
+    // ignore
+  }
+
+  // Unlink any activities in activityService linked to this deleted goal
+  try {
+    const { getLocalActivities, saveLocalActivities } = await import('./activityService');
+    const acts = getLocalActivities();
+    let actsChanged = false;
+    const updatedActs = acts.map((a) => {
+      if (a.goalId === goalId) {
+        actsChanged = true;
+        return { ...a, goalId: undefined };
+      }
+      return a;
+    });
+    if (actsChanged) {
+      saveLocalActivities(updatedActs);
+    }
+  } catch {
+    // ignore
+  }
+
   if (isCloudSyncableUser(userId)) {
     try {
       await deleteDoc(doc(db, 'goals', goalId));
@@ -638,6 +681,13 @@ export async function deleteGoal(goalId: string, userId?: string): Promise<boole
   }
 
   trackGoalDeleted();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('streak_goals_updated', { detail: { id: goalId, deleted: true } }));
+    window.dispatchEvent(new CustomEvent('streak_tasks_updated'));
+    window.dispatchEvent(new CustomEvent('streak_habits_updated'));
+  }
+
   return true;
 }
 

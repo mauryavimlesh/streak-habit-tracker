@@ -188,14 +188,18 @@ export const createHabit = async (habitData: Omit<Habit, 'id' | 'createdAt' | 'u
     return duplicate.id;
   }
 
-  const tempId = typeof crypto !== 'undefined' && crypto.randomUUID 
-    ? `habit_${crypto.randomUUID()}` 
-    : `habit_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${Math.random().toString(36).substring(2, 9)}`;
+  const isCloud = isCloudSyncableUser(habitData.userId);
+  const newHabitDocRef = isCloud ? doc(collection(db, 'habits')) : null;
+  const stableId = newHabitDocRef
+    ? newHabitDocRef.id
+    : typeof crypto !== 'undefined' && crypto.randomUUID 
+      ? `habit_${crypto.randomUUID()}` 
+      : `habit_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${Math.random().toString(36).substring(2, 9)}`;
 
   const newHabit: Habit = {
     ...habitData,
     name: trimmedName,
-    id: tempId,
+    id: stableId,
     archived: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -206,25 +210,22 @@ export const createHabit = async (habitData: Omit<Habit, 'id' | 'createdAt' | 'u
   local.unshift(newHabit);
   saveLocalHabits(local);
 
-  if (isCloudSyncableUser(habitData.userId)) {
+  if (isCloud && newHabitDocRef) {
     try {
-      const docRef = await addDoc(collection(db, 'habits'), {
+      await setDoc(newHabitDocRef, {
         ...habitData,
         name: trimmedName,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      newHabit.id = docRef.id;
-      const updatedLocal = readLocalHabits().map((h) => (h.id === tempId ? newHabit : h));
-      saveLocalHabits(updatedLocal);
-      return docRef.id;
+      return stableId;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'habits');
     }
   }
 
   trackHabitCreated(habitData.category, habitData.frequencyType);
-  return tempId;
+  return stableId;
 };
 
 let habitsMemoryCache: Habit[] | null = null;
@@ -362,12 +363,14 @@ export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
 
 export const deleteHabit = async (habitId: string, userId?: string) => {
   const local = readLocalHabits();
-  const filtered = local.filter(h => h.id !== habitId);
+  const filtered = local.filter((h) => h.id !== habitId);
   saveLocalHabits(filtered);
+  localStorage.setItem('streak_habits_initialized', 'true');
+  clearHabitCaches();
 
   // Clean up local logs associated with this habit
   const localLogs = readLocalLogs();
-  const filteredLogs = localLogs.filter(l => l.habitId !== habitId);
+  const filteredLogs = localLogs.filter((l) => l.habitId !== habitId);
   saveLocalLogs(filteredLogs);
 
   // Clean up local reminders linked to this habit
@@ -396,6 +399,29 @@ export const deleteHabit = async (habitId: string, userId?: string) => {
     });
     if (tasksChanged) {
       saveLocalTasks(updatedTasks);
+    }
+  } catch {
+    // ignore
+  }
+
+  // Unlink any goals linked to this habit
+  try {
+    const { readLocalGoals, saveLocalGoals } = await import('./goalService');
+    const localGoals = readLocalGoals();
+    let goalsChanged = false;
+    const updatedGoals = localGoals.map((g) => {
+      if (g.linkedHabitId === habitId || (g.linkedHabitIds && g.linkedHabitIds.includes(habitId))) {
+        goalsChanged = true;
+        return {
+          ...g,
+          linkedHabitId: g.linkedHabitId === habitId ? undefined : g.linkedHabitId,
+          linkedHabitIds: g.linkedHabitIds ? g.linkedHabitIds.filter((id) => id !== habitId) : undefined,
+        };
+      }
+      return g;
+    });
+    if (goalsChanged) {
+      saveLocalGoals(updatedGoals);
     }
   } catch {
     // ignore

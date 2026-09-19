@@ -427,6 +427,9 @@ export function saveLocalReminders(reminders: ReminderItem[]): void {
   try {
     const clean = deduplicateReminders(reminders);
     localStorage.setItem(LOCAL_REMINDERS_KEY, JSON.stringify(clean));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('streak_reminders_updated', { detail: clean }));
+    }
   } catch {
     // Ignore
   }
