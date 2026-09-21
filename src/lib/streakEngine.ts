@@ -1,28 +1,60 @@
-import { HabitLog, HabitFrequency } from './habitService';
+import { HabitLog, HabitFrequency, Habit } from './habitService';
 import { getTodayDateKey, parseDateKey, formatDateKey, addDays, diffDays } from './dateUtils';
 
 export interface StreakStats {
   currentStreak: number;
   bestStreak: number;
   recoveryStreak: number;
+  totalSuccessfulDays?: number;
+  missedDays?: number;
+  completionRate?: number;
 }
 
+export {
+  evaluateHabitProgress,
+  isLogCompleted,
+  getHabitProgressForDate,
+  calculateHabitStreakStats,
+  calculateGlobalHabitStreak,
+} from './habitEngine';
+export type { StreakStatus, HabitProgressInfo, DetailedStreakStats } from './habitEngine';
+
 /**
- * Calculates the current, best, and recovery streaks based on habit logs and frequency.
+ * Calculates the current, best, and recovery streaks based on habit logs and frequency,
+ * strictly requiring the configured minimum target to be met for a day to count.
  */
 export function calculateStreakStats(
   logs: HabitLog[],
   frequencyType: HabitFrequency,
   frequencyValue?: string[], // e.g. ['Mon', 'Wed', 'Fri']
-  targetDateStr?: string
+  targetDateStr?: string,
+  habit?: Habit
 ): StreakStats {
-  const stats: StreakStats = { currentStreak: 0, bestStreak: 0, recoveryStreak: 0 };
+  const stats: StreakStats = {
+    currentStreak: 0,
+    bestStreak: 0,
+    recoveryStreak: 0,
+    totalSuccessfulDays: 0,
+    missedDays: 0,
+    completionRate: 0,
+  };
 
-  // Deduplicate and filter completed logs only
+  // Deduplicate and filter completed logs only based on true target completion
   const completedDateMap = new Map<string, HabitLog>();
   logs.forEach((log) => {
-    if (log.status === 'completed' && log.date) {
-      const canonicalDate = log.date.split('T')[0];
+    if (!log.date) return;
+    const canonicalDate = log.date.split('T')[0];
+
+    const requiredTarget = log.minimumTarget ?? log.targetValue ?? habit?.minimumTarget ?? habit?.targetValue ?? 1;
+    const progress = typeof log.progressValue === 'number'
+      ? log.progressValue
+      : (log.status === 'completed' ? requiredTarget : 0);
+
+    const isDone = (log.targetValue !== undefined || habit?.targetValue !== undefined || log.minimumTarget !== undefined)
+      ? progress >= requiredTarget
+      : log.status === 'completed';
+
+    if (isDone) {
       completedDateMap.set(canonicalDate, { ...log, date: canonicalDate });
     }
   });
@@ -30,9 +62,18 @@ export function calculateStreakStats(
   // Sort logs in descending order by date (newest first)
   const sortedLogs = Array.from(completedDateMap.values()).sort((a, b) => b.date.localeCompare(a.date));
 
-  if (sortedLogs.length === 0) return stats;
+  stats.totalSuccessfulDays = sortedLogs.length;
 
   const todayStr = targetDateStr || getTodayDateKey(); // 'YYYY-MM-DD'
+
+  if (sortedLogs.length > 0) {
+    const oldestDate = sortedLogs[sortedLogs.length - 1].date;
+    const totalDaysTracked = Math.max(1, diffDays(oldestDate, todayStr) + 1);
+    stats.missedDays = Math.max(0, totalDaysTracked - stats.totalSuccessfulDays);
+    stats.completionRate = Math.min(100, Math.round((stats.totalSuccessfulDays / totalDaysTracked) * 100));
+  }
+
+  if (sortedLogs.length === 0) return stats;
 
   if (frequencyType === 'daily') {
     stats.bestStreak = calculateMaxContinuousDays(sortedLogs);

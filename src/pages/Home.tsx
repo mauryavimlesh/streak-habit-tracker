@@ -21,6 +21,7 @@ import { HabitConsistencyHeatmap } from '../components/ui/HabitConsistencyHeatma
 import { getTodayDateKey, addDays } from '../lib/dateUtils';
 import { ActiveTimerWidget } from "../components/home/ActiveTimerWidget";
 import { StreakLogo } from '../components/ui/StreakLogo';
+import { evaluateHabitProgress, calculateGlobalHabitStreak, StreakStatus } from '../lib/habitEngine';
 
 // Reference authentic default habits matching the design reference
 const DEFAULT_HABITS: Habit[] = [
@@ -36,6 +37,7 @@ const DEFAULT_HABITS: Habit[] = [
     targetType: 'count',
     targetValue: 30,
     targetUnit: 'min',
+    minimumTarget: 20,
     reminderTime: '08:00',
   },
   {
@@ -50,6 +52,7 @@ const DEFAULT_HABITS: Habit[] = [
     targetType: 'count',
     targetValue: 8,
     targetUnit: 'glasses',
+    minimumTarget: 8,
     reminderTime: '10:00',
   },
   {
@@ -64,6 +67,7 @@ const DEFAULT_HABITS: Habit[] = [
     targetType: 'count',
     targetValue: 8,
     targetUnit: 'hours',
+    minimumTarget: 8,
     reminderTime: '22:30',
   },
 ];
@@ -293,11 +297,12 @@ export default function Home() {
     return 1;
   };
 
-  // Check how many habits are completed today
+  // Check how many habits are completed today (strict minimum target verification)
   const isHabitCompleted = (habit: Habit) => {
     const currentVal = localProgress[habit.id!] ?? 0;
     const target = habit.targetValue || 1;
-    return currentVal >= target;
+    const minimum = habit.minimumTarget ?? target;
+    return currentVal >= minimum;
   };
 
   const displayedHabits = !user ? (habits.length > 0 ? habits : DEFAULT_HABITS) : habits;
@@ -331,76 +336,101 @@ export default function Home() {
   const leftCount = Math.max(0, totalCount - completedHabitsCount);
 
   // Quick action / stepper click handler
-  const handleIncrement = async (e: React.MouseEvent, habit: Habit) => {
-    e.stopPropagation();
+  const handleProgressUpdate = async (
+    habit: Habit,
+    deltaOrExact: { delta?: number; exact?: number },
+    e?: React.MouseEvent
+  ) => {
+    if (e) e.stopPropagation();
     const habitId = habit.id!;
     const target = habit.targetValue || 1;
-    const step = getStep(habit);
+    const minimum = habit.minimumTarget ?? target;
     const current = localProgress[habitId] ?? 0;
 
-    const nextVal = current >= target ? 0 : Math.min(target, current + step);
+    let nextVal = current;
+    if (deltaOrExact.exact !== undefined) {
+      nextVal = Math.max(0, deltaOrExact.exact);
+    } else if (deltaOrExact.delta !== undefined) {
+      nextVal = Math.max(0, current + deltaOrExact.delta);
+    }
 
     // Optimistic UI state
     setLocalProgress((prev) => ({ ...prev, [habitId]: nextVal }));
 
-    const isDone = nextVal >= target;
-    const wasCompleted = current >= target;
+    const isDone = nextVal >= minimum;
+    const wasCompleted = current >= minimum;
 
-    // Physical feedback via navigator.vibrate() when marking habits as done for a tactile OS feel
+    // Tactile haptic feedback
     if (isDone && !wasCompleted) {
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         try {
-          // Premium Apple OS double-pulse confirmation haptic
           navigator.vibrate([40, 50, 35]);
-        } catch {
-          // Ignore if unsupported or restricted
-        }
+        } catch {}
       }
+      confetti({
+        particleCount: 70,
+        spread: 60,
+        origin: { y: 0.7 },
+        colors: ['var(--app-accent)', '#ffffff', '#22361b']
+      });
     } else if (nextVal > current) {
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         try {
-          // Subtle micro-tap for incremental step
           navigator.vibrate(18);
-        } catch {
-          // Ignore
-        }
+        } catch {}
       }
     } else if (nextVal === 0 && wasCompleted) {
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
         try {
-          // Subtle release tap
           navigator.vibrate(12);
-        } catch {
-          // Ignore
-        }
+        } catch {}
       }
     }
 
-    let newStatus: 'completed' | 'partial' | 'in_progress' | 'missed';
-    if (isDone) {
-      newStatus = 'completed';
-    } else if (nextVal > 0) {
-      newStatus = 'partial';
-    } else {
-      newStatus = 'missed';
-    }
+    const newStatus: 'completed' | 'in_progress' | 'not_started' = isDone
+      ? 'completed'
+      : (nextVal > 0 ? 'in_progress' : 'not_started');
 
     try {
       await logHabit({
         userId: user?.uid || 'guest',
         habitId: habitId,
         date: todayStr,
-        status: newStatus,
+        status: newStatus as any,
         progressValue: nextVal,
+        targetValue: target,
+        minimumTarget: minimum,
+        targetUnit: habit.targetUnit || '',
+        note: habitNotes[habitId] || undefined,
       });
       setLogs((prev) => {
         const idx = prev.findIndex((l) => l.habitId === habitId && l.date === todayStr);
         if (idx !== -1) {
           const copy = [...prev];
-          copy[idx] = { ...copy[idx], status: newStatus, progressValue: nextVal };
+          copy[idx] = {
+            ...copy[idx],
+            status: newStatus as any,
+            progressValue: nextVal,
+            targetValue: target,
+            minimumTarget: minimum,
+            targetUnit: habit.targetUnit || '',
+            completedAt: isDone ? (copy[idx].completedAt || new Date().toISOString()) : undefined,
+          };
           return copy;
         }
-        return [...prev, { habitId, date: todayStr, status: newStatus, progressValue: nextVal } as any];
+        return [
+          ...prev,
+          {
+            habitId,
+            date: todayStr,
+            status: newStatus as any,
+            progressValue: nextVal,
+            targetValue: target,
+            minimumTarget: minimum,
+            targetUnit: habit.targetUnit || '',
+            completedAt: isDone ? new Date().toISOString() : undefined,
+          } as any,
+        ];
       });
     } catch (err) {
       console.error('Failed to log habit:', err);
@@ -409,16 +439,25 @@ export default function Home() {
     }
   };
 
+  const handleIncrement = async (e: React.MouseEvent, habit: Habit) => {
+    const step = getStep(habit);
+    await handleProgressUpdate(habit, { delta: step }, e);
+  };
+
   const saveNote = async (habit: Habit, note: string) => {
     const current = localProgress[habit.id!] ?? 0;
     const target = habit.targetValue || 1;
+    const minimum = habit.minimumTarget ?? target;
     try {
       await logHabit({
         userId: user?.uid || 'guest',
         habitId: habit.id!,
         date: todayStr,
-        status: current >= target ? 'completed' : 'missed',
+        status: current >= minimum ? 'completed' : (current > 0 ? 'in_progress' : 'not_started'),
         progressValue: current,
+        targetValue: target,
+        minimumTarget: minimum,
+        targetUnit: habit.targetUnit || '',
         note: note
       });
       setHabitNotes((prev) => ({ ...prev, [habit.id!]: note }));
@@ -433,73 +472,14 @@ export default function Home() {
   const handleToggleHabitComplete = async (habit: Habit) => {
     const habitId = habit.id!;
     const target = habit.targetValue || 1;
+    const minimum = habit.minimumTarget ?? target;
     const current = localProgress[habitId] ?? 0;
-    const isCurrentlyDone = current >= target;
+    const isCurrentlyDone = current >= minimum;
 
+    // If currently done, clicking allows resetting to 0
+    // If NOT done, clicking "Complete" sets progress to the full target so the configured target has actually been reached!
     const nextVal = isCurrentlyDone ? 0 : target;
-    setLocalProgress((prev) => ({ ...prev, [habitId]: nextVal }));
-
-    // Tactile 'premium OS' feedback via navigator.vibrate()
-    if (!isCurrentlyDone) {
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        try {
-          // Double-pulse confirmation vibration when marking a habit as done
-          navigator.vibrate([40, 60, 40]);
-        } catch {
-          // Ignore
-        }
-      }
-      
-      // Check if this completes the final habit for today
-      if (nextVal >= target) {
-        const willBeCompletedCount = displayedHabits.filter(h => {
-          if (h.id === habitId) return true;
-          return isHabitCompleted(h);
-        }).length;
-        
-        if (willBeCompletedCount === totalCount && totalCount > 0) {
-          confetti({
-            particleCount: 120,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ['var(--app-accent)', '#ffffff', '#22361b']
-          });
-        }
-      }
-    } else {
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        try {
-          navigator.vibrate(15);
-        } catch {
-          // Ignore
-        }
-      }
-    }
-
-    try {
-      const status = nextVal >= target ? 'completed' : 'missed';
-      await logHabit({
-        userId: user?.uid || 'guest',
-        habitId: habitId,
-        date: todayStr,
-        status,
-        progressValue: nextVal,
-        note: habitNotes[habitId] || undefined,
-      });
-      setLogs(prev => {
-        const idx = prev.findIndex(l => l.habitId === habitId && l.date === todayStr);
-        if (idx !== -1) {
-          const copy = [...prev];
-          copy[idx] = { ...copy[idx], status, progressValue: nextVal };
-          return copy;
-        }
-        return [...prev, { habitId, date: todayStr, status, progressValue: nextVal } as any];
-      });
-    } catch (err) {
-      console.error('Failed to log habit:', err);
-      // Rollback optimistic state to database truth
-      setLocalProgress((prev) => ({ ...prev, [habitId]: current }));
-    }
+    await handleProgressUpdate(habit, { exact: nextVal });
   };
 
   // Direct toggle task completion on the dashboard with tactile OS feedback
@@ -538,36 +518,12 @@ export default function Home() {
   };
 
 
-  const getGlobalStreak = () => {
-    // Collect all dates where at least one habit was completed
-    const completedDates = new Set<string>();
-    logs.forEach(l => {
-      if (l.status === 'completed' || (l.progressValue && l.progressValue > 0)) {
-        completedDates.add(l.date);
-      }
-    });
-    
-    if (completedDates.size === 0) return 0;
-    
-    const today = getTodayDateKey();
-    const yesterdayStr = addDays(today, -1);
-    const hasToday = completedDates.has(today);
-    const hasYesterday = completedDates.has(yesterdayStr);
-    
-    if (!hasToday && !hasYesterday) {
-      return 0; // Streak broken
-    }
-    
-    let cursor = hasToday ? today : yesterdayStr;
-    let currentStreak = 0;
-    
-    while (completedDates.has(cursor)) {
-      currentStreak++;
-      cursor = addDays(cursor, -1);
-    }
-    
-    return currentStreak;
-  };
+  const globalStreakStats = React.useMemo(() => {
+    return calculateGlobalHabitStreak(displayedHabits, logs, todayStr);
+  }, [displayedHabits, logs, todayStr]);
+
+  const globalStreak = globalStreakStats.currentStreak;
+
   const handleConfirmDeleteHabit = async () => {
     if (!deletingHabit) return;
     setIsDeleting(true);
@@ -584,8 +540,6 @@ export default function Home() {
     setDeletingTask(null);
     setIsDeleting(false);
   };
-
-  const globalStreak = getGlobalStreak();
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -933,153 +887,251 @@ export default function Home() {
               const visuals = getHabitVisuals(habit);
               const currentVal = localProgress[habit.id!] ?? 0;
               const target = habit.targetValue || 1;
-              const isCompleted = currentVal >= target;
-              const step = getStep(habit);
-              const progressRatio = Math.min(1, currentVal / target);
+              const minimum = habit.minimumTarget ?? target;
+              const progressInfo = evaluateHabitProgress(habit, currentVal);
+              const isCompleted = progressInfo.isCompleted;
+              const isSleep = habit.name.toLowerCase().includes('sleep');
 
-              let subtitle = '';
-              let badge: React.ReactNode = null;
-              
-              if (habit.name.toLowerCase().includes('sleep')) {
-                const sleepLog = logs.find(l => l.habitId === habit.id && l.date === todayStr);
-                const actualSleep = sleepLog?.progressValue || 0;
-                const bedtimeFmt = habit.sleepBedtime ? format24To12(habit.sleepBedtime) : '11:00 PM';
-                const wakeFmt = habit.sleepWakeTime ? format24To12(habit.sleepWakeTime) : '07:00 AM';
-                
-                if (actualSleep > 0) {
-                    subtitle = `${actualSleep}h logged / ${target}h goal • ${bedtimeFmt} → ${wakeFmt}`;
-                    if (actualSleep >= target) {
-                        badge = <span className="ml-2 text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded-full border border-emerald-400/20">Target Met</span>;
-                    } else {
-                        badge = <span className="ml-2 text-[10px] font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded-full border border-amber-400/20">Partial ({Math.round((actualSleep / target) * 100)}%)</span>;
-                    }
-                } else {
-                  subtitle = `${bedtimeFmt} → ${wakeFmt} • Target: ${target}h`;
+              const renderStreakBadge = (status: StreakStatus) => {
+                switch (status) {
+                  case 'completed':
+                    return (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-accent-primary bg-accent-primary/10 border border-accent-primary/25 px-2.5 py-0.5 rounded-full">
+                        ✓ Completed
+                      </span>
+                    );
+                  case 'in_progress':
+                    return (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-400 bg-sky-400/10 border border-sky-400/25 px-2.5 py-0.5 rounded-full">
+                        ◐ In progress
+                      </span>
+                    );
+                  case 'missed':
+                    return (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-400 bg-rose-400/10 border border-rose-400/25 px-2.5 py-0.5 rounded-full">
+                        ✕ Missed
+                      </span>
+                    );
+                  case 'not_started':
+                  default:
+                    return (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#828899] bg-white/5 border border-white/10 px-2.5 py-0.5 rounded-full">
+                        ○ Not started
+                      </span>
+                    );
                 }
-              } else {
-                subtitle = `${currentVal} / ${target} ${habit.targetUnit || 'times'}`;
-              }
+              };
 
               return (
-                <div key={habit.id} className="flex flex-col gap-2">
-                <div
-                  onClick={() => {
-                    if (habit.name.toLowerCase().includes('sleep')) {
-                      setEditingSleepHabit(habit);
-                    } else {
-                      handleToggleHabitComplete(habit);
-                    }
-                  }}
-                  className="h-[72px] rounded-full glass-effect-interactive px-3.5 flex items-center justify-between group cursor-pointer transition-all active:scale-[0.99]"
-                >
-                  {/* Left Icon + Text */}
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div
-                      className={`w-[48px] h-[48px] rounded-full ${visuals.bg} ${visuals.text} flex items-center justify-center shrink-0`}
-                    >
-                      {visuals.icon}
-                    </div>
-
-                    <div className="flex flex-col truncate">
-                      <span
-                        className={cn(
-                          'text-[15.5px] font-semibold tracking-tight truncate transition-all',
-                          isCompleted ? 'text-white/50 line-through' : 'text-white'
-                        )}
-                      >
-                        {habit.name}
-                      </span>
-                      <span className="text-[13px] font-medium text-[#7d8495] mt-0.5 flex items-center">
-                        {subtitle}
-                        {badge}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Internal Edit/Delete Actions */}
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity mr-1 shrink-0">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); navigate(`/habits/new?edit=${habit.id}`); }}
-                      className="p-2 rounded-full hover:bg-white/10 text-[#7d8495] hover:text-white transition-colors"
-                      title="Edit Habit"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setDeletingHabit(habit); }}
-                      className="p-2 rounded-full hover:bg-red-500/10 text-[#7d8495] hover:text-red-400 transition-colors"
-                      title="Delete Habit"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  
-                  {/* Right Action Stepper / Completion Button */}
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (habit.name.toLowerCase().includes('sleep')) {
-                        setEditingSleepHabit(habit);
-                        return;
-                      }
-                      if (target > 1 && !isCompleted) {
-                        handleIncrement(e, habit);
-                      } else {
-                        handleToggleHabitComplete(habit);
-                      }
-                    }}
-                    className="w-[42px] h-[42px] rounded-full relative flex items-center justify-center shrink-0 bg-[#1a1d25] border border-[#262b36] overflow-hidden hover:border-accent-primary/50 transition-colors"
-                  >
-                    {isCompleted ? (
-                      <div className="w-full h-full bg-[#22361b] border border-[#2d5025] text-accent-primary flex items-center justify-center rounded-full animate-in zoom-in-75 duration-200">
-                        <Check className="w-5 h-5 stroke-[3]" />
+                <div key={habit.id} className="rounded-[22px] glass-effect p-4 flex flex-col gap-3 transition-all border border-white/5 hover:border-white/10">
+                  {/* Header row: Icon, Title & target, Status Badge, Edit/Delete */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-[44px] h-[44px] rounded-full ${visuals.bg} ${visuals.text} flex items-center justify-center shrink-0`}>
+                        {visuals.icon}
                       </div>
-                    ) : (
-                      <>
-                        {/* Progress ring track around stepper button */}
-                        {progressRatio > 0 && (
-                          <svg
-                            className="absolute inset-0 w-full h-full transform -rotate-90"
-                            viewBox="0 0 42 42"
-                          >
-                            <circle
-                              cx="21"
-                              cy="21"
-                              r="18"
-                              stroke={visuals.ringColor}
-                              strokeWidth="2.5"
-                              fill="none"
-                              strokeLinecap="round"
-                              strokeDasharray={`${2 * Math.PI * 18}`}
-                              strokeDashoffset={`${2 * Math.PI * 18 * (1 - progressRatio)}`}
-                            />
-                          </svg>
-                        )}
-                        <span
-                          className={cn(
-                            'text-xs font-bold relative z-10',
-                            progressRatio > 0 ? 'text-white' : 'text-[#7d8495] group-hover:text-white'
-                          )}
-                        >
-                          {habit.name.toLowerCase().includes('sleep') ? <Edit2 className="w-4 h-4" /> : `+${step}`}
+                      <div className="flex flex-col truncate">
+                        <span className={cn(
+                          'text-[15.5px] font-semibold tracking-tight truncate',
+                          isCompleted ? 'text-white/80' : 'text-white'
+                        )}>
+                          {habit.name}
                         </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {isCompleted && (
-                  <div className="px-4 mb-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <input
-                      type="text"
-                      placeholder="Add a quick reflection or note..."
-                      value={habitNotes[habit.id!] || ''}
-                      onChange={(e) => setHabitNotes(prev => ({...prev, [habit.id!]: e.target.value}))}
-                      onBlur={() => saveNote(habit, habitNotes[habit.id!] || '')}
-                      className="w-full bg-transparent border-b border-[#262b36] text-[13px] text-white focus:outline-none focus:border-accent-primary pb-1.5 placeholder:text-[#7d8495] transition-colors"
-                    />
-                  </div>
-                )}
+                        <span className="text-[12.5px] font-medium text-[#7d8495] mt-0.5">
+                          {target} {habit.targetUnit || 'times'} target
+                          {minimum < target && ` • Min ${minimum} for streak`}
+                        </span>
+                      </div>
+                    </div>
 
+                    <div className="flex items-center gap-2 shrink-0">
+                      {renderStreakBadge(progressInfo.status)}
+                      <div className="flex items-center gap-0.5">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); navigate(`/habits/new?edit=${habit.id}`); }}
+                          className="p-1.5 rounded-full hover:bg-white/10 text-[#7d8495] hover:text-white transition-colors"
+                          title="Edit Habit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setDeletingHabit(habit); }}
+                          className="p-1.5 rounded-full hover:bg-red-500/10 text-[#7d8495] hover:text-red-400 transition-colors"
+                          title="Delete Habit"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar & Details */}
+                  {isSleep ? (
+                    <div className="pt-1 flex flex-col gap-2">
+                      <div className="flex items-center justify-between text-xs text-[#828899]">
+                        <span>Bedtime: {habit.sleepBedtime ? format24To12(habit.sleepBedtime) : '11:00 PM'} → {habit.sleepWakeTime ? format24To12(habit.sleepWakeTime) : '07:00 AM'}</span>
+                        <span className="font-semibold text-white">{currentVal}h / {target}h</span>
+                      </div>
+                      <button
+                        onClick={() => setEditingSleepHabit(habit)}
+                        className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" /> Log / Edit Sleep
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="pt-1 flex flex-col gap-2">
+                      {/* Progress Breakdown */}
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-[#7d8495] text-[11px] uppercase tracking-wider font-semibold">Today's Progress</span>
+                          <span className="text-[14px] font-bold text-white mt-0.5">
+                            {currentVal} <span className="text-[#7d8495] font-normal text-xs">/ {target} {habit.targetUnit || 'times'}</span>
+                          </span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-[#7d8495] text-[11px] uppercase tracking-wider font-semibold">Remaining</span>
+                          <span className={cn('text-[14px] font-bold mt-0.5', isCompleted ? 'text-accent-primary' : 'text-[#828899]')}>
+                            {isCompleted ? '0 (Target reached)' : `${Math.max(0, target - currentVal)} ${habit.targetUnit || 'times'}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Progress Track */}
+                      <div className="w-full bg-[#1b1f2b] h-2 rounded-full overflow-hidden relative">
+                        <div
+                          className={cn(
+                            'h-full transition-all duration-300 rounded-full',
+                            isCompleted ? 'bg-accent-primary' : (currentVal > 0 ? 'bg-sky-400' : 'bg-transparent')
+                          )}
+                          style={{ width: `${Math.min(100, Math.round((currentVal / target) * 100))}%` }}
+                        />
+                      </div>
+
+                      {/* Streak Requirement Status Text */}
+                      <div className="text-[12px] pt-0.5">
+                        {isCompleted ? (
+                          <div className="text-accent-primary font-medium flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            ✓ {habit.name} completed · Today's streak requirement completed.
+                          </div>
+                        ) : currentVal > 0 ? (
+                          <div className="text-[#9ca3af] flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-sky-400" />
+                            Needs {Math.max(0, minimum - currentVal)} {habit.targetUnit || 'times'} more to count toward streak.
+                          </div>
+                        ) : (
+                          <div className="text-[#7d8495] flex items-center gap-1.5">
+                            <Target className="w-3.5 h-3.5 text-[#828899]" />
+                            Complete at least {minimum} {habit.targetUnit || 'times'} to count toward streak.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Quick Action Buttons */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+                        {habit.targetUnit === 'min' ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleProgressUpdate(habit, { delta: 5 }); }}
+                              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-xs font-bold text-white border border-white/10 transition-all cursor-pointer"
+                            >
+                              +5 min
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleProgressUpdate(habit, { delta: 10 }); }}
+                              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-xs font-bold text-white border border-white/10 transition-all cursor-pointer"
+                            >
+                              +10 min
+                            </button>
+                            {target >= 20 && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleProgressUpdate(habit, { delta: 15 }); }}
+                                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-xs font-bold text-white border border-white/10 transition-all cursor-pointer"
+                              >
+                                +15 min
+                              </button>
+                            )}
+                            {currentVal > 0 && (
+                              <button
+                                type="button"
+                                title="Step back 5 min"
+                                onClick={(e) => { e.stopPropagation(); handleProgressUpdate(habit, { delta: -5 }); }}
+                                className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-xs font-bold text-[#828899] hover:text-white border border-white/10 transition-all cursor-pointer"
+                              >
+                                -5
+                              </button>
+                            )}
+                          </>
+                        ) : habit.targetType === 'binary' ? (
+                          <span className="text-xs text-[#7d8495]">Single daily check-in</span>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleProgressUpdate(habit, { delta: 1 }); }}
+                              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-xs font-bold text-white border border-white/10 transition-all cursor-pointer"
+                            >
+                              +1 {habit.targetUnit || ''}
+                            </button>
+                            {target >= 5 && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleProgressUpdate(habit, { delta: 5 }); }}
+                                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-xs font-bold text-white border border-white/10 transition-all cursor-pointer"
+                              >
+                                +5 {habit.targetUnit || ''}
+                              </button>
+                            )}
+                            {currentVal > 0 && (
+                              <button
+                                type="button"
+                                title="Step back 1"
+                                onClick={(e) => { e.stopPropagation(); handleProgressUpdate(habit, { delta: -1 }); }}
+                                className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 text-xs font-bold text-[#828899] hover:text-white border border-white/10 transition-all cursor-pointer"
+                              >
+                                -1
+                              </button>
+                            )}
+                          </>
+                        )}
+
+                        {/* Complete Action Button */}
+                        <div className="ml-auto">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleToggleHabitComplete(habit); }}
+                            className={cn(
+                              'px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95',
+                              isCompleted
+                                ? 'bg-[#22361b] text-accent-primary border border-[#2d5025] hover:bg-[#2d4724]'
+                                : 'bg-accent-primary text-black hover:bg-[#a5ff36]'
+                            )}
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            {isCompleted ? 'Completed' : 'Complete'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Optional Note */}
+                  {isCompleted && (
+                    <div className="pt-2 border-t border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <input
+                        type="text"
+                        placeholder="Add a quick reflection or note..."
+                        value={habitNotes[habit.id!] || ''}
+                        onChange={(e) => setHabitNotes(prev => ({ ...prev, [habit.id!]: e.target.value }))}
+                        onBlur={() => saveNote(habit, habitNotes[habit.id!] || '')}
+                        className="w-full bg-transparent border-b border-[#262b36] text-[13px] text-white focus:outline-none focus:border-accent-primary pb-1 placeholder:text-[#7d8495] transition-colors"
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}

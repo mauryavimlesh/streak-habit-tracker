@@ -381,8 +381,8 @@ export default function Analytics() {
 
   // Overall Streak Stats (Truthful streak engine calculation)
   const streakStats = useMemo(() => {
-    return calculateStreakStats(logs, 'daily', undefined, todayStr);
-  }, [logs, todayStr]);
+    return calculateStreakStats(logs, 'daily', habits, todayStr);
+  }, [logs, habits, todayStr]);
 
   // Tasks Analysis
   const completedTasks = filteredTasks.filter((t) => t.completed);

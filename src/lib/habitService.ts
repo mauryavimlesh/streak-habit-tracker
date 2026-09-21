@@ -32,8 +32,11 @@ export interface HabitLog {
   habitId: string;
   userId: string;
   date: string; // YYYY-MM-DD
-  status: 'completed' | 'skipped' | 'failed' | 'in_progress' | 'partial' | 'missed';
+  status: 'completed' | 'skipped' | 'failed' | 'in_progress' | 'partial' | 'missed' | 'not_started';
   progressValue?: number;
+  targetValue?: number; // Snapshot of target at the time of logging
+  minimumTarget?: number; // Snapshot of minimum required target at the time of logging
+  targetUnit?: string;
   note?: string;
   reflection?: string;
   completedAt?: any;
@@ -51,9 +54,12 @@ export interface Habit {
   color: string;
   frequencyType: HabitFrequency;
   frequencyValue: string[];
+  frequency?: HabitFrequency; // Alias for frequencyType
+  scheduleDays?: number[]; // Numeric day of week 0=Sun, 1=Mon, ..., 6=Sat
   targetType: TargetType;
   targetValue: number;
   targetUnit?: string;
+  minimumTarget?: number; // Minimum required completion value to count for streak
   reminderTime?: string;
   sleepBedtime?: string;
   sleepWakeTime?: string;
@@ -343,6 +349,36 @@ export const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
     saveLocalHabits(local);
   }
 
+  // If target was updated, synchronously synchronize today's log without corrupting historical past records
+  if (updates.targetValue !== undefined || updates.minimumTarget !== undefined) {
+    try {
+      const { getTodayDateKey } = await import('./dateUtils');
+      const todayStr = getTodayDateKey();
+      const localLogs = readLocalLogs();
+      const todayLogIdx = localLogs.findIndex((l) => l.habitId === habitId && l.date === todayStr);
+      if (todayLogIdx !== -1) {
+        const todayLog = localLogs[todayLogIdx];
+        const newTarget = updates.targetValue ?? todayLog.targetValue ?? 1;
+        const newMin = updates.minimumTarget ?? updates.targetValue ?? todayLog.minimumTarget ?? newTarget;
+        const currentProgress = todayLog.progressValue ?? 0;
+        const isNowDone = currentProgress >= newMin;
+        const newStatus = isNowDone ? 'completed' : (currentProgress > 0 ? 'in_progress' : 'not_started');
+        localLogs[todayLogIdx] = {
+          ...todayLog,
+          targetValue: newTarget,
+          minimumTarget: newMin,
+          targetUnit: updates.targetUnit ?? todayLog.targetUnit,
+          status: newStatus as any,
+          completedAt: isNowDone ? (todayLog.completedAt || new Date().toISOString()) : undefined,
+          updatedAt: new Date().toISOString(),
+        };
+        saveLocalLogs(localLogs);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   if (isCloudSynced && !habitId.startsWith('temp_habit_')) {
     try {
       const targetDocId = habitId.startsWith('default-') ? `${actualUserId}_${habitId}` : habitId;
@@ -368,10 +404,11 @@ export const deleteHabit = async (habitId: string, userId?: string) => {
   localStorage.setItem('streak_habits_initialized', 'true');
   clearHabitCaches();
 
-  // Clean up local logs associated with this habit
+  // For historical analytics integrity (Test 11), retain completed historical logs:
+  // We only remove uncompleted/pending logs of the deleted habit, preserving completed days for analytics
   const localLogs = readLocalLogs();
-  const filteredLogs = localLogs.filter((l) => l.habitId !== habitId);
-  saveLocalLogs(filteredLogs);
+  const updatedLogs = localLogs.filter((l) => l.habitId !== habitId || l.status === 'completed');
+  saveLocalLogs(updatedLogs);
 
   // Clean up local reminders linked to this habit
   try {
@@ -462,6 +499,28 @@ export const deleteHabit = async (habitId: string, userId?: string) => {
 
 // Habit Logs CRUD
 export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'updatedAt'>, skipSync: boolean = false) => {
+  // Snapshot target values from the habit if not explicitly provided
+  const habits = readLocalHabits();
+  const habit = habits.find((h) => h.id === logData.habitId);
+  const targetVal = logData.targetValue ?? habit?.targetValue ?? 1;
+  const minimumVal = logData.minimumTarget ?? habit?.minimumTarget ?? targetVal;
+  const targetUnit = logData.targetUnit ?? habit?.targetUnit ?? '';
+
+  // Determine strict completion status
+  const currentProgress = typeof logData.progressValue === 'number'
+    ? logData.progressValue
+    : (logData.status === 'completed' ? minimumVal : 0);
+
+  const isNowCompleted = currentProgress >= minimumVal;
+  let finalStatus: HabitLog['status'] = 'not_started' as any;
+  if (isNowCompleted) {
+    finalStatus = 'completed';
+  } else if (currentProgress > 0) {
+    finalStatus = 'in_progress';
+  } else {
+    finalStatus = (logData.status === 'missed' || logData.status === 'skipped') ? logData.status : 'not_started' as any;
+  }
+
   // Update local logs immediately
   const localLogs = readLocalLogs();
   const existingIdx = localLogs.findIndex(
@@ -470,8 +529,18 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
 
   const previousStatus = existingIdx !== -1 ? localLogs[existingIdx].status : null;
 
+  const completedAt = isNowCompleted
+    ? (logData.completedAt || (existingIdx !== -1 ? localLogs[existingIdx].completedAt : undefined) || new Date().toISOString())
+    : undefined;
+
   const updatedLog: HabitLog = {
     ...logData,
+    targetValue: targetVal,
+    minimumTarget: minimumVal,
+    targetUnit: targetUnit,
+    status: finalStatus,
+    progressValue: currentProgress,
+    completedAt: completedAt,
     id: existingIdx !== -1 ? localLogs[existingIdx].id : 'log_' + Date.now(),
     updatedAt: new Date().toISOString(),
   };
@@ -484,7 +553,6 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
   saveLocalLogs(localLogs);
 
   const wasCompleted = previousStatus === 'completed';
-  const isNowCompleted = logData.status === 'completed';
 
   if (!skipSync && wasCompleted !== isNowCompleted) {
     try {
@@ -492,10 +560,10 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
       const localGoals = readLocalGoals();
       const linkedGoal = localGoals.find(g => g.linkedHabitId === logData.habitId);
       if (linkedGoal && linkedGoal.type === 'daily') {
-        const targetValue = typeof logData.progressValue === 'number'
+        const goalProgressVal = typeof logData.progressValue === 'number'
           ? logData.progressValue
           : (isNowCompleted ? (linkedGoal.dailyTarget || linkedGoal.target || 1) : 0);
-        await logDailyGoalProgress(linkedGoal.id, targetValue, 'set', logData.userId, logData.date);
+        await logDailyGoalProgress(linkedGoal.id, goalProgressVal, 'set', logData.userId, logData.date);
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('streak_goals_updated'));
         }
@@ -505,13 +573,9 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
     }
   }
 
-  if (logData.status === 'completed') {
-    const habits = readLocalHabits();
-    const habit = habits.find((h) => h.id === logData.habitId);
+  if (isNowCompleted) {
     trackHabitCompleted(habit?.category);
   } else if (existingIdx !== -1 && localLogs[existingIdx].status === 'completed') {
-    const habits = readLocalHabits();
-    const habit = habits.find((h) => h.id === logData.habitId);
     trackHabitUncompleted(habit?.category);
   }
 
@@ -525,20 +589,33 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
       );
       const snapshot = await getDocs(q);
       
+      const payload: any = {
+        userId: logData.userId,
+        habitId: logData.habitId,
+        date: logData.date,
+        status: finalStatus,
+        progressValue: currentProgress,
+        targetValue: targetVal,
+        minimumTarget: minimumVal,
+        targetUnit: targetUnit,
+        updatedAt: serverTimestamp(),
+      };
+      if (completedAt) {
+        payload.completedAt = completedAt;
+      }
+      if (logData.note) {
+        payload.note = logData.note;
+      }
+
       if (!snapshot.empty) {
         const existingDoc = snapshot.docs[0];
-        await updateDoc(doc(db, 'habit_logs', existingDoc.id), {
-          status: logData.status,
-          progressValue: logData.progressValue,
-          updatedAt: serverTimestamp()
-        });
+        await updateDoc(doc(db, 'habit_logs', existingDoc.id), payload);
         return existingDoc.id;
       }
 
       const docRef = await addDoc(collection(db, 'habit_logs'), {
-        ...logData,
+        ...payload,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       });
       return docRef.id;
     } catch (error) {

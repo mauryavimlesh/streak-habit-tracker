@@ -55,6 +55,7 @@ service cloud.firestore {
         && (!('frequencyValue' in data) || (data.frequencyValue is list && data.frequencyValue.size() <= 31))
         && data.targetType is string && data.targetType.matches('^(binary|count|duration|quantity)$')
         && (!('targetValue' in data) || data.targetValue is number)
+        && (!('minimumTarget' in data) || data.minimumTarget is number)
         && (!('targetUnit' in data) || (data.targetUnit is string && data.targetUnit.size() <= 50))
         && (!('reminderTime' in data) || (data.reminderTime is string && data.reminderTime.size() <= 10))
         && (!('archived' in data) || data.archived is bool);
@@ -67,6 +68,10 @@ service cloud.firestore {
         && data.date is string && data.date.size() <= 10
         && data.status is string && data.status.matches('^(completed|partial|missed|skipped|in_progress|failed)$')
         && (!('progressValue' in data) || data.progressValue is number)
+        && (!('targetValue' in data) || data.targetValue is number)
+        && (!('minimumTarget' in data) || data.minimumTarget is number)
+        && (!('targetUnit' in data) || (data.targetUnit is string && data.targetUnit.size() <= 50))
+        && (!('completedAt' in data) || (data.completedAt is string && data.completedAt.size() <= 50) || data.completedAt is timestamp)
         && (!('note' in data) || (data.note is string && data.note.size() <= 1000))
         && (!('reflection' in data) || (data.reflection is string && data.reflection.size() <= 5000));
     }

@@ -16,7 +16,7 @@ export interface UnifiedActivityItem {
   time?: string; // e.g. "11:30 PM"
   durationMinutes?: number;
   completed: boolean;
-  status: 'completed' | 'in_progress' | 'missed' | 'pending' | 'skipped' | 'failed' | 'partial';
+  status: 'completed' | 'in_progress' | 'missed' | 'pending' | 'skipped' | 'failed' | 'partial' | 'not_started';
   category?: string;
   subject?: string;
   quantity?: number;

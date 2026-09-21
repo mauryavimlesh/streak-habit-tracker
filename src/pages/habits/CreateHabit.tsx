@@ -49,9 +49,11 @@ export default function CreateHabit() {
   const [selectedColor, setSelectedColor] = useState(HABIT_COLORS[0].id);
 
   const [frequencyType, setFrequencyType] = useState<HabitFrequency>('daily');
+  const [scheduleDays, setScheduleDays] = useState<string[]>(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
   const [targetType, setTargetType] = useState<TargetType>('binary');
   const [targetValue, setTargetValue] = useState(1);
   const [targetUnit, setTargetUnit] = useState('');
+  const [minimumTarget, setMinimumTarget] = useState<number | ''>('');
 
   // Multiple Alarms / Reminders state
   const [habitReminders, setHabitReminders] = useState<ReminderItem[]>([]);
@@ -73,7 +75,11 @@ export default function CreateHabit() {
           setTargetType(habit.targetType || 'binary');
           setTargetValue(habit.targetValue || 1);
           setTargetUnit(habit.targetUnit || '');
+          setMinimumTarget(habit.minimumTarget !== undefined ? habit.minimumTarget : (habit.targetValue || 1));
           setFrequencyType(habit.frequencyType || 'daily');
+          if (habit.frequencyValue && habit.frequencyValue.length > 0) {
+            setScheduleDays(habit.frequencyValue);
+          }
 
           // Load linked reminders
           const allReminders = readLocalReminders();
@@ -201,6 +207,10 @@ export default function CreateHabit() {
       const primaryReminder = habitReminders.find((r) => r.enabled) || habitReminders[0];
       const primaryReminderTime = primaryReminder ? primaryReminder.time : '';
 
+      const finalMinTarget = targetType === 'binary' ? 1 : (typeof minimumTarget === 'number' && minimumTarget > 0 ? minimumTarget : targetValue);
+      const finalTargetVal = targetType === 'binary' ? 1 : Math.max(1, targetValue);
+      const finalUnit = targetType === 'binary' ? 'times' : (targetUnit.trim() || 'times');
+
       if (editId) {
         await updateHabit(editId, {
           name: name.trim(),
@@ -209,10 +219,11 @@ export default function CreateHabit() {
           icon: selectedIcon,
           color: selectedColor,
           frequencyType,
-          frequencyValue: [],
+          frequencyValue: scheduleDays,
           targetType,
-          targetValue,
-          targetUnit,
+          targetValue: finalTargetVal,
+          targetUnit: finalUnit,
+          minimumTarget: finalMinTarget,
           reminderTime: primaryReminderTime,
         });
 
@@ -240,10 +251,11 @@ export default function CreateHabit() {
           icon: selectedIcon,
           color: selectedColor,
           frequencyType,
-          frequencyValue: [],
+          frequencyValue: scheduleDays,
           targetType,
-          targetValue,
-          targetUnit,
+          targetValue: finalTargetVal,
+          targetUnit: finalUnit,
+          minimumTarget: finalMinTarget,
           reminderTime: primaryReminderTime,
         });
 
@@ -457,22 +469,58 @@ export default function CreateHabit() {
             </div>
 
             {targetType === 'numeric' && (
-              <div className="flex gap-3 mt-3">
-                <input
-                  type="number"
-                  min="1"
-                  value={targetValue}
-                  onChange={(e) => setTargetValue(parseInt(e.target.value, 10) || 1)}
-                  placeholder="Target (e.g. 8)"
-                  className="w-1/2 bg-surface-card border border-[#1f232c] rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-accent-primary/50"
-                />
-                <input
-                  type="text"
-                  value={targetUnit}
-                  onChange={(e) => setTargetUnit(e.target.value)}
-                  placeholder="Unit (e.g. glasses)"
-                  className="w-1/2 bg-surface-card border border-[#1f232c] rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-accent-primary/50"
-                />
+              <div className="mt-3 space-y-3">
+                <div className="flex gap-3">
+                  <div className="w-1/2">
+                    <label className="block text-[11px] font-semibold text-[#7d8495] mb-1.5 ml-1">
+                      Target Value
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={targetValue}
+                      onChange={(e) => setTargetValue(parseInt(e.target.value, 10) || 1)}
+                      placeholder="Target (e.g. 30)"
+                      className="w-full bg-surface-card border border-[#1f232c] rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-accent-primary/50"
+                    />
+                  </div>
+                  <div className="w-1/2">
+                    <label className="block text-[11px] font-semibold text-[#7d8495] mb-1.5 ml-1">
+                      Unit
+                    </label>
+                    <input
+                      type="text"
+                      value={targetUnit}
+                      onChange={(e) => setTargetUnit(e.target.value)}
+                      placeholder="e.g. min, hours, glasses"
+                      className="w-full bg-surface-card border border-[#1f232c] rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-accent-primary/50"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5 ml-1">
+                    <label className="text-[11px] font-semibold text-[#7d8495]">
+                      Minimum Required Target
+                    </label>
+                    <span className="text-[10px] text-accent-primary">Streak Requirement</span>
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    max={targetValue}
+                    value={minimumTarget}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? '' : parseInt(e.target.value, 10);
+                      setMinimumTarget(val);
+                    }}
+                    placeholder={`Defaults to full target (${targetValue} ${targetUnit || 'units'})`}
+                    className="w-full bg-surface-card border border-[#1f232c] rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-accent-primary/50"
+                  />
+                  <p className="text-[11px] text-[#7d8495] mt-1.5 ml-1 leading-relaxed">
+                    A day counts toward your streak ONLY when this minimum requirement is met (e.g. at least 20 min of a 30 min workout).
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -481,7 +529,7 @@ export default function CreateHabit() {
             <label className="block text-xs font-semibold text-[#7d8495] uppercase tracking-wider mb-2 ml-1">
               Repeat Frequency
             </label>
-            <div className="flex rounded-2xl bg-surface-card border border-[#1f232c] p-1">
+            <div className="flex rounded-2xl bg-surface-card border border-[#1f232c] p-1 mb-2">
               {[
                 { id: 'daily', label: 'Daily' },
                 { id: 'weekly', label: 'Weekly' },
@@ -504,6 +552,38 @@ export default function CreateHabit() {
                 </button>
               ))}
             </div>
+
+            {frequencyType === 'weekly' && (
+              <div className="mt-2.5">
+                <label className="block text-[11px] font-semibold text-[#7d8495] mb-2 ml-1">
+                  Active Schedule Days
+                </label>
+                <div className="flex gap-1.5">
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => {
+                    const isSelected = scheduleDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          triggerHaptic('tap');
+                          setScheduleDays((prev) =>
+                            isSelected ? prev.filter((d) => d !== day) : [...prev, day]
+                          );
+                        }}
+                        className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#182415] border-accent-primary/60 text-accent-primary'
+                            : 'bg-surface-card border-[#1f232c] text-[#7d8495] hover:text-white'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
