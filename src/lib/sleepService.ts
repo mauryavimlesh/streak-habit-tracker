@@ -13,7 +13,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { readLocalHabits, saveLocalHabits, Habit, HabitLog, logHabit, updateHabit, readLocalLogs, saveLocalLogs } from './habitService';
-import { readLocalReminders, saveLocalReminders, ReminderItem } from './reminderService';
+import { readLocalReminders, saveLocalReminders, ReminderItem, createReminder, updateReminder } from './reminderService';
 import { isCloudSyncableUser } from './authUtils';
 
 export interface SleepSettings {
@@ -349,69 +349,75 @@ export async function syncSleepReminders(settings: SleepSettings, userId?: strin
   const formattedBedtime = format24To12(settings.bedtimeReminderTime || settings.bedtime);
   const formattedWakeTime = format24To12(settings.wakeReminderTime || settings.wakeTime);
 
-  let bedtimeRem = reminders.find(
+  const bedtimeRem = reminders.find(
     (r) =>
       r.title.toLowerCase().includes('wind down') ||
       r.title.toLowerCase().includes('bedtime') ||
       r.linkedEntityName?.toLowerCase().includes('sleep')
   );
 
-  let wakeRem = reminders.find(
+  const wakeRem = reminders.find(
     (r) =>
       r.title.toLowerCase().includes('wake up') ||
       r.title.toLowerCase().includes('morning alarm') ||
       r.title.toLowerCase().includes('rise and shine')
   );
 
-  const updatedList = [...reminders];
-
   if (bedtimeRem) {
-    bedtimeRem.time = formattedBedtime;
-    bedtimeRem.enabled = settings.bedtimeReminderEnabled;
-    bedtimeRem.days = settings.repeatDays;
-    bedtimeRem.repeat = settings.repeatDays.length === 7 ? 'daily' : 'custom';
+    await updateReminder(
+      bedtimeRem.id,
+      {
+        time: formattedBedtime,
+        enabled: settings.bedtimeReminderEnabled,
+        days: settings.repeatDays,
+        repeat: settings.repeatDays.length === 7 ? 'daily' : 'custom',
+      },
+      userId
+    );
   } else if (settings.bedtimeReminderEnabled) {
-    const newBedRem: ReminderItem = {
-      id: 'rem-sleep-bedtime-' + Date.now(),
-      userId,
-      title: 'Wind Down & Sleep Prep',
-      description: 'Prepare for restful recovery',
-      time: formattedBedtime,
-      repeat: 'daily',
-      days: settings.repeatDays,
-      enabled: settings.bedtimeReminderEnabled,
-      notificationEnabled: true,
-      category: 'night',
-      linkedEntityName: 'Sleep',
-      createdAt: new Date().toISOString(),
-    };
-    updatedList.push(newBedRem);
+    await createReminder(
+      {
+        title: 'Wind Down & Sleep Prep',
+        description: 'Prepare for restful recovery',
+        time: formattedBedtime,
+        repeat: 'daily',
+        days: settings.repeatDays,
+        enabled: settings.bedtimeReminderEnabled,
+        notificationEnabled: true,
+        category: 'night',
+        linkedEntityName: 'Sleep',
+      },
+      userId
+    );
   }
 
   if (wakeRem) {
-    wakeRem.time = formattedWakeTime;
-    wakeRem.enabled = settings.wakeReminderEnabled;
-    wakeRem.days = settings.repeatDays;
-    wakeRem.repeat = settings.repeatDays.length === 7 ? 'daily' : 'custom';
+    await updateReminder(
+      wakeRem.id,
+      {
+        time: formattedWakeTime,
+        enabled: settings.wakeReminderEnabled,
+        days: settings.repeatDays,
+        repeat: settings.repeatDays.length === 7 ? 'daily' : 'custom',
+      },
+      userId
+    );
   } else if (settings.wakeReminderEnabled) {
-    const newWakeRem: ReminderItem = {
-      id: 'rem-sleep-wake-' + Date.now(),
-      userId,
-      title: 'Wake Up & Morning Momentum',
-      description: 'Rise and begin your peak daily focus',
-      time: formattedWakeTime,
-      repeat: 'daily',
-      days: settings.repeatDays,
-      enabled: settings.wakeReminderEnabled,
-      notificationEnabled: true,
-      category: 'morning',
-      linkedEntityName: 'Sleep',
-      createdAt: new Date().toISOString(),
-    };
-    updatedList.push(newWakeRem);
+    await createReminder(
+      {
+        title: 'Wake Up & Morning Momentum',
+        description: 'Rise and begin your peak daily focus',
+        time: formattedWakeTime,
+        repeat: 'daily',
+        days: settings.repeatDays,
+        enabled: settings.wakeReminderEnabled,
+        notificationEnabled: true,
+        category: 'morning',
+        linkedEntityName: 'Sleep',
+      },
+      userId
+    );
   }
-
-  saveLocalReminders(updatedList);
 }
 
 // --- Sleep Records Persistence & CRUD ---

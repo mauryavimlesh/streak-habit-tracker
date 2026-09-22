@@ -117,21 +117,26 @@ export function calculateSmartSnooze(
 export function formatTimeDisplay(timeStr: string): string {
   if (!timeStr) return '08:00 AM';
   const clean = timeStr.trim();
-  if (/am|pm/i.test(clean)) {
-    return clean.toUpperCase();
+  const match = clean.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+  if (!match) return clean;
+
+  let hour = parseInt(match[1], 10);
+  const minute = match[2];
+  const ampmRaw = match[3] ? match[3].toUpperCase() : null;
+
+  let ampm: 'AM' | 'PM' = 'AM';
+  if (ampmRaw) {
+    ampm = ampmRaw as 'AM' | 'PM';
+    if (ampm === 'PM' && hour < 12) hour += 12;
+    if (ampm === 'AM' && hour === 12) hour = 0;
+  } else {
+    ampm = hour >= 12 ? 'PM' : 'AM';
   }
-  const parts = clean.split(':');
-  if (parts.length >= 2) {
-    let hour = parseInt(parts[0], 10);
-    const minute = parts[1].slice(0, 2);
-    if (isNaN(hour)) return clean;
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    hour = hour % 12;
-    if (hour === 0) hour = 12;
-    const padHour = hour < 10 ? `0${hour}` : `${hour}`;
-    return `${padHour}:${minute} ${ampm}`;
-  }
-  return clean;
+
+  let h12 = hour % 12;
+  if (h12 === 0) h12 = 12;
+  const padHour = h12 < 10 ? `0${h12}` : `${h12}`;
+  return `${padHour}:${minute} ${ampm}`;
 }
 
 /**
@@ -292,17 +297,13 @@ const REMINDERS_INITIALIZED_KEY = 'streak_reminders_initialized';
 
 export function deduplicateReminders(reminders: ReminderItem[]): ReminderItem[] {
   const seenIds = new Set<string>();
-  const seenKeys = new Set<string>();
   const result: ReminderItem[] = [];
 
   for (const r of reminders) {
-    if (!r || !r.title) continue;
-    const key = `${(r.title || '').trim().toLowerCase()}_${r.time}`;
-    if (r.id && seenIds.has(r.id)) continue;
-    if (seenKeys.has(key)) continue;
-
-    if (r.id) seenIds.add(r.id);
-    seenKeys.add(key);
+    if (!r) continue;
+    const stableId = r.id || `${(r.title || '').trim().toLowerCase()}_${r.time}`;
+    if (seenIds.has(stableId)) continue;
+    seenIds.add(stableId);
     result.push(r);
   }
 
@@ -435,6 +436,108 @@ export function saveLocalReminders(reminders: ReminderItem[]): void {
   }
 }
 
+export function sanitizeReminderForFirestore(
+  reminder: Partial<ReminderItem>,
+  userId: string,
+  isCreate: boolean = false
+): Record<string, any> {
+  const payload: Record<string, any> = {
+    userId,
+    updatedAt: serverTimestamp(),
+  };
+
+  if (isCreate) {
+    payload.createdAt = serverTimestamp();
+    payload.title = (reminder.title || 'Reminder').trim();
+    payload.time = formatTimeDisplay(reminder.time || '08:00 AM');
+    payload.repeat = reminder.repeat || 'daily';
+    payload.enabled = reminder.enabled ?? true;
+    payload.notificationEnabled = reminder.notificationEnabled ?? true;
+    payload.category = reminder.category || 'general';
+  } else {
+    if (reminder.title !== undefined) payload.title = String(reminder.title).trim();
+    if (reminder.time !== undefined) payload.time = formatTimeDisplay(reminder.time);
+    if (reminder.repeat !== undefined) payload.repeat = String(reminder.repeat);
+    if (reminder.enabled !== undefined) payload.enabled = Boolean(reminder.enabled);
+    if (reminder.notificationEnabled !== undefined) payload.notificationEnabled = Boolean(reminder.notificationEnabled);
+    if (reminder.category !== undefined) payload.category = String(reminder.category);
+  }
+
+  if (reminder.description !== undefined) {
+    const desc = String(reminder.description).trim();
+    if (desc) payload.description = desc;
+  }
+
+  if (reminder.date !== undefined && reminder.date) {
+    payload.date = String(reminder.date).trim();
+  }
+
+  if (Array.isArray(reminder.days) && reminder.days.length > 0) {
+    payload.days = reminder.days;
+  }
+
+  if (reminder.linkedHabitId) {
+    payload.linkedHabitId = String(reminder.linkedHabitId);
+  }
+
+  if (reminder.linkedEntityName) {
+    payload.linkedEntityName = String(reminder.linkedEntityName);
+  }
+
+  if (reminder.soundTone) {
+    payload.soundTone = String(reminder.soundTone);
+  }
+
+  if (reminder.customAudioId) {
+    payload.customAudioId = String(reminder.customAudioId);
+  }
+
+  if (reminder.customAudioName) {
+    payload.customAudioName = String(reminder.customAudioName);
+  }
+
+  if (typeof reminder.volume === 'number' && !isNaN(reminder.volume)) {
+    payload.volume = Number(reminder.volume.toFixed(2));
+  }
+
+  if (typeof reminder.vibrate === 'boolean') {
+    payload.vibrate = reminder.vibrate;
+  }
+
+  if (reminder.vibrationPattern) {
+    payload.vibrationPattern = String(reminder.vibrationPattern);
+  }
+
+  if (typeof reminder.snoozeEnabled === 'boolean') {
+    payload.snoozeEnabled = reminder.snoozeEnabled;
+  }
+
+  if (typeof reminder.snoozeMinutes === 'number' && !isNaN(reminder.snoozeMinutes)) {
+    payload.snoozeMinutes = reminder.snoozeMinutes;
+  }
+
+  if (reminder.snoozeUntil) {
+    payload.snoozeUntil = String(reminder.snoozeUntil);
+  }
+
+  if (typeof reminder.snoozeCount === 'number' && !isNaN(reminder.snoozeCount)) {
+    payload.snoozeCount = reminder.snoozeCount;
+  }
+
+  if (reminder.lastTriggeredAt) {
+    payload.lastTriggeredAt = String(reminder.lastTriggeredAt);
+  }
+
+  return payload;
+}
+
+export function generateStableReminderId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `rem_${crypto.randomUUID()}`;
+  }
+  return `rem_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
 export async function getUserReminders(userId: string): Promise<ReminderItem[]> {
   const local = readLocalReminders();
   if (!isCloudSyncableUser(userId)) {
@@ -444,49 +547,28 @@ export async function getUserReminders(userId: string): Promise<ReminderItem[]> 
   try {
     const q = query(
       collection(db, 'reminders'),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      where('userId', '==', userId)
     );
     const snapshot = await getDocs(q);
     const rawFirestoreReminders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ReminderItem));
 
-    // Deduplicate in Firestore
-    const seenKeys = new Map<string, string>();
-    const duplicateDocIdsToDelete: string[] = [];
-    const firestoreReminders: ReminderItem[] = [];
+    rawFirestoreReminders.sort((a, b) => {
+      const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return tB - tA;
+    });
 
-    for (const r of rawFirestoreReminders) {
-      const key = `${(r.title || '').trim().toLowerCase()}_${r.time}`;
-      if (seenKeys.has(key)) {
-        if (r.id) duplicateDocIdsToDelete.push(r.id);
-      } else {
-        if (r.id) seenKeys.set(key, r.id);
-        firestoreReminders.push(r);
-      }
-    }
-
-    if (duplicateDocIdsToDelete.length > 0) {
-      duplicateDocIdsToDelete.forEach(async (id) => {
-        try {
-          await deleteDoc(doc(db, 'reminders', id));
-        } catch {
-          // ignore
-        }
-      });
-    }
-
-    if (firestoreReminders.length > 0) {
-      const clean = deduplicateReminders(firestoreReminders);
+    if (rawFirestoreReminders.length > 0) {
+      const clean = deduplicateReminders(rawFirestoreReminders);
       saveLocalReminders(clean);
       localStorage.setItem(REMINDERS_INITIALIZED_KEY, 'true');
       return clean;
     } else {
-      const isInit = localStorage.getItem(REMINDERS_INITIALIZED_KEY);
-      if (isInit) {
-        saveLocalReminders([]);
-        return [];
+      if (local.length > 0) {
+        await syncLocalRemindersToCloud(userId);
+        return deduplicateReminders(local);
       }
-      return deduplicateReminders(local);
+      return [];
     }
   } catch (err) {
     console.error('Error fetching reminders from Firestore:', err);
@@ -500,52 +582,51 @@ export async function toggleReminder(id: string, userId?: string): Promise<Remin
   if (!reminder) return list;
   
   const newState = !reminder.enabled;
-  const updated = list.map((r) => (r.id === id ? { ...r, enabled: newState } : r));
-  saveLocalReminders(updated);
-  
-  if (isCloudSyncableUser(userId) && !id.startsWith('temp_rem_')) {
-    try {
-      const ref = doc(db, 'reminders', id);
-      await updateDoc(ref, { enabled: newState });
-    } catch (err) {
-      console.error('Failed to sync reminder toggle:', err);
-    }
-  }
-  
-  return updated;
+  return updateReminder(id, { enabled: newState }, userId);
 }
 
 export async function createReminder(
   item: Omit<ReminderItem, 'id' | 'createdAt'>,
   userId?: string
 ): Promise<ReminderItem> {
-  const list = readLocalReminders();
-  let newId = 'temp_rem_' + Date.now();
-  let serverTime = new Date().toISOString();
+  const isCloud = isCloudSyncableUser(userId);
+  const docRef = isCloud ? doc(collection(db, 'reminders')) : null;
+  const stableId = docRef ? docRef.id : generateStableReminderId();
+  const nowIso = new Date().toISOString();
 
-  if (isCloudSyncableUser(userId)) {
-    try {
-      const docRef = await addDoc(collection(db, 'reminders'), {
-        ...item,
-        userId,
-        createdAt: serverTimestamp()
-      });
-      newId = docRef.id;
-    } catch (err) {
-      console.error('Failed to sync reminder creation:', err);
-      handleFirestoreError(err, OperationType.CREATE, 'reminders');
-    }
-  }
+  const formattedTime = formatTimeDisplay(item.time);
 
   const newReminder: ReminderItem = {
     ...item,
-    id: newId,
-    userId,
-    createdAt: serverTime,
+    time: formattedTime,
+    id: stableId,
+    userId: userId || 'local',
+    createdAt: nowIso,
   };
-  
-  list.unshift(newReminder);
+
+  // Directly persist to source of truth (Firestore) first if signed in
+  if (isCloud && docRef && userId) {
+    try {
+      const firestorePayload = sanitizeReminderForFirestore(newReminder, userId, true);
+      await setDoc(docRef, firestorePayload);
+    } catch (err) {
+      console.error('Failed to sync reminder creation to database:', err);
+      handleFirestoreError(err, OperationType.CREATE, 'reminders');
+      throw err;
+    }
+  }
+
+  // Only commit to local persistent mirror after source of truth confirmed
+  const list = readLocalReminders();
+  const existingIndex = list.findIndex(r => r.id === stableId);
+  if (existingIndex !== -1) {
+    list[existingIndex] = newReminder;
+  } else {
+    list.unshift(newReminder);
+  }
   saveLocalReminders(list);
+  localStorage.setItem(REMINDERS_INITIALIZED_KEY, 'true');
+
   trackReminderCreated(item.category, item.repeat);
   return newReminder;
 }
@@ -556,34 +637,79 @@ export async function updateReminder(
   userId?: string
 ): Promise<ReminderItem[]> {
   const list = readLocalReminders();
-  const updated = list.map((r) => (r.id === id ? { ...r, ...updates } : r));
-  saveLocalReminders(updated);
-  
-  if (isCloudSyncableUser(userId) && !id.startsWith('temp_rem_')) {
+  const index = list.findIndex((r) => r.id === id);
+
+  const formattedUpdates = { ...updates };
+  if (updates.time) {
+    formattedUpdates.time = formatTimeDisplay(updates.time);
+  }
+
+  let updatedItem: ReminderItem;
+  if (index !== -1) {
+    updatedItem = {
+      ...list[index],
+      ...formattedUpdates,
+      id,
+    };
+  } else {
+    updatedItem = {
+      id,
+      userId: userId || 'local',
+      title: formattedUpdates.title || 'Reminder',
+      time: formattedUpdates.time || '08:00 AM',
+      repeat: formattedUpdates.repeat || 'daily',
+      days: formattedUpdates.days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      enabled: formattedUpdates.enabled ?? true,
+      notificationEnabled: formattedUpdates.notificationEnabled ?? true,
+      category: formattedUpdates.category || 'general',
+      createdAt: new Date().toISOString(),
+      ...formattedUpdates,
+    };
+  }
+
+  // Directly update source of truth (Firestore) first if signed in
+  if (isCloudSyncableUser(userId)) {
     try {
-      const ref = doc(db, 'reminders', id);
-      await updateDoc(ref, updates);
+      const targetDocRef = doc(db, 'reminders', id);
+      const firestorePayload = sanitizeReminderForFirestore(updatedItem, userId, false);
+      await setDoc(targetDocRef, firestorePayload, { merge: true });
     } catch (err) {
-      console.error('Failed to sync reminder update:', err);
+      console.error('Failed to sync reminder update to database:', err);
       handleFirestoreError(err, OperationType.UPDATE, `reminders/${id}`);
+      throw err;
     }
   }
-  return updated;
+
+  // Commit update to local state after confirmed by source of truth
+  if (index !== -1) {
+    list[index] = updatedItem;
+  } else {
+    list.unshift(updatedItem);
+  }
+  saveLocalReminders(list);
+  localStorage.setItem(REMINDERS_INITIALIZED_KEY, 'true');
+
+  return list;
 }
 
 export async function deleteReminder(id: string, userId?: string): Promise<ReminderItem[]> {
-  const list = readLocalReminders();
-  const updated = list.filter((r) => r.id !== id);
-  saveLocalReminders(updated);
-  
+  // Directly delete from source of truth (Firestore) first if signed in
   if (isCloudSyncableUser(userId)) {
     try {
       await deleteDoc(doc(db, 'reminders', id));
     } catch (err) {
-      console.error('Failed to sync reminder deletion:', err);
+      console.error('Failed to sync reminder deletion to database:', err);
       handleFirestoreError(err, OperationType.DELETE, `reminders/${id}`);
+      throw err;
     }
   }
+
+  // Remove from local persistent mirror only after confirmation
+  const list = readLocalReminders();
+  const updated = list.filter((r) => r.id !== id);
+  saveLocalReminders(updated);
+  localStorage.setItem(REMINDERS_INITIALIZED_KEY, 'true');
+
   return updated;
 }
 
@@ -660,8 +786,7 @@ export function subscribeToReminders(
 
   const q = query(
     collection(db, 'reminders'),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
+    where('userId', '==', userId)
   );
 
   return onSnapshot(
@@ -672,9 +797,16 @@ export function subscribeToReminders(
         ...d.data(),
       })) as ReminderItem[];
 
+      reminders.sort((a, b) => {
+        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tB - tA;
+      });
+
       if (reminders.length > 0) {
-        saveLocalReminders(reminders);
-        callback(reminders);
+        const clean = deduplicateReminders(reminders);
+        saveLocalReminders(clean);
+        callback(clean);
       } else {
         callback(readLocalReminders());
       }
@@ -690,46 +822,16 @@ export async function syncLocalRemindersToCloud(userId: string) {
   if (!isCloudSyncableUser(userId)) return;
   const localReminders = readLocalReminders();
   for (const reminder of localReminders) {
-    if (!reminder.userId || reminder.userId === 'local' || reminder.userId !== userId) {
-      reminder.userId = userId;
-      const targetDocId = reminder.id || 'rem_' + Date.now();
-      const targetDocRef = doc(db, 'reminders', targetDocId);
-      try {
-        const snap = await getDoc(targetDocRef);
-        const reminderPayload: Record<string, any> = {
-          userId,
-          title: reminder.title,
-          time: reminder.time,
-          repeat: reminder.repeat,
-          enabled: Boolean(reminder.enabled),
-          notificationEnabled: Boolean(reminder.notificationEnabled),
-          category: reminder.category || 'General',
-          updatedAt: serverTimestamp(),
-        };
-        if (reminder.description) reminderPayload.description = reminder.description;
-        if (reminder.date) reminderPayload.date = reminder.date;
-        if (Array.isArray(reminder.days)) reminderPayload.days = reminder.days;
-        if (reminder.linkedHabitId) reminderPayload.linkedHabitId = reminder.linkedHabitId;
-        if (reminder.linkedEntityName) reminderPayload.linkedEntityName = reminder.linkedEntityName;
-        if (reminder.lastTriggeredAt) reminderPayload.lastTriggeredAt = reminder.lastTriggeredAt;
-        if (reminder.soundTone) reminderPayload.soundTone = reminder.soundTone;
-        if (reminder.customAudioId) reminderPayload.customAudioId = reminder.customAudioId;
-        if (reminder.customAudioName) reminderPayload.customAudioName = reminder.customAudioName;
-        if (typeof reminder.volume === 'number') reminderPayload.volume = reminder.volume;
-        if (typeof reminder.vibrate === 'boolean') reminderPayload.vibrate = reminder.vibrate;
-        if (typeof reminder.snoozeEnabled === 'boolean') reminderPayload.snoozeEnabled = reminder.snoozeEnabled;
-        if (typeof reminder.snoozeMinutes === 'number') reminderPayload.snoozeMinutes = reminder.snoozeMinutes;
-        if (reminder.snoozeUntil) reminderPayload.snoozeUntil = reminder.snoozeUntil;
-
-        if (!snap.exists()) {
-          reminderPayload.createdAt = serverTimestamp();
-          await setDoc(targetDocRef, reminderPayload);
-        } else {
-          await updateDoc(targetDocRef, reminderPayload);
-        }
-      } catch (e) {
-        handleFirestoreError(e, OperationType.WRITE, `reminders/${targetDocId}`);
-      }
+    const targetDocId = reminder.id || generateStableReminderId();
+    reminder.id = targetDocId;
+    reminder.userId = userId;
+    const targetDocRef = doc(db, 'reminders', targetDocId);
+    try {
+      const firestorePayload = sanitizeReminderForFirestore(reminder, userId, true);
+      await setDoc(targetDocRef, firestorePayload, { merge: true });
+    } catch (e) {
+      console.warn('syncLocalRemindersToCloud item warning:', targetDocId, e);
     }
   }
+  saveLocalReminders(localReminders);
 }

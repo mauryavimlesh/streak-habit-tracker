@@ -26,6 +26,14 @@ export interface DetailedStreakStats {
   missedDays: number;
   completionRate: number; // 0 - 100
   lastCompletedDate?: string;
+  isTodayFrozen?: boolean;
+  freezeState?: {
+    available: number;
+    total: number;
+    consumed: string[];
+    planned: string[];
+    isFrozenToday: boolean;
+  };
 }
 
 /**
@@ -336,13 +344,32 @@ export function calculateHabitStreakStats(
 export function calculateGlobalHabitStreak(
   habits: Habit[],
   logs: HabitLog[],
-  targetDateStr?: string
+  targetDateStr?: string,
+  freezeConfig?: {
+    totalAvailable: number;
+    usedFreezes?: string[];
+    plannedDates?: string[];
+    autoConsume?: boolean;
+  }
 ): DetailedStreakStats {
   const todayStr = targetDateStr || getTodayDateKey();
   const habitMap = new Map<string, Habit>();
   habits.forEach((h) => {
     if (h.id) habitMap.set(h.id, h);
   });
+
+  // Freeze protected dates setup
+  const protectedFreezeDates = new Set<string>();
+  (freezeConfig?.usedFreezes || []).forEach((d) => protectedFreezeDates.add(d));
+  (freezeConfig?.plannedDates || []).forEach((d) => protectedFreezeDates.add(d));
+
+  let availableFreezes = Math.max(
+    0,
+    (freezeConfig?.totalAvailable ?? 0) -
+      (freezeConfig?.usedFreezes?.length ?? 0) -
+      (freezeConfig?.plannedDates?.length ?? 0)
+  );
+  const newlyConsumedFreezes = new Set<string>();
 
   // Collect all unique calendar dates where at least one habit requirement was completed
   const completedDates = new Set<string>();
@@ -384,30 +411,58 @@ export function calculateGlobalHabitStreak(
     }
   });
 
+  const sortedDates = Array.from(completedDates).sort((a, b) => b.localeCompare(a));
+  const oldestCompletedDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : undefined;
+
+  const isProtectedOrConsumed = (d: string, allowAuto: boolean = true) => {
+    if (protectedFreezeDates.has(d)) return true;
+    if (!allowAuto || !freezeConfig || freezeConfig.autoConsume === false) return false;
+    if (oldestCompletedDate && d < oldestCompletedDate) return false;
+    if (availableFreezes > 0) {
+      availableFreezes--;
+      protectedFreezeDates.add(d);
+      newlyConsumedFreezes.add(d);
+      return true;
+    }
+    return false;
+  };
+
   // Calculate Current Streak
   const hasToday = completedDates.has(todayStr);
   const yesterdayStr = addDays(todayStr, -1);
   const hasYesterday = completedDates.has(yesterdayStr);
+  const hasYesterdayFrozen = isProtectedOrConsumed(yesterdayStr);
 
   let currentStreak = 0;
-  if (hasToday || hasYesterday) {
+  if (hasToday || hasYesterday || hasYesterdayFrozen) {
     let cursor = hasToday ? todayStr : yesterdayStr;
-    while (completedDates.has(cursor)) {
-      currentStreak++;
+    while (Math.abs(diffDays(cursor, todayStr)) <= 365) {
+      if (completedDates.has(cursor)) {
+        currentStreak++;
+      } else if (isProtectedOrConsumed(cursor)) {
+        // Freeze day preserves continuity without incrementing
+      } else {
+        break;
+      }
       cursor = addDays(cursor, -1);
     }
   }
 
   // Calculate Longest / Best Streak
-  const sortedDates = Array.from(completedDates).sort((a, b) => b.localeCompare(a));
   let bestStreak = 0;
-
   for (let i = 0; i < sortedDates.length; i++) {
     let tempStreak = 1;
     let curr = sortedDates[i];
-    while (completedDates.has(addDays(curr, -1))) {
-      tempStreak++;
-      curr = addDays(curr, -1);
+    while (Math.abs(diffDays(curr, sortedDates[0])) <= 365) {
+      const prev = addDays(curr, -1);
+      if (completedDates.has(prev)) {
+        tempStreak++;
+        curr = prev;
+      } else if (isProtectedOrConsumed(prev, false)) {
+        curr = prev;
+      } else {
+        break;
+      }
     }
     if (tempStreak > bestStreak) {
       bestStreak = tempStreak;
@@ -431,6 +486,10 @@ export function calculateGlobalHabitStreak(
     completionRate = Math.min(100, Math.round((totalSuccessfulDays / totalDaysTracked) * 100));
   }
 
+  const allConsumed = Array.from(new Set([...(freezeConfig?.usedFreezes || []), ...Array.from(newlyConsumedFreezes)]));
+  const remainingPlanned = (freezeConfig?.plannedDates || []).filter((d) => !allConsumed.includes(d));
+  const isTodayFrozen = protectedFreezeDates.has(todayStr);
+
   return {
     currentStreak,
     bestStreak,
@@ -439,5 +498,15 @@ export function calculateGlobalHabitStreak(
     missedDays,
     completionRate,
     lastCompletedDate: sortedDates[0],
+    isTodayFrozen,
+    freezeState: freezeConfig
+      ? {
+          available: availableFreezes,
+          total: freezeConfig.totalAvailable,
+          consumed: allConsumed,
+          planned: remainingPlanned,
+          isFrozenToday: isTodayFrozen,
+        }
+      : undefined,
   };
 }

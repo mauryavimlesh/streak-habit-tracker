@@ -84,7 +84,6 @@ export default function Reminders() {
 
   useEffect(() => {
     async function loadData() {
-      reconcileAlarmsState();
       setReminders(readLocalReminders());
       setHabits(readLocalHabits());
       if (user) {
@@ -95,6 +94,7 @@ export default function Reminders() {
         setReminders(fetchedReminders);
         setHabits(fetchedHabits);
       }
+      reconcileAlarmsState();
     }
     loadData();
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -115,14 +115,30 @@ export default function Reminders() {
 
   const handleToggle = async (id: string) => {
     triggerHaptic('tap');
-    const updated = await toggleReminder(id, user?.uid);
-    setReminders(updated);
+    try {
+      const updated = await toggleReminder(id, user?.uid);
+      setReminders(updated);
+    } catch (err: any) {
+      console.error('Failed to toggle reminder:', err);
+      setReminders(readLocalReminders());
+      setToastMessage('Failed to update alarm status.');
+      setTimeout(() => setToastMessage(null), 3000);
+    }
   };
 
   const handleDelete = async (id: string) => {
     triggerHaptic('light');
-    const updated = await deleteReminder(id, user?.uid);
-    setReminders(updated);
+    try {
+      const updated = await deleteReminder(id, user?.uid);
+      setReminders(updated);
+      setToastMessage('Alarm removed.');
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (err: any) {
+      console.error('Failed to delete reminder:', err);
+      setReminders(readLocalReminders());
+      setToastMessage('Failed to delete alarm.');
+      setTimeout(() => setToastMessage(null), 3000);
+    }
   };
 
   const handleOpenCreate = () => {
@@ -141,16 +157,22 @@ export default function Reminders() {
     payload: Omit<ReminderItem, 'id' | 'createdAt'>,
     existingId?: string
   ) => {
-    if (existingId) {
-      const updated = await updateReminder(existingId, payload, user?.uid);
-      setReminders(updated);
-      setToastMessage('Alarm updated successfully.');
-    } else {
-      await createReminder(payload, user?.uid);
-      setReminders(readLocalReminders());
-      setToastMessage('New alarm scheduled.');
+    try {
+      if (existingId) {
+        const updated = await updateReminder(existingId, payload, user?.uid);
+        setReminders(updated);
+        setToastMessage('Alarm updated successfully.');
+      } else {
+        await createReminder(payload, user?.uid);
+        const refreshed = readLocalReminders();
+        setReminders(refreshed);
+        setToastMessage('New alarm scheduled.');
+      }
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (err: any) {
+      console.error('Failed to save reminder in Reminders page:', err);
+      throw err;
     }
-    setTimeout(() => setToastMessage(null), 3000);
   };
 
   const handleTestAlarm = (reminder: ReminderItem) => {

@@ -225,15 +225,23 @@
         "notificationEnabled": { "type": "boolean" },
         "category": { "type": "string" },
         "description": { "type": "string" },
+        "days": { "type": "array", "items": { "type": "string" } },
+        "date": { "type": "string" },
+        "linkedHabitId": { "type": "string" },
+        "linkedEntityName": { "type": "string" },
         "soundTone": { "type": "string" },
         "customAudioId": { "type": "string" },
         "customAudioName": { "type": "string" },
         "volume": { "type": "number" },
         "vibrate": { "type": "boolean" },
+        "vibrationPattern": { "type": "string" },
         "snoozeEnabled": { "type": "boolean" },
         "snoozeMinutes": { "type": "number" },
         "snoozeUntil": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "snoozeCount": { "type": "number" },
+        "lastTriggeredAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "title", "time", "repeat", "enabled", "notificationEnabled", "category"]
     }

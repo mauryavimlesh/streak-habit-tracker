@@ -485,6 +485,19 @@ export async function migrateGuestDataToFirestore(
       if (Array.isArray(reminder.days)) {
         reminderPayload.days = reminder.days.slice(0, 7);
       }
+      if (reminder.soundTone) reminderPayload.soundTone = sanitizeString(reminder.soundTone, 50);
+      if (reminder.customAudioId) reminderPayload.customAudioId = sanitizeString(reminder.customAudioId, 100);
+      if (reminder.customAudioName) reminderPayload.customAudioName = sanitizeString(reminder.customAudioName, 100);
+      if (typeof reminder.volume === 'number') reminderPayload.volume = reminder.volume;
+      if (typeof reminder.vibrate === 'boolean') reminderPayload.vibrate = reminder.vibrate;
+      if (reminder.vibrationPattern) reminderPayload.vibrationPattern = sanitizeString(reminder.vibrationPattern, 50);
+      if (typeof reminder.snoozeEnabled === 'boolean') reminderPayload.snoozeEnabled = reminder.snoozeEnabled;
+      if (typeof reminder.snoozeMinutes === 'number') reminderPayload.snoozeMinutes = reminder.snoozeMinutes;
+      if (reminder.linkedHabitId) {
+        const mappedId = habitIdMap.get(reminder.linkedHabitId) || reminder.linkedHabitId;
+        reminderPayload.linkedHabitId = sanitizeString(mappedId, 128);
+      }
+      if (reminder.linkedEntityName) reminderPayload.linkedEntityName = sanitizeString(reminder.linkedEntityName, 100);
 
       batch.set(reminderDoc, reminderPayload);
       operationCount++;

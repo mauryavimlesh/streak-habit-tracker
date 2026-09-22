@@ -299,10 +299,15 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      setAudioError('Please enter a title or label for this alarm.');
+      triggerHaptic('error');
+      return;
+    }
 
     stopPreviewTone();
     setSaving(true);
+    setAudioError(null);
     triggerHaptic('tap');
 
     try {
@@ -324,7 +329,7 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
         date: repeat === 'once' ? date || new Date().toISOString().split('T')[0] : undefined,
         enabled,
         notificationEnabled: true,
-        category: (habitContext ? 'habit' : initialData?.category || 'habit') as ReminderCategory,
+        category: (habitContext ? 'habit' : initialData?.category || 'general') as ReminderCategory,
         linkedHabitId: habitContext?.id || linkedHabitId || undefined,
         linkedEntityName: habitContext?.name || (selectedHabit ? selectedHabit.name : undefined),
         soundTone,
@@ -334,13 +339,15 @@ export const AlarmReminderModal: React.FC<AlarmReminderModalProps> = ({
         vibrate: vibrationPattern !== 'off',
         vibrationPattern,
         snoozeEnabled,
-        snoozeMinutes,
+        snoozeMinutes: isCustomSnooze ? (snoozeMinutes || 10) : (snoozeMinutes || 10),
       };
 
       await onSave(payload, initialData?.id);
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save reminder:', err);
+      setAudioError(err?.message || 'Failed to save alarm. Your changes have been preserved.');
+      triggerHaptic('error');
     } finally {
       setSaving(false);
     }

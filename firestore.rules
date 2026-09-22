@@ -200,10 +200,12 @@ service cloud.firestore {
         && (!('customAudioId' in data) || (data.customAudioId is string && data.customAudioId.size() <= 100))
         && (!('customAudioName' in data) || (data.customAudioName is string && data.customAudioName.size() <= 200))
         && (!('vibrate' in data) || data.vibrate is bool)
+        && (!('vibrationPattern' in data) || (data.vibrationPattern is string && data.vibrationPattern.size() <= 50))
         && (!('volume' in data) || data.volume is number)
         && (!('snoozeEnabled' in data) || data.snoozeEnabled is bool)
         && (!('snoozeMinutes' in data) || data.snoozeMinutes is number)
-        && (!('snoozeUntil' in data) || (data.snoozeUntil is string && data.snoozeUntil.size() <= 50));
+        && (!('snoozeUntil' in data) || (data.snoozeUntil is string && data.snoozeUntil.size() <= 50))
+        && (!('snoozeCount' in data) || data.snoozeCount is number);
     }
 
     // 4. Collection Rules

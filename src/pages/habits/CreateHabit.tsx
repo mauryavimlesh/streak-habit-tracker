@@ -227,7 +227,7 @@ export default function CreateHabit() {
           reminderTime: primaryReminderTime,
         });
 
-        // Ensure all reminders have updated habit title
+        // Ensure all reminders have updated habit title and settings
         for (const rem of habitReminders) {
           if (rem.id.startsWith('temp_')) {
             await createReminder(
@@ -239,7 +239,26 @@ export default function CreateHabit() {
               user?.uid
             );
           } else {
-            await updateReminder(rem.id, { linkedEntityName: name.trim() }, user?.uid);
+            await updateReminder(
+              rem.id,
+              {
+                title: rem.title,
+                time: rem.time,
+                repeat: rem.repeat,
+                days: rem.days,
+                enabled: rem.enabled,
+                soundTone: rem.soundTone,
+                customAudioId: rem.customAudioId,
+                customAudioName: rem.customAudioName,
+                volume: rem.volume,
+                vibrate: rem.vibrate,
+                vibrationPattern: rem.vibrationPattern,
+                snoozeEnabled: rem.snoozeEnabled,
+                snoozeMinutes: rem.snoozeMinutes,
+                linkedEntityName: name.trim(),
+              },
+              user?.uid
+            );
           }
         }
       } else {
@@ -279,6 +298,7 @@ export default function CreateHabit() {
               customAudioName: rem.customAudioName,
               volume: rem.volume,
               vibrate: rem.vibrate,
+              vibrationPattern: rem.vibrationPattern,
               snoozeEnabled: rem.snoozeEnabled,
               snoozeMinutes: rem.snoozeMinutes,
             },

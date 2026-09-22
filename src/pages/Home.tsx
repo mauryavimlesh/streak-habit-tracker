@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../lib/AuthContext';
-import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Clock, CheckCircle2, Calendar as CalendarIcon, RefreshCw } from 'lucide-react';
+import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Clock, CheckCircle2, Calendar as CalendarIcon, RefreshCw, Snowflake } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog, deleteHabit, readLocalHabits, readLocalLogs, deduplicateHabits } from '../lib/habitService';
 import { TaskItem, subscribeToTasks, toggleTaskComplete, deleteTask, readLocalTasks, deduplicateTasks } from '../lib/taskService';
@@ -13,6 +13,9 @@ import { DeleteConfirmModal } from '../components/ui/DeleteConfirmModal';
 import { SleepModal } from '../components/ui/SleepModal';
 import { ShareModal } from '../components/ui/ShareModal';
 import { StreakShareCard } from '../components/ui/StreakShareCard';
+import { StreakFreezeModal } from '../components/StreakFreezeModal';
+import { getStoredFreezeConfig } from '../lib/freezeService';
+import { StreakFreezeConfig, FreezeStatus, getFreezeStatus } from '../lib/streakEngine';
 import { cn } from '../lib/utils';
 import { Edit2, Trash2, Share } from 'lucide-react';
 import UserAvatar from '../components/profile/UserAvatar';
@@ -113,6 +116,21 @@ export default function Home() {
   
   // Sleep tracking state
   const [editingSleepHabit, setEditingSleepHabit] = useState<Habit | null>(null);
+
+  // Streak Freeze state
+  const [isFreezeModalOpen, setIsFreezeModalOpen] = useState(false);
+  const [freezeConfig, setFreezeConfig] = useState<StreakFreezeConfig>(() => getStoredFreezeConfig(user?.uid));
+  const [freezeStatus, setFreezeStatus] = useState<FreezeStatus>(() => getFreezeStatus(freezeConfig, todayStr));
+
+  useEffect(() => {
+    const handleFreezeUpdate = (e: any) => {
+      const updatedConfig = e.detail?.config || getStoredFreezeConfig(user?.uid);
+      setFreezeConfig(updatedConfig);
+      setFreezeStatus(getFreezeStatus(updatedConfig, todayStr));
+    };
+    window.addEventListener('streak_freeze_updated', handleFreezeUpdate);
+    return () => window.removeEventListener('streak_freeze_updated', handleFreezeUpdate);
+  }, [user, todayStr]);
 
   // Local progress values for instant responsive Apple OS feedback on first render frame
   const [localProgress, setLocalProgress] = useState<Record<string, number>>(() => {
@@ -519,8 +537,8 @@ export default function Home() {
 
 
   const globalStreakStats = React.useMemo(() => {
-    return calculateGlobalHabitStreak(displayedHabits, logs, todayStr);
-  }, [displayedHabits, logs, todayStr]);
+    return calculateGlobalHabitStreak(displayedHabits, logs, todayStr, freezeConfig);
+  }, [displayedHabits, logs, todayStr, freezeConfig]);
 
   const globalStreak = globalStreakStats.currentStreak;
 
@@ -695,6 +713,27 @@ export default function Home() {
             <div className="bg-[#1a1d25] border border-[#262b36] text-[#9ca2b2] px-3.5 py-1.5 rounded-full text-xs font-semibold">
               Score {globalStreak * 10}
             </div>
+
+            {/* Streak Freeze button */}
+            <button
+              onClick={() => setIsFreezeModalOpen(true)}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold border transition-all cursor-pointer",
+                freezeStatus.isProtectedToday
+                  ? "bg-[#162736] border-[#3b82f6] text-[#60a5fa] shadow-[0_0_12px_rgba(96,165,250,0.25)]"
+                  : freezeStatus.availableCount > 0
+                  ? "bg-[#16202c] border-[#22394d] text-[#60a5fa] hover:border-[#3b82f6]"
+                  : "bg-white/5 border-white/10 text-[#828b9e] hover:text-white"
+              )}
+              title="Streak Freeze: Protect your streak during days off"
+            >
+              <Snowflake className="w-3.5 h-3.5 text-[#60a5fa]" />
+              <span>
+                {freezeStatus.isProtectedToday
+                  ? 'Frozen'
+                  : `${freezeStatus.availableCount} ${freezeStatus.availableCount === 1 ? 'Freeze' : 'Freezes'}`}
+              </span>
+            </button>
 
             {/* Share button */}
             <button
@@ -1328,6 +1367,16 @@ export default function Home() {
           />
         )}
       </ShareModal>
+
+      <StreakFreezeModal
+        isOpen={isFreezeModalOpen}
+        onClose={() => setIsFreezeModalOpen(false)}
+        userId={user?.uid}
+        onFreezeChange={(updated) => {
+          setFreezeConfig(updated);
+          setFreezeStatus(getFreezeStatus(updated, todayStr));
+        }}
+      />
 
       {editingSleepHabit && (
         <SleepModal
