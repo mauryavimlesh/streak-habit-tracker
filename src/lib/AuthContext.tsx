@@ -402,7 +402,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch (err) {
       console.error('Failed to sync profile to Firestore:', err);
     }
-  }, [user, profile]);
+  }, []);
 
   useEffect(() => {
     let isSigningIn = false;
@@ -576,33 +576,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     });
 
-    // Cross-tab and local profile updates listener
+    // Cross-tab profile updates listener (other tabs only)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === LOCAL_STORAGE_PROFILE_KEY && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
-          setProfile(parsed);
+          setProfile((prev) => {
+            if (JSON.stringify(prev) === e.newValue) return prev;
+            return parsed;
+          });
         } catch {}
       }
     };
 
-    const handleCustomProfileUpdate = (e: Event) => {
-      const customEvent = e as CustomEvent<UserProfile>;
-      if (customEvent.detail) {
-        setProfile((prev) => ({ ...prev, ...customEvent.detail }));
-      }
-    };
-
     window.addEventListener('storage', handleStorageChange);
-    window.addEventListener(STREAK_PROFILE_UPDATED_EVENT, handleCustomProfileUpdate);
 
     return () => {
       clearTimeout(fallbackTimer);
       unsubscribe();
       window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener(STREAK_PROFILE_UPDATED_EVENT, handleCustomProfileUpdate);
     };
-  }, [saveUserProfileToFirestore]);
+  }, []);
 
   const logout = useCallback(async () => {
     try {
@@ -620,11 +614,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const updateProfile = useCallback(async (data: Partial<UserProfile>) => {
-    const isCompleted = data.onboardingCompleted ?? data.hasCompletedOnboarding ?? profile?.onboardingCompleted ?? profile?.hasCompletedOnboarding ?? true;
-    const nameVal = data.userName || data.name || data.displayName || profile?.userName || profile?.name || profile?.displayName || '';
+    const isCompleted = data.onboardingCompleted ?? data.hasCompletedOnboarding ?? true;
+    const currentUser = auth.currentUser;
+    const currentIsGuest = !currentUser || currentUser.isAnonymous;
 
     // If in guest mode, lock identity
-    if (isGuest || !user || user.isAnonymous) {
+    if (currentIsGuest) {
       const currentGuest = getStoredGuestData() || createDefaultGuestData();
       const updatedGuest = saveGuestData({
         ...currentGuest,
@@ -638,37 +633,41 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setProfile(updatedGuest);
       return;
     }
-    
-    const updated: UserProfile = {
-      ...profile,
-      ...data,
-      isGuest: false,
-      name: nameVal,
-      userName: nameVal,
-      displayName: nameVal,
-      avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : (profile?.avatarUrl || ''),
-      hasCompletedOnboarding: Boolean(isCompleted),
-      onboardingCompleted: Boolean(isCompleted),
-      selectedGoals: data.selectedGoals ?? profile?.selectedGoals ?? [],
-    };
 
-    // 1. Instantly persist to localStorage
-    try {
-      localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(updated));
-      if (isCompleted) {
-        localStorage.setItem(LOCAL_STORAGE_ONBOARDING_KEY, 'true');
+    let updatedResult: UserProfile | null = null;
+    setProfile((prev) => {
+      const nameVal = data.userName || data.name || data.displayName || prev?.userName || prev?.name || prev?.displayName || currentUser.displayName || 'Vimlesh';
+      const updated: UserProfile = {
+        ...prev,
+        ...data,
+        isGuest: false,
+        name: nameVal,
+        userName: nameVal,
+        displayName: nameVal,
+        avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : (prev?.avatarUrl || ''),
+        hasCompletedOnboarding: Boolean(isCompleted),
+        onboardingCompleted: Boolean(isCompleted),
+        selectedGoals: data.selectedGoals ?? prev?.selectedGoals ?? [],
+      };
+      updatedResult = updated;
+      try {
+        localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(updated));
+        if (isCompleted) {
+          localStorage.setItem(LOCAL_STORAGE_ONBOARDING_KEY, 'true');
+        }
+      } catch (e) {
+        console.error('Failed to write profile to localStorage:', e);
       }
-      window.dispatchEvent(new CustomEvent(STREAK_PROFILE_UPDATED_EVENT, { detail: updated }));
-    } catch (e) {
-      console.error('Failed to write profile to localStorage:', e);
+      return updated;
+    });
+
+    // Sync to Firestore
+    if (updatedResult) {
+      await saveUserProfileToFirestore(updatedResult);
+    } else {
+      await saveUserProfileToFirestore(data);
     }
-
-    // 2. Update React state immediately
-    setProfile(updated);
-
-    // 3. Sync to Firestore
-    await saveUserProfileToFirestore(updated);
-  }, [isGuest, user, profile, saveUserProfileToFirestore]);
+  }, [saveUserProfileToFirestore]);
 
   const removeProfilePhoto = useCallback(async () => {
     await updateProfile({ avatarUrl: '' });
@@ -697,8 +696,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const migrateGuestData = useCallback(async (): Promise<MigrationResult | null> => {
-    const uid = user?.uid || auth.currentUser?.uid;
-    if (!uid || (user && user.isAnonymous)) {
+    const uid = auth.currentUser?.uid;
+    if (!uid || auth.currentUser.isAnonymous) {
       return null;
     }
     if (!hasGuestDataToMigrate()) {
@@ -718,9 +717,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
     return await migrateGuestDataToFirestore(
       uid,
-      user?.email || auth.currentUser?.email || undefined
+      auth.currentUser?.email || undefined
     );
-  }, [user]);
+  }, []);
 
   const resetOnboarding = useCallback(() => {
     try {
@@ -735,30 +734,49 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const onboardingCompleted = Boolean(profile?.onboardingCompleted || profile?.hasCompletedOnboarding);
 
+  const contextValue = useMemo<AuthContextType>(() => ({
+    session,
+    userSession: session,
+    user,
+    profile,
+    userProfile: profile,
+    guestData: isGuest ? (profile as GuestData) : null,
+    isGuest,
+    isAuthenticated,
+    authState: session.authState,
+    onboardingCompleted,
+    loading,
+    logout,
+    signOut: logout,
+    updateProfile,
+    removeProfilePhoto,
+    saveUserProfileToFirestore,
+    setOnboardingCompleted,
+    resetOnboarding,
+    continueAsGuest,
+    resetGuestSession,
+    migrateGuestData,
+  }), [
+    session,
+    user,
+    profile,
+    isGuest,
+    isAuthenticated,
+    onboardingCompleted,
+    loading,
+    logout,
+    updateProfile,
+    removeProfilePhoto,
+    saveUserProfileToFirestore,
+    setOnboardingCompleted,
+    resetOnboarding,
+    continueAsGuest,
+    resetGuestSession,
+    migrateGuestData,
+  ]);
+
   return (
-    <AuthContext.Provider value={{
-      session,
-      userSession: session,
-      user,
-      profile,
-      userProfile: profile,
-      guestData: isGuest ? (profile as GuestData) : null,
-      isGuest,
-      isAuthenticated,
-      authState: session.authState,
-      onboardingCompleted,
-      loading,
-      logout,
-      signOut: logout,
-      updateProfile,
-      removeProfilePhoto,
-      saveUserProfileToFirestore,
-      setOnboardingCompleted,
-      resetOnboarding,
-      continueAsGuest,
-      resetGuestSession,
-      migrateGuestData,
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

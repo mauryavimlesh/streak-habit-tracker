@@ -120,7 +120,7 @@ export default function Calendar() {
       window.removeEventListener('streak_tasks_archived', onTasksArchived);
       window.removeEventListener('streak_tasks_updated', onTasksArchived);
     };
-  }, [user]);
+  }, [user?.uid]);
 
   // Keep viewMonthDate in sync when user selects a date from another month
   const handleSelectDate = useCallback((date: Date) => {

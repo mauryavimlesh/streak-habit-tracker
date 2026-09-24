@@ -85,8 +85,13 @@ const NavItem = memo(function NavItem({ to, Icon, label, end }: NavItemProps) {
 
 const BottomNav = memo(function BottomNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 pointer-events-auto bottom-nav" data-pwa-bottom-nav>
-      <div className="bg-surface/90 backdrop-blur-2xl border-t border-border min-h-[64px] pb-[max(env(safe-area-inset-bottom,0px),8px)] pt-1 px-3 sm:px-6 flex items-center justify-around overflow-x-auto no-scrollbar bottom-nav-inner">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 pointer-events-auto bottom-nav"
+      data-pwa-bottom-nav
+      role="navigation"
+      aria-label="Main Navigation"
+    >
+      <div className="bg-surface/90 backdrop-blur-2xl border-t border-border min-h-[64px] pb-[max(env(safe-area-inset-bottom,0px),8px)] pt-1 px-4 sm:px-8 flex items-center justify-around overflow-x-auto no-scrollbar bottom-nav-inner max-w-lg mx-auto sm:max-w-none">
         <NavItem to="/" end Icon={Home} label="Home" />
         <NavItem to="/calendar" Icon={CalendarIcon} label="Calendar" />
         <NavItem to="/more" Icon={LayoutGrid} label="More" />
@@ -97,9 +102,9 @@ const BottomNav = memo(function BottomNav() {
 
 export default function MainLayout() {
   return (
-    <div className="flex flex-col h-[100dvh] min-h-[100dvh] bg-background text-text-primary overflow-hidden">
+    <div className="flex flex-col h-[100dvh] min-h-[100dvh] bg-background text-text-primary overflow-hidden relative">
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto pt-[env(safe-area-inset-top,0px)] pb-[calc(env(safe-area-inset-bottom,0px)+84px)] app-main-content overscroll-contain">
+      <main className="flex-1 overflow-y-auto w-full overscroll-y-contain pt-[env(safe-area-inset-top,0px)] pb-[calc(env(safe-area-inset-bottom,0px)+80px)] app-main-content">
         <Suspense fallback={<RouteSkeleton />}>
           <Outlet />
         </Suspense>

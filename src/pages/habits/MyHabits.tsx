@@ -63,7 +63,7 @@ export default function MyHabits() {
 
   useEffect(() => {
     loadHabits();
-  }, [user]);
+  }, [user?.uid]);
 
   const categories = ['All', ...Array.from(new Set(habits.map((h) => h.category || 'General')))];
 

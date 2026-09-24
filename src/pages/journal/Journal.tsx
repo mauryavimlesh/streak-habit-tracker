@@ -79,7 +79,7 @@ export default function Journal() {
 
   useEffect(() => {
     loadEntries();
-  }, [user]);
+  }, [user?.uid]);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();

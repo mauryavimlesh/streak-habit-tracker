@@ -30,7 +30,7 @@ export default function ActivityHistory() {
     };
     window.addEventListener('streak_activities_updated', handleUpdate);
     return () => window.removeEventListener('streak_activities_updated', handleUpdate);
-  }, [user]);
+  }, [user?.uid]);
 
   const handleDelete = async () => {
     if (!deletingId) return;

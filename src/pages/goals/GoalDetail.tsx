@@ -268,7 +268,7 @@ export default function GoalDetail() {
       unsub();
       window.removeEventListener('streak_goals_updated', onUpdate);
     };
-  }, [goalId, user]);
+  }, [goalId, user?.uid]);
 
   if (loading) {
     return (

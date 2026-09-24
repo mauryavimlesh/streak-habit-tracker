@@ -110,7 +110,7 @@ export default function Social() {
     } else {
       getOrInitUserInvite('local', username, profile?.displayName || profile?.name).then(setUserInvite);
     }
-  }, [user, isGuest, username]);
+  }, [user?.uid, isGuest, username, profile?.displayName, profile?.name]);
 
   // Debounced user search
   useEffect(() => {
@@ -125,7 +125,7 @@ export default function Social() {
       setIsSearching(false);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery, user]);
+  }, [searchQuery, user?.uid]);
 
   const handleOpenInviteSheet = () => {
     triggerHaptic('tap');

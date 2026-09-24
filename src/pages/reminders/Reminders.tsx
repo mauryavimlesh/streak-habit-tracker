@@ -111,7 +111,7 @@ export default function Reminders() {
       window.removeEventListener('streak_sleep_updated', handleSync);
       window.removeEventListener('streak_reminders_updated', handleSync);
     };
-  }, [user]);
+  }, [user?.uid]);
 
   const handleToggle = async (id: string) => {
     triggerHaptic('tap');

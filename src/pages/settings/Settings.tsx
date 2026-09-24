@@ -88,10 +88,11 @@ export default function Settings() {
   };
 
   useEffect(() => {
-    if (profile?.displayName || profile?.name) {
-      setDisplayName(profile.displayName || profile.name);
+    const nextName = profile?.displayName || profile?.name;
+    if (nextName) {
+      setDisplayName(nextName);
     }
-  }, [profile]);
+  }, [profile?.displayName, profile?.name]);
 
   const handleUpdateSetting = (updates: Partial<AppSettings>) => {
     const updated = { ...settings, ...updates };

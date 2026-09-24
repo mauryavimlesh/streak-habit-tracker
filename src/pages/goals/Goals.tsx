@@ -114,7 +114,7 @@ export default function Goals() {
     return () => {
       window.removeEventListener('streak_goals_updated', onGoalsUpdated);
     };
-  }, [user]);
+  }, [user?.uid]);
 
   const filteredGoals = goals.filter((g) => {
     if (activeFilter === 'all') return true;

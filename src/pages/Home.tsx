@@ -145,7 +145,7 @@ export default function Home() {
     };
     window.addEventListener('streak_freeze_updated', handleFreezeUpdate);
     return () => window.removeEventListener('streak_freeze_updated', handleFreezeUpdate);
-  }, [user, todayStr]);
+  }, [user?.uid, todayStr]);
 
   // Lifetime XP progression state (strictly separate from streaks)
   const [lifetimeXP, setLifetimeXP] = useState<number>(() => getStoredLifetimeXP());
@@ -159,7 +159,7 @@ export default function Home() {
     };
     window.addEventListener('streak_xp_updated', handleXPUpdate);
     return () => window.removeEventListener('streak_xp_updated', handleXPUpdate);
-  }, [user]);
+  }, [user?.uid]);
 
   // Local progress values for instant responsive Apple OS feedback on first render frame
   const [localProgress, setLocalProgress] = useState<Record<string, number>>(() => {
@@ -207,7 +207,7 @@ export default function Home() {
       setTodayTasks(filtered);
     });
     return () => unsubscribe();
-  }, [user, todayStr]);
+  }, [user?.uid, todayStr]);
 
   useEffect(() => {
     const lastSyncStr = localStorage.getItem('lastSyncTime');
@@ -334,7 +334,7 @@ export default function Home() {
       window.removeEventListener('streak_sleep_updated', onSleepUpdated);
       window.removeEventListener('streak_goals_updated', onGoalsUpdated);
     };
-  }, [user]);
+  }, [user?.uid]);
 
   // Derived stats for share card
   const totalStudyMinutes = activities.reduce((acc, a) => acc + (a.durationMinutes || 0) + Math.floor((a.durationSeconds || 0)/60), 0);

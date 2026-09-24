@@ -138,7 +138,7 @@ export default function Analytics() {
       window.removeEventListener('streak_activities_updated', onDataUpdated);
       window.removeEventListener('streak_journal_updated', onDataUpdated);
     };
-  }, [user]);
+  }, [user?.uid]);
 
   const todayStr = getTodayDateKey();
 

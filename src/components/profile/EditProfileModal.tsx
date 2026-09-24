@@ -459,7 +459,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 <div className="relative">
                   <UserAvatar
                     avatarUrl={avatarPreview}
-                    name={name}
+                    name={displayName}
                     size="2xl"
                     showBadge
                     onBadgeClick={() => {
