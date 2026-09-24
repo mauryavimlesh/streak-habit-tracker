@@ -30,6 +30,7 @@ import {
   trackAICoachRetry 
 } from '../lib/analyticsService';
 import ConfigurationDialog from '../components/ui/ConfigurationDialog';
+import { buildAICoachContext } from '../lib/aiCoachContext';
 
 const SUGGESTED_PROMPTS = [
   '⚡ How do I build consistency?',
@@ -202,23 +203,9 @@ export default function AICoach() {
     };
   }, [user?.uid]);
 
-  // Construct coach context
-  const coachContext: CoachContext = useMemo(() => {
-    const habitSummaries: HabitSummary[] = (habits || []).map((h) => ({
-      id: h.id,
-      title: h.title || h.name || 'Habit',
-      category: h.category || 'General',
-      frequency: h.frequency || 'daily',
-      streak: h.streak || 0,
-    }));
-    const totalStreaks = habitSummaries.reduce((sum, h) => sum + (h.streak || 0), 0);
-
-    return {
-      userName,
-      habits: habitSummaries,
-      activeHabitCount: habitSummaries.length,
-      totalStreaks,
-    };
+  // Construct structured coach context from real application data
+  const coachContext = useMemo(() => {
+    return buildAICoachContext(userName);
   }, [userName, habits]);
 
   // Auto-scroll when messages change or loading state toggles

@@ -1,9 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from '../lib/AuthContext';
-import { getUserHabits, getHabitLogs } from '../lib/habitService';
+import { getUserHabits, getHabitLogs, readLocalHabits, readLocalLogs } from '../lib/habitService';
+import { readLocalTasks } from '../lib/taskService';
+import { readLocalGoals } from '../lib/goalService';
+import { getLocalActivities } from '../lib/activityService';
+import { getTodayDateKey } from '../lib/dateUtils';
 import {
   readLocalReminders,
-  shouldReminderTriggerNow,
+  evaluateReminderDecision,
   sendSystemNotification,
   requestNotificationPermission,
   registerStreakServiceWorker,
@@ -125,6 +129,15 @@ export function HabitNotificationEngine() {
         }
 
         const reminders = readLocalReminders();
+        const habits = readLocalHabits();
+        const logs = readLocalLogs();
+        const tasks = readLocalTasks();
+        const goals = readLocalGoals();
+        const activities = getLocalActivities();
+        const dateStr = getTodayDateKey();
+
+        const contextData = { habits, logs, tasks, goals, activities, dateStr };
+
         for (const reminder of reminders) {
           if (!reminder.enabled) continue;
 
@@ -133,9 +146,14 @@ export function HabitNotificationEngine() {
             continue;
           }
 
-          if (shouldReminderTriggerNow(reminder, now)) {
+          const decision = evaluateReminderDecision(reminder, now, contextData);
+          if (decision.shouldTrigger) {
             triggeredMinuteRef.current.add(triggerKey);
-            triggerAlarm(reminder);
+            triggerAlarm({
+              ...reminder,
+              title: decision.smartTitle || reminder.title,
+              description: decision.smartBody || reminder.description,
+            });
             break; // Trigger one alarm modal at a time
           }
         }

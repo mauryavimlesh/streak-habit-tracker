@@ -21,11 +21,13 @@ import {
   calculateGoalProgress,
   calculateImmutableGoalStreaks,
   calculateActivityQuantities,
+  getDailyGoalDetailedStats,
+  DailyGoalDetailedStats,
   GoalProgressResult,
 } from './goalProgressEngine';
 
-export { calculateGoalProgress, calculateImmutableGoalStreaks, calculateActivityQuantities };
-export type { GoalProgressResult };
+export { calculateGoalProgress, calculateImmutableGoalStreaks, calculateActivityQuantities, getDailyGoalDetailedStats };
+export type { GoalProgressResult, DailyGoalDetailedStats };
 
 export interface Milestone {
   id: string;
@@ -1086,6 +1088,95 @@ export async function logDailyGoalProgressQuick(
 export function getGoalHistoryList(goal: Goal) {
   if (!goal || !goal.dailyHistory) return [];
   return Object.values(goal.dailyHistory).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+/**
+ * Explicitly links a daily Goal to Habit and/or Task entities using stable IDs.
+ * Reuses existing relationships to strictly prevent duplicate creation.
+ */
+export async function linkGoalToHabitAndTask(
+  goalId: string,
+  options: {
+    addAsHabit?: boolean;
+    addAsTask?: boolean;
+  },
+  userId: string = 'local'
+): Promise<Goal | null> {
+  const localGoals = readLocalGoals();
+  const goal = localGoals.find((g) => g.id === goalId);
+  if (!goal) return null;
+
+  let linkedHabitId = goal.linkedHabitId;
+  let linkedTaskId = goal.linkedTaskId;
+  let linkToHabit = goal.linkToHabit ?? false;
+  let linkToTask = goal.linkToTask ?? false;
+
+  if (options.addAsHabit) {
+    linkToHabit = true;
+    if (!linkedHabitId) {
+      const { readLocalHabits, createHabit } = await import('./habitService');
+      const habits = readLocalHabits();
+      const existing = habits.find((h) => (h as any).goalId === goalId || h.name === goal.title);
+      if (existing && existing.id) {
+        linkedHabitId = existing.id;
+      } else {
+        const createdHabitId = await createHabit({
+          userId: userId || 'local',
+          name: goal.title,
+          category: goal.category || 'Study',
+          targetValue: goal.dailyTarget || goal.target || 1,
+          targetUnit: goal.unit || 'units',
+          frequencyType: 'daily',
+          frequencyValue: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+          targetType: 'count',
+          icon: 'target',
+          color: 'lime',
+          reminderTime: '09:00',
+        });
+        linkedHabitId = createdHabitId;
+      }
+    }
+  }
+
+  if (options.addAsTask) {
+    linkToTask = true;
+    if (!linkedTaskId) {
+      const { readLocalTasks, createTask } = await import('./taskService');
+      const tasks = readLocalTasks();
+      const existing = tasks.find((t) => t.linkedGoalId === goalId || t.title === goal.title);
+      if (existing) {
+        linkedTaskId = existing.id;
+      } else {
+        const created = await createTask(
+          {
+            title: goal.title,
+            description: goal.description || `Daily goal target: ${goal.title}`,
+            date: getTodayDateKey(),
+            priority: goal.priority || 'medium',
+            type: 'task',
+            completed: false,
+            linkedGoalId: goalId,
+            targetQuantity: goal.dailyTarget || goal.target || 1,
+            progressQuantity: goal.dailyHistory?.[getTodayDateKey()]?.progress || 0,
+            unit: goal.unit || 'units',
+          },
+          userId
+        );
+        linkedTaskId = created.id;
+      }
+    }
+  }
+
+  return await updateGoal(
+    goalId,
+    {
+      linkToHabit,
+      linkedHabitId,
+      linkToTask,
+      linkedTaskId,
+    },
+    userId
+  );
 }
 
 export async function addGoalActivity(

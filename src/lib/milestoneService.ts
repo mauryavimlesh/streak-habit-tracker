@@ -3,38 +3,114 @@ import { readLocalTasks } from './taskService';
 import { readLocalGoals, calculateGoalStreak } from './goalService';
 import { readLocalJournal } from './journalService';
 import { getLocalActivities } from './activityService';
+import { getTodayDateKey } from './dateUtils';
+import { db } from './firebase';
+import { collection, doc, setDoc, getDocs, query, where } from 'firebase/firestore';
+import { isCloudSyncableUser } from './authUtils';
 
 export interface MilestoneItem {
   id: string;
+  milestoneId: string;
+  userId?: string;
   title: string;
   description: string;
-  category: 'streak' | 'study' | 'tasks' | 'focus' | 'journal';
+  requirement: string;
+  category: 'streak' | 'study' | 'tasks' | 'focus' | 'journal' | 'goal';
   icon: string;
   threshold: number;
   currentValue: number;
   unit: string;
   isUnlocked: boolean;
   unlockedAt?: string;
+  relatedEntityId?: string;
 }
 
 const UNLOCKED_MILESTONES_KEY = 'streak_unlocked_milestones_v1';
 
-export function getStoredUnlockedMilestoneIds(): Record<string, string> {
+export interface StoredMilestoneRecord {
+  milestoneId: string;
+  userId?: string;
+  unlockedAt: string;
+  requirement: string;
+  relatedEntityId?: string;
+}
+
+export function getStoredUnlockedMilestoneMap(): Record<string, StoredMilestoneRecord> {
   try {
     const raw = localStorage.getItem(UNLOCKED_MILESTONES_KEY);
-    return raw ? JSON.parse(raw) : {};
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    const result: Record<string, StoredMilestoneRecord> = {};
+    for (const [key, val] of Object.entries(parsed)) {
+      if (typeof val === 'string') {
+        result[key] = {
+          milestoneId: key,
+          unlockedAt: val,
+          requirement: key,
+        };
+      } else if (val && typeof val === 'object') {
+        result[key] = val as StoredMilestoneRecord;
+      }
+    }
+    return result;
   } catch {
     return {};
   }
 }
 
-export function saveStoredUnlockedMilestone(id: string, dateStr: string) {
-  const current = getStoredUnlockedMilestoneIds();
-  current[id] = dateStr;
+export function saveStoredUnlockedMilestone(
+  milestoneId: string,
+  record: Partial<StoredMilestoneRecord>
+) {
+  const current = getStoredUnlockedMilestoneMap();
+  const unlockedAt = record.unlockedAt || getTodayDateKey();
+  current[milestoneId] = {
+    milestoneId,
+    userId: record.userId || 'local',
+    unlockedAt,
+    requirement: record.requirement || milestoneId,
+    relatedEntityId: record.relatedEntityId,
+  };
   localStorage.setItem(UNLOCKED_MILESTONES_KEY, JSON.stringify(current));
+
+  // Sync to Firestore if signed in
+  if (record.userId && isCloudSyncableUser(record.userId)) {
+    try {
+      const docRef = doc(db, 'milestones', `${record.userId}_${milestoneId}`);
+      setDoc(docRef, current[milestoneId], { merge: true }).catch((err) => {
+        console.warn('Could not sync milestone to cloud:', err);
+      });
+    } catch {
+      // Ignore background sync errors
+    }
+  }
 }
 
-export function calculateRealMilestones(): {
+export async function syncUserMilestonesFromCloud(userId: string) {
+  if (!isCloudSyncableUser(userId)) return;
+  try {
+    const q = query(collection(db, 'milestones'), where('userId', '==', userId));
+    const snapshot = await getDocs(q);
+    const stored = getStoredUnlockedMilestoneMap();
+    let updated = false;
+
+    snapshot.forEach((d) => {
+      const data = d.data() as StoredMilestoneRecord;
+      if (data && data.milestoneId && !stored[data.milestoneId]) {
+        stored[data.milestoneId] = data;
+        updated = true;
+      }
+    });
+
+    if (updated) {
+      localStorage.setItem(UNLOCKED_MILESTONES_KEY, JSON.stringify(stored));
+    }
+  } catch (err) {
+    console.warn('Failed to sync milestones from cloud:', err);
+  }
+}
+
+export function calculateRealMilestones(userId?: string): {
   milestones: MilestoneItem[];
   unlockedCount: number;
   newlyUnlocked: MilestoneItem[];
@@ -46,7 +122,7 @@ export function calculateRealMilestones(): {
   const journals = readLocalJournal();
   const activities = getLocalActivities();
 
-  // 1. Max Streak
+  // 1. Max Streak (checks habits & goals, both current and best)
   let maxStreak = 0;
   for (const h of habits) {
     const habitLogs = logs.filter((l) => l.habitId === h.id && l.status === 'completed');
@@ -65,14 +141,16 @@ export function calculateRealMilestones(): {
       prev = d;
     }
     if (best > maxStreak) maxStreak = best;
+    if (((h as any).streak || 0) > maxStreak) maxStreak = (h as any).streak || 0;
   }
+
   for (const g of goals) {
     const streakData = calculateGoalStreak(g);
     if (streakData.currentStreak > maxStreak) maxStreak = streakData.currentStreak;
     if (streakData.bestStreak > maxStreak) maxStreak = streakData.bestStreak;
   }
 
-  // 2. Lectures & Study Goal activities completed
+  // 2. Study Goal activities completed
   let totalLecturesCompleted = 0;
   for (const g of goals) {
     if (g.dailyHistory) {
@@ -98,15 +176,37 @@ export function calculateRealMilestones(): {
   // 5. Journal Entries
   const totalJournalEntries = journals.length;
 
-  const storedUnlocked = getStoredUnlockedMilestoneIds();
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  // 6. Completed Goals
+  const completedGoalsCount = goals.filter((g) => g.status === 'completed' || (g.currentProgress || 0) >= (g.target || 1)).length;
+
+  // 7. First completion count across all entities
+  const firstCompletionCount =
+    (logs.some((l) => l.status === 'completed') ? 1 : 0) +
+    (completedTasksCount > 0 ? 1 : 0) +
+    (totalFocusMinutes > 0 ? 1 : 0) +
+    (totalJournalEntries > 0 ? 1 : 0);
+
+  const storedUnlockedMap = getStoredUnlockedMilestoneMap();
+  const todayStr = getTodayDateKey();
   const newlyUnlocked: MilestoneItem[] = [];
 
   const rawMilestonesDef = [
     {
+      id: 'first_completion',
+      title: 'First Completion',
+      description: 'Completed your first action in STREAK. The foundation of momentum.',
+      requirement: 'Complete any 1 habit, task, or focus session',
+      category: 'streak' as const,
+      icon: 'Zap',
+      threshold: 1,
+      currentValue: firstCompletionCount,
+      unit: 'actions',
+    },
+    {
       id: 'streak_7',
-      title: '7 Day Streak',
+      title: '7-Day Streak',
       description: 'Maintained relentless daily discipline for one full week.',
+      requirement: 'Reach a 7-day streak',
       category: 'streak' as const,
       icon: 'Flame',
       threshold: 7,
@@ -114,19 +214,32 @@ export function calculateRealMilestones(): {
       unit: 'days',
     },
     {
-      id: 'streak_21',
-      title: '21 Day Habit Master',
-      description: 'Habits are now deeply etched into your daily neurological wiring.',
+      id: 'streak_14',
+      title: '14-Day Streak',
+      description: 'Two full weeks of uninterrupted execution.',
+      requirement: 'Reach a 14-day streak',
+      category: 'streak' as const,
+      icon: 'Flame',
+      threshold: 14,
+      currentValue: maxStreak,
+      unit: 'days',
+    },
+    {
+      id: 'streak_30',
+      title: '30-Day Streak',
+      description: 'A full month of non-negotiable dedication.',
+      requirement: 'Reach a 30-day streak',
       category: 'streak' as const,
       icon: 'Sparkles',
-      threshold: 21,
+      threshold: 30,
       currentValue: maxStreak,
       unit: 'days',
     },
     {
       id: 'streak_50',
-      title: '50 Day Unstoppable',
-      description: 'A monument of consistency. You are in the top 1% of disciplined achievers.',
+      title: '50-Day Streak',
+      description: 'A monument of consistency in the top tier of disciplined achievers.',
+      requirement: 'Reach a 50-day streak',
       category: 'streak' as const,
       icon: 'Award',
       threshold: 50,
@@ -134,19 +247,32 @@ export function calculateRealMilestones(): {
       unit: 'days',
     },
     {
-      id: 'lectures_50',
-      title: '50 Study Targets Completed',
-      description: 'Crushed 50 scheduled lectures, practice papers, and revision blocks.',
-      category: 'study' as const,
-      icon: 'BookOpen',
-      threshold: 50,
-      currentValue: totalLecturesCompleted,
-      unit: 'lectures',
+      id: 'streak_100',
+      title: '100-Day Streak',
+      description: 'Century mark. An elite milestone of habit transformation.',
+      requirement: 'Reach a 100-day streak',
+      category: 'streak' as const,
+      icon: 'Award',
+      threshold: 100,
+      currentValue: maxStreak,
+      unit: 'days',
+    },
+    {
+      id: 'tasks_10',
+      title: '10 Tasks Completed',
+      description: 'Executed 10 scheduled productivity tasks and to-dos.',
+      requirement: 'Complete 10 tasks',
+      category: 'tasks' as const,
+      icon: 'CheckCircle2',
+      threshold: 10,
+      currentValue: completedTasksCount,
+      unit: 'tasks',
     },
     {
       id: 'tasks_100',
-      title: '100 Tasks Crushed',
-      description: 'Closed out 100 scheduled productivity tasks and to-dos.',
+      title: '100 Tasks Completed',
+      description: 'Closed out 100 scheduled productivity tasks.',
+      requirement: 'Complete 100 tasks',
       category: 'tasks' as const,
       icon: 'CheckCircle2',
       threshold: 100,
@@ -154,19 +280,32 @@ export function calculateRealMilestones(): {
       unit: 'tasks',
     },
     {
-      id: 'focus_25',
-      title: '25 Focus Hours',
-      description: 'Logged 25 full hours of deep, distraction-free focus timer sessions.',
+      id: 'focus_10',
+      title: '10 Focus Hours',
+      description: 'Logged 10 full hours of deep, distraction-free focus sessions.',
+      requirement: 'Log 10 focus hours',
       category: 'focus' as const,
       icon: 'Clock',
-      threshold: 25,
+      threshold: 10,
       currentValue: totalFocusHours,
       unit: 'hours',
+    },
+    {
+      id: 'goal_completed',
+      title: 'Goal Completed',
+      description: 'Fully achieved and conquered a primary major goal.',
+      requirement: 'Complete at least 1 goal',
+      category: 'goal' as const,
+      icon: 'Award',
+      threshold: 1,
+      currentValue: completedGoalsCount,
+      unit: 'goals',
     },
     {
       id: 'journal_30',
       title: '30 Journal Entries',
       description: 'Recorded 30 days of mindful reflections and mental self-awareness.',
+      requirement: 'Write 30 journal entries',
       category: 'journal' as const,
       icon: 'Book',
       threshold: 30,
@@ -176,23 +315,36 @@ export function calculateRealMilestones(): {
   ];
 
   const milestones: MilestoneItem[] = rawMilestonesDef.map((def) => {
-    const isUnlocked = def.currentValue >= def.threshold;
-    let unlockedAt = storedUnlocked[def.id];
+    const stored = storedUnlockedMap[def.id];
+    // RULE: Once unlocked, a milestone remains permanently unlocked, even if current streak drops
+    const wasPreviouslyUnlocked = Boolean(stored && stored.unlockedAt);
+    const qualifiesNow = def.currentValue >= def.threshold;
+    const isUnlocked = wasPreviouslyUnlocked || qualifiesNow;
 
-    if (isUnlocked && !unlockedAt) {
+    let unlockedAt = stored?.unlockedAt;
+
+    if (qualifiesNow && !wasPreviouslyUnlocked) {
       unlockedAt = todayStr;
-      saveStoredUnlockedMilestone(def.id, todayStr);
+      saveStoredUnlockedMilestone(def.id, {
+        unlockedAt: todayStr,
+        userId: userId || 'local',
+        requirement: def.requirement,
+      });
       newlyUnlocked.push({
         ...def,
+        milestoneId: def.id,
         isUnlocked: true,
         unlockedAt,
+        requirement: def.requirement,
       });
     }
 
     return {
       ...def,
+      milestoneId: def.id,
       isUnlocked,
       unlockedAt,
+      requirement: def.requirement,
     };
   });
 

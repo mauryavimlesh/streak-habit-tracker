@@ -370,3 +370,88 @@ export function calculateGoalProgress(
     paceMessage,
   };
 }
+
+export interface DailyGoalDetailedStats {
+  todayProgress: number;
+  todayTarget: number;
+  todayPercentage: number;
+  isTodayCompleted: boolean;
+  totalDaysTracked: number;
+  daysTargetCompleted: number;
+  daysPartiallyCompleted: number;
+  missedDays: number;
+  currentStreak: number;
+  longestStreak: number;
+  overallCompletionPercentage: number;
+  averageDailyCompletion: number;
+  lastActiveDate: string | null;
+}
+
+/**
+ * Calculates comprehensive daily recurring goal statistics adhering strictly to
+ * historical immutability and real stored data.
+ */
+export function getDailyGoalDetailedStats(
+  goal: Goal,
+  todayKey: string = getTodayDateKey()
+): DailyGoalDetailedStats {
+  const history = goal.dailyHistory || {};
+  const entries = Object.entries(history);
+  const fallbackTarget = goal.dailyTarget || goal.target || 1;
+
+  const todayEntry = history[todayKey];
+  const todayResult = getCanonicalDayEntryProgress(todayEntry, fallbackTarget);
+  const todayProgress = todayResult.progress;
+  const todayTarget = todayResult.target;
+  const todayPercentage = Math.min(100, Math.round((todayProgress / Math.max(1, todayTarget)) * 100));
+  const isTodayCompleted = todayProgress >= todayTarget;
+
+  let daysTargetCompleted = 0;
+  let daysPartiallyCompleted = 0;
+  let missedDays = 0;
+  let totalUnits = 0;
+  let lastActiveDate: string | null = null;
+
+  // Sort dates chronologically to find last active date
+  const sortedDateKeys = Object.keys(history).sort();
+
+  for (const dateStr of sortedDateKeys) {
+    const entry = history[dateStr];
+    const dayStats = getCanonicalDayEntryProgress(entry, fallbackTarget);
+    totalUnits += dayStats.progress;
+
+    if (dayStats.progress >= dayStats.target) {
+      daysTargetCompleted++;
+    } else if (dayStats.progress > 0) {
+      daysPartiallyCompleted++;
+    } else {
+      missedDays++;
+    }
+
+    if (dayStats.progress > 0) {
+      lastActiveDate = dateStr;
+    }
+  }
+
+  const totalDaysTracked = entries.length;
+  const streakStats = calculateImmutableGoalStreaks(goal, todayKey);
+  const averageDailyCompletion = totalDaysTracked > 0 ? Math.round((totalUnits / totalDaysTracked) * 10) / 10 : 0;
+  const overallTarget = goal.target || (fallbackTarget * 30);
+  const overallCompletionPercentage = Math.min(100, Math.round((totalUnits / Math.max(1, overallTarget)) * 100));
+
+  return {
+    todayProgress,
+    todayTarget,
+    todayPercentage,
+    isTodayCompleted,
+    totalDaysTracked,
+    daysTargetCompleted,
+    daysPartiallyCompleted,
+    missedDays,
+    currentStreak: streakStats.currentStreak,
+    longestStreak: streakStats.bestStreak,
+    overallCompletionPercentage,
+    averageDailyCompletion,
+    lastActiveDate,
+  };
+}

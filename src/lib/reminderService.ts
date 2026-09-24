@@ -26,6 +26,7 @@ import { registerPWA } from './pwa/pwaManager';
 
 export interface ReminderItem {
   id: string;
+  reminderId?: string;
   userId?: string;
   title: string;
   description?: string;
@@ -33,22 +34,31 @@ export interface ReminderItem {
   time: string; // e.g. "07:30 AM" or "14:00"
   repeat: ReminderRepeat;
   days: string[]; // ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  repeatDays?: string[];
   enabled: boolean;
   notificationEnabled: boolean;
   category: ReminderCategory;
+  entityId?: string;
+  entityType?: 'habit' | 'task' | 'goal' | 'focus' | 'general' | 'workout' | 'sleep';
   linkedHabitId?: string;
   linkedEntityName?: string;
   createdAt: string;
   lastTriggeredAt?: string;
+  nextTriggerAt?: string;
+  timezone?: string;
+  allowRepeatedWhenComplete?: boolean;
   // Alarm & Sound extensions
   soundTone?: string; // built-in tone id e.g. 'streak-pulse' | 'atomic-focus' | 'zen-bell' | 'gentle-sunrise' | 'digital-beep' | 'vibrant-marimba' | 'custom'
+  tone?: string;
   customAudioId?: string; // id in local IndexedDB
   customAudioName?: string; // original filename e.g. "zen_birds.mp3"
   volume?: number; // 0.0 to 1.0 (default 0.85)
   vibrate?: boolean; // default true
+  vibration?: boolean;
   vibrationPattern?: VibrationPatternType; // 'default' | 'double-pulse' | 'long-persistent' | 'off'
   snoozeEnabled?: boolean; // default true
   snoozeMinutes?: number; // 5, 10, 15, or custom (default 10)
+  snoozeDuration?: number;
   snoozeUntil?: string; // ISO string if currently snoozed
   snoozeCount?: number; // tracks number of snoozes for smart adaptive intervals
 }
@@ -179,62 +189,243 @@ export function parseHourMinute(timeStr: string): { hour: number; minute: number
   return { hour, minute };
 }
 
-/**
- * Checks if a reminder should trigger at a given Date
- */
-export function shouldReminderTriggerNow(reminder: ReminderItem, now: Date): boolean {
-  if (!reminder.enabled) return false;
+export interface ReminderContextData {
+  habits?: any[];
+  logs?: any[];
+  tasks?: any[];
+  goals?: any[];
+  activities?: any[];
+  dateStr?: string;
+}
 
-  // If snoozed, check if snooze window has arrived
+export interface ReminderDecisionResult {
+  shouldTrigger: boolean;
+  reason: string;
+  smartTitle: string;
+  smartBody: string;
+  isCompleted: boolean;
+}
+
+/**
+ * REMINDER DECISION ENGINE
+ * Evaluates whether a reminder is valid, active, timely, and contextually pending.
+ * If target is already completed today, the reminder is suppressed (unless explicitly allowed).
+ */
+export function evaluateReminderDecision(
+  reminder: ReminderItem,
+  now: Date = new Date(),
+  contextData?: ReminderContextData
+): ReminderDecisionResult {
+  if (!reminder.enabled) {
+    return {
+      shouldTrigger: false,
+      reason: 'Reminder is disabled',
+      smartTitle: reminder.title,
+      smartBody: reminder.description || '',
+      isCompleted: false,
+    };
+  }
+
+  // 1. Check Snooze State
   if (reminder.snoozeUntil) {
     const snoozeDate = new Date(reminder.snoozeUntil);
-    if (!isNaN(snoozeDate.getTime()) && now.getTime() >= snoozeDate.getTime()) {
-      return true;
-    }
-    // If still in future snooze, do not fire regular schedule yet
     if (!isNaN(snoozeDate.getTime()) && now.getTime() < snoozeDate.getTime()) {
-      return false;
+      return {
+        shouldTrigger: false,
+        reason: 'Currently snoozed until ' + reminder.snoozeUntil,
+        smartTitle: reminder.title,
+        smartBody: reminder.description || '',
+        isCompleted: false,
+      };
     }
   }
 
-  // Check matching hour & minute
+  // 2. Check Time and Schedule Match
   const { hour, minute } = parseHourMinute(reminder.time);
-  if (now.getHours() !== hour || now.getMinutes() !== minute) {
-    return false;
-  }
+  const timeMatches = now.getHours() === hour && now.getMinutes() === minute;
 
-  // Day abbreviation: Sun, Mon, Tue, Wed, Thu, Fri, Sat
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const currentDayName = dayNames[now.getDay()];
   const isWeekend = currentDayName === 'Sat' || currentDayName === 'Sun';
+  const repeatDays = reminder.repeatDays || reminder.days || [];
 
+  let scheduleMatches = true;
   switch (reminder.repeat) {
-    case 'once': {
+    case 'once':
       if (reminder.date) {
         const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        return reminder.date === todayStr;
+        scheduleMatches = reminder.date === todayStr;
       }
-      return true;
-    }
+      break;
     case 'daily':
-      return true;
+      scheduleMatches = true;
+      break;
     case 'weekdays':
-      return !isWeekend;
+      scheduleMatches = !isWeekend;
+      break;
     case 'weekends':
-      return isWeekend;
+      scheduleMatches = isWeekend;
+      break;
     case 'weekly':
-    case 'custom': {
-      if (Array.isArray(reminder.days) && reminder.days.length > 0) {
-        return reminder.days.includes(currentDayName);
+    case 'custom':
+      if (repeatDays.length > 0) {
+        scheduleMatches = repeatDays.includes(currentDayName);
       }
-      return true;
-    }
-    case 'monthly': {
-      return reminder.date ? new Date(reminder.date).getDate() === now.getDate() : now.getDate() === 1;
-    }
+      break;
+    case 'monthly':
+      scheduleMatches = reminder.date
+        ? new Date(reminder.date).getDate() === now.getDate()
+        : now.getDate() === 1;
+      break;
     default:
-      return true;
+      scheduleMatches = true;
   }
+
+  if (!timeMatches || !scheduleMatches) {
+    return {
+      shouldTrigger: false,
+      reason: !timeMatches ? 'Time does not match current minute' : 'Schedule does not match today',
+      smartTitle: reminder.title,
+      smartBody: reminder.description || '',
+      isCompleted: false,
+    };
+  }
+
+  // 3. Contextual Data Lookup for Linked Entity
+  const dateStr =
+    contextData?.dateStr ||
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  let smartTitle = reminder.title;
+  let smartBody = reminder.description || '';
+  let isCompleted = false;
+
+  const entityId = reminder.entityId || reminder.linkedHabitId;
+  const entityType = reminder.entityType || reminder.category;
+
+  // Habit context check
+  if (entityType === 'habit' || entityId?.startsWith('habit_') || reminder.linkedHabitId) {
+    const habits = contextData?.habits || [];
+    const logs = contextData?.logs || [];
+    const habit = habits.find((h: any) => h.id === entityId || h.id === reminder.linkedHabitId);
+    if (habit) {
+      const todayLog = logs.find((l: any) => l.habitId === habit.id && l.date === dateStr);
+      const target = Math.max(1, habit.targetValue || 1);
+      const progress = todayLog?.progressValue ?? (todayLog?.status === 'completed' ? target : 0);
+      isCompleted = todayLog?.status === 'completed' || progress >= target;
+
+      if (isCompleted) {
+        smartTitle = `🎯 ${habit.name} complete`;
+        smartBody = `Today's target of ${target} ${habit.targetUnit || 'units'} is complete. Great job!`;
+      } else {
+        const remaining = Math.max(0, target - progress);
+        if (habit.targetType !== 'binary' && target > 1) {
+          smartTitle = `💧 ${habit.name}`;
+          smartBody = `You're ${remaining} ${habit.targetUnit || 'units'} away from today's ${habit.name} target.`;
+        } else {
+          smartTitle = `⚡ ${habit.name}`;
+          smartBody = reminder.description || `Keep your daily streak alive!`;
+        }
+      }
+    }
+  }
+
+  // Goal context check
+  if (entityType === 'goal' || entityId?.startsWith('goal_') || entityId?.startsWith('goal-') || reminder.linkedEntityName?.includes('Goal')) {
+    const goals = contextData?.goals || [];
+    const goal = goals.find((g: any) => g.id === entityId || g.title === reminder.linkedEntityName);
+    if (goal) {
+      const dayEntry = goal.dailyHistory?.[dateStr];
+      const target = dayEntry?.target ?? goal.dailyTarget ?? goal.target ?? 1;
+      const progress = dayEntry?.progress ?? 0;
+      isCompleted = dayEntry?.completed || progress >= target;
+
+      if (isCompleted) {
+        smartTitle = `🎯 Today's ${goal.title} target is complete`;
+        smartBody = `All ${target} ${goal.unit || 'units'} completed for today.`;
+      } else {
+        const remaining = Math.max(0, target - progress);
+        smartTitle = `🎯 ${goal.title}`;
+        smartBody = `📚 ${remaining} of ${target} ${goal.unit || 'units'} remaining today.`;
+      }
+    }
+  }
+
+  // Task context check
+  if (entityType === 'task' || entityId?.startsWith('task_') || entityId?.startsWith('task-')) {
+    const tasks = contextData?.tasks || [];
+    const task = tasks.find((t: any) => t.id === entityId || t.title === reminder.linkedEntityName);
+    if (task) {
+      isCompleted = Boolean(task.completed);
+      if (isCompleted) {
+        smartTitle = `✓ Task complete`;
+        smartBody = `${task.title} is completed for today.`;
+      } else {
+        smartTitle = `📋 ${task.title}`;
+        smartBody = `${task.title} is due today.`;
+      }
+    }
+  }
+
+  // Focus context check
+  if (entityType === 'focus') {
+    const activities = contextData?.activities || [];
+    const actualFocusMinutes = activities
+      .filter((a: any) => a.date === dateStr && a.completionStatus !== 'abandoned')
+      .reduce((sum: number, a: any) => sum + (a.durationMinutes || 0), 0);
+    const plannedTarget = 120;
+    isCompleted = actualFocusMinutes >= plannedTarget;
+    if (isCompleted) {
+      smartTitle = `🎯 Focus target complete`;
+      smartBody = `You completed ${actualFocusMinutes} minutes of focus today.`;
+    } else {
+      smartTitle = `📚 Daily Focus`;
+      smartBody = `You planned focus sessions today. ${actualFocusMinutes} minutes completed.`;
+    }
+  }
+
+  // Workout context check
+  if (entityType === 'workout') {
+    smartTitle = `🏋️ ${reminder.title}`;
+    smartBody = `Your workout is scheduled for ${reminder.time}.`;
+  }
+
+  // Sleep context check
+  if (entityType === 'sleep' || reminder.category === 'night') {
+    smartTitle = `🌙 Planned Bedtime`;
+    smartBody = `Your planned bedtime is in 30 minutes.`;
+  }
+
+  // 4. Decision: If already completed and user hasn't explicitly allowed repeated reminders, do not send
+  if (isCompleted && !reminder.allowRepeatedWhenComplete) {
+    return {
+      shouldTrigger: false,
+      reason: 'Target is already completed today',
+      smartTitle,
+      smartBody,
+      isCompleted: true,
+    };
+  }
+
+  return {
+    shouldTrigger: true,
+    reason: 'Schedule match and target pending',
+    smartTitle,
+    smartBody,
+    isCompleted,
+  };
+}
+
+/**
+ * Checks if a reminder should trigger at a given Date
+ */
+export function shouldReminderTriggerNow(
+  reminder: ReminderItem,
+  now: Date,
+  contextData?: ReminderContextData
+): boolean {
+  const decision = evaluateReminderDecision(reminder, now, contextData);
+  return decision.shouldTrigger;
 }
 
 const LOCAL_REMINDERS_KEY = 'streak_reminders_v1';

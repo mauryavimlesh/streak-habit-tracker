@@ -26,6 +26,11 @@ import { ActiveTimerWidget } from "../components/home/ActiveTimerWidget";
 import { StreakLogo } from '../components/ui/StreakLogo';
 import { evaluateHabitProgress, calculateGlobalHabitStreak, StreakStatus } from '../lib/habitEngine';
 import { DeferredRender } from '../components/progressive/DeferredRender';
+import { calculateDailyMomentum } from '../lib/momentumService';
+import { MomentumCard } from '../components/home/MomentumCard';
+import { TodayPlan } from '../components/home/TodayPlan';
+import { DailyReflectionModal } from '../components/ui/DailyReflectionModal';
+import { readLocalJournal, getUserJournal, JournalEntry } from '../lib/journalService';
 
 // Reference authentic default habits matching the design reference
 const DEFAULT_HABITS: Habit[] = [
@@ -100,6 +105,8 @@ export default function Home() {
   const [allTasks, setAllTasks] = useState<TaskItem[]>(() => deduplicateTasks(readLocalTasks()));
   const [activities, setActivities] = useState<FocusActivity[]>(() => getLocalActivities());
   const [goals, setGoals] = useState<Goal[]>(() => readLocalGoals());
+  const [journals, setJournals] = useState<JournalEntry[]>(() => readLocalJournal());
+  const [isReflectionModalOpen, setIsReflectionModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // New state variables for Habit Notes and Sync Toast
@@ -549,6 +556,29 @@ export default function Home() {
 
   const globalStreak = globalStreakStats.currentStreak;
 
+  const momentumResult = React.useMemo(() => {
+    return calculateDailyMomentum({
+      dateStr: todayStr,
+      habits: displayedHabits,
+      logs,
+      localProgress,
+      tasks: allTasks,
+      goals,
+      activities,
+      plannedFocusMinutes: 120,
+    });
+  }, [todayStr, displayedHabits, logs, localProgress, allTasks, goals, activities]);
+
+  const handleIncrementGoal = async (goalId: string, delta: number) => {
+    try {
+      await logDailyGoalProgressQuick(goalId, todayStr, delta, user?.uid || 'local');
+      const updatedGoals = readLocalGoals();
+      setGoals(updatedGoals);
+    } catch (err) {
+      console.error('Failed to increment goal:', err);
+    }
+  };
+
   const handleConfirmDeleteHabit = async () => {
     if (!deletingHabit) return;
     setIsDeleting(true);
@@ -657,102 +687,31 @@ export default function Home() {
         />
       </header>
 
-      {/* Today's Progress Card */}
-      <div className="glass-effect rounded-[28px] p-6 flex items-center gap-5">
-        {/* Left circular progress widget */}
-        <div className="w-[114px] h-[114px] rounded-full bg-[#161922] border border-[#212633] flex items-center justify-center relative p-1 shrink-0">
-          <svg className="w-[96px] h-[96px] transform -rotate-90" viewBox="0 0 96 96">
-            {/* Dark background track */}
-            <circle
-              cx="48"
-              cy="48"
-              r="38"
-              stroke="#1c222b"
-              strokeWidth="9"
-              fill="none"
-            />
-            {/* Progress arc */}
-            {progressPercentage > 0 && (
-              <circle
-                cx="48"
-                cy="48"
-                r="38"
-                stroke="var(--app-accent)"
-                strokeWidth="9"
-                fill="none"
-                strokeLinecap="round"
-                strokeDasharray={`${2 * Math.PI * 38}`}
-                strokeDashoffset={`${2 * Math.PI * 38 * (1 - progressPercentage / 100)}`}
-                className="transition-all duration-700 ease-out"
-              />
-            )}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[26px] font-bold text-white tracking-tight leading-none">
-              {progressPercentage}%
-            </span>
-            <span className="text-[12px] font-medium text-[#7a8192] mt-0.5 tracking-tight">
-              today
-            </span>
-          </div>
-        </div>
+      {/* Real Today's Momentum Card (Deterministic Single Source of Truth) */}
+      <MomentumCard
+        momentum={momentumResult}
+        globalStreak={globalStreak}
+        freezeStatus={freezeStatus}
+        onOpenFreezeModal={() => setIsFreezeModalOpen(true)}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
+      />
 
-        {/* Right side info */}
-        <div className="flex-1">
-          <p className="text-[13.5px] font-medium text-[#7d8495] mb-0.5">Today's progress</p>
-          <div className="flex items-baseline gap-1.5 mb-3">
-            <span className="text-4xl font-extrabold text-white tracking-tight">
-              {completedHabitsCount}
-            </span>
-            <span className="text-2xl font-semibold text-[#7d8495]">
-              / {totalCount}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Streak badge */}
-            <div className="bg-[#1e3419] border border-[#2d5025] text-accent-primary px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold">
-              <Flame className="w-3.5 h-3.5 fill-accent-primary/25 stroke-accent-primary" />
-              <span>{globalStreak} {globalStreak === 1 ? 'day' : 'days'}</span>
-            </div>
-
-            {/* Score badge */}
-            <div className="bg-[#1a1d25] border border-[#262b36] text-[#9ca2b2] px-3.5 py-1.5 rounded-full text-xs font-semibold">
-              Score {globalStreak * 10}
-            </div>
-
-            {/* Streak Freeze button */}
-            <button
-              onClick={() => setIsFreezeModalOpen(true)}
-              className={cn(
-                "px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold border transition-all cursor-pointer",
-                freezeStatus.isProtectedToday
-                  ? "bg-[#162736] border-[#3b82f6] text-[#60a5fa] shadow-[0_0_12px_rgba(96,165,250,0.25)]"
-                  : freezeStatus.availableCount > 0
-                  ? "bg-[#16202c] border-[#22394d] text-[#60a5fa] hover:border-[#3b82f6]"
-                  : "bg-white/5 border-white/10 text-[#828b9e] hover:text-white"
-              )}
-              title="Streak Freeze: Protect your streak during days off"
-            >
-              <Snowflake className="w-3.5 h-3.5 text-[#60a5fa]" />
-              <span>
-                {freezeStatus.isProtectedToday
-                  ? 'Frozen'
-                  : `${freezeStatus.availableCount} ${freezeStatus.availableCount === 1 ? 'Freeze' : 'Freezes'}`}
-              </span>
-            </button>
-
-            {/* Share button */}
-            <button
-              onClick={() => setIsShareModalOpen(true)}
-              className="bg-white/5 border border-white/10 hover:bg-white/10 text-white px-3.5 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer"
-            >
-              <Share className="w-3.5 h-3.5" />
-              <span>Share</span>
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Unified Today's Plan (Habits, Tasks, Daily Goals, Focus, Journal) */}
+      <TodayPlan
+        todayStr={todayStr}
+        habits={displayedHabits}
+        logs={logs}
+        localProgress={localProgress}
+        tasks={allTasks}
+        goals={goals}
+        activities={activities}
+        journals={journals}
+        onToggleHabit={handleToggleHabitComplete}
+        onIncrementHabit={(habit, delta) => handleIncrement(habit, delta)}
+        onToggleTask={(_id) => handleToggleTask({ stopPropagation: () => {} } as any, _id)}
+        onIncrementGoal={handleIncrementGoal}
+        onOpenJournalModal={() => setIsReflectionModalOpen(true)}
+      />
 
       {/* AI Coach Banner */}
       <div className="glass-effect rounded-[28px] p-5 flex items-start gap-4">
@@ -1415,6 +1374,18 @@ export default function Home() {
             if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
               navigator.vibrate([40, 60, 40]);
             }
+          }}
+        />
+      )}
+
+      {isReflectionModalOpen && (
+        <DailyReflectionModal
+          isOpen={true}
+          onClose={() => setIsReflectionModalOpen(false)}
+          momentum={momentumResult}
+          userId={user?.uid}
+          onSaved={() => {
+            setJournals(readLocalJournal());
           }}
         />
       )}

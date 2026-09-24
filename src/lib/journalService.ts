@@ -21,12 +21,16 @@ export type JournalMood = 'great' | 'good' | 'neutral' | 'tired' | 'stressed';
 
 export interface JournalEntry {
   id: string;
+  journalId?: string;
   userId?: string;
   date: string; // YYYY-MM-DD
   time: string; // e.g. "9:30 PM"
   mood: JournalMood;
   title?: string;
   text: string;
+  content?: string;
+  productivityRating?: number; // 1-5
+  momentum?: number; // 0-100
   tags?: string[];
   images?: string[];
   linkedHabitIds?: string[];
@@ -203,7 +207,11 @@ export async function createJournalEntry(
   const newEntry: JournalEntry = {
     ...entryData,
     id: tempId,
+    journalId: tempId,
     userId,
+    content: entryData.text || entryData.content || '',
+    productivityRating: entryData.productivityRating,
+    momentum: entryData.momentum,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -221,6 +229,9 @@ export async function createJournalEntry(
         mood: newEntry.mood,
         title: newEntry.title || '',
         text: newEntry.text,
+        content: newEntry.text,
+        productivityRating: newEntry.productivityRating ?? null,
+        momentum: newEntry.momentum ?? null,
         tags: newEntry.tags || [],
         images: newEntry.images || [],
         linkedHabitIds: newEntry.linkedHabitIds || [],
@@ -230,12 +241,35 @@ export async function createJournalEntry(
         updatedAt: serverTimestamp(),
       });
       newEntry.id = docRef.id;
+      newEntry.journalId = docRef.id;
       const updatedLocal = readLocalJournal().map((e) => (e.id === tempId ? newEntry : e));
       saveLocalJournal(updatedLocal);
     } catch (err) {
       console.warn('Could not sync journal entry to Firestore:', err);
       handleFirestoreError(err, OperationType.CREATE, 'journal_logs');
     }
+  }
+
+  // Create Calendar activity for the journal entry
+  try {
+    const { saveActivity } = await import('./activityService');
+    await saveActivity(
+      {
+        userId: userId || 'local',
+        name: newEntry.title || 'Daily Journal Reflection',
+        category: 'Journal',
+        subject: 'Reflection',
+        date: newEntry.date,
+        time: newEntry.time || '20:00',
+        durationMinutes: 5,
+        durationSeconds: 300,
+        completionStatus: 'completed',
+        notes: (newEntry.text || '').substring(0, 100),
+      },
+      userId || 'local'
+    );
+  } catch (actErr) {
+    console.warn('Could not create calendar activity for journal:', actErr);
   }
 
   trackJournalEntryCreated(newEntry.mood);
