@@ -244,12 +244,29 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "title", "time", "repeat", "enabled", "notificationEnabled", "category"]
+    },
+    "Username": {
+      "title": "Username",
+      "description": "Unique username registry",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "normalized": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "username", "normalized"]
     }
   },
   "firestore": {
     "users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "User profiles"
+    },
+    "usernames/{usernameId}": {
+      "schema": { "$ref": "#/entities/Username" },
+      "description": "Unique username registry"
     },
     "habits/{habitId}": {
       "schema": { "$ref": "#/entities/Habit" },

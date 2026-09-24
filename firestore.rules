@@ -40,8 +40,18 @@ service cloud.firestore {
         && (!('onboardingCompleted' in data) || data.onboardingCompleted is bool)
         && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 200000))
         && (!('userName' in data) || (data.userName is string && data.userName.size() <= 100))
+        && (!('userNameNormalized' in data) || (data.userNameNormalized is string && data.userNameNormalized.size() <= 100))
         && (!('routinePreference' in data) || (data.routinePreference is string && data.routinePreference.size() <= 100))
         && (!('appearancePreference' in data) || (data.appearancePreference is string && data.appearancePreference.size() <= 500));
+    }
+
+    function isValidUsernameDoc(data) {
+      return data.keys().hasAll(['uid', 'username', 'normalized'])
+        && data.uid is string && data.uid.size() <= 128
+        && data.username is string && data.username.size() >= 3 && data.username.size() <= 50
+        && data.normalized is string && data.normalized.size() >= 3 && data.normalized.size() <= 50
+        && (!('createdAt' in data) || isValidTimestamp(data.createdAt))
+        && (!('updatedAt' in data) || isValidTimestamp(data.updatedAt));
     }
 
     function isValidHabit(data) {
@@ -225,6 +235,24 @@ service cloud.firestore {
       match /{allSubcollections=**} {
         allow read, write: if isOwner(userId);
       }
+    }
+
+    // Usernames (Atomic claim registry & public handle lookup)
+    match /usernames/{usernameId} {
+      allow get: if true;
+      allow list: if request.auth != null;
+      allow create: if request.auth != null 
+        && isValidId(usernameId)
+        && incoming().uid == request.auth.uid
+        && isValidUsernameDoc(incoming());
+      allow update: if request.auth != null
+        && isValidId(usernameId)
+        && existing().uid == request.auth.uid
+        && incoming().uid == request.auth.uid
+        && isValidUsernameDoc(incoming());
+      allow delete: if request.auth != null 
+        && isValidId(usernameId)
+        && existing().uid == request.auth.uid;
     }
 
     // Habits
