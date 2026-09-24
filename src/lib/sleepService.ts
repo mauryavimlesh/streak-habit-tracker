@@ -15,6 +15,12 @@ import {
 import { readLocalHabits, saveLocalHabits, Habit, HabitLog, logHabit, updateHabit, readLocalLogs, saveLocalLogs } from './habitService';
 import { readLocalReminders, saveLocalReminders, ReminderItem, createReminder, updateReminder } from './reminderService';
 import { isCloudSyncableUser } from './authUtils';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
+
+let sleepSettingsCache: SleepSettings | null = null;
+let sleepSettingsCacheUserId: string | null = null;
+let sleepSettingsCacheTimestamp = 0;
+const SLEEP_CACHE_TTL = 5 * 60 * 1000; // 5 mins
 
 export interface SleepSettings {
   enabled: boolean;
@@ -211,13 +217,21 @@ export async function getSleepSettings(userId?: string): Promise<SleepSettings> 
     return local;
   }
 
+  if (sleepSettingsCache && sleepSettingsCacheUserId === userId && Date.now() - sleepSettingsCacheTimestamp < SLEEP_CACHE_TTL) {
+    return sleepSettingsCache;
+  }
+
   try {
     const docRef = doc(db, 'users', userId, 'settings', 'sleep');
+    logFirestoreRead('sleepService:getSleepSettings', `users/${userId}/settings/sleep`);
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const remote = snap.data() as SleepSettings;
       const merged = { ...DEFAULT_SLEEP_SETTINGS, ...remote };
       saveLocalSleepSettings(merged);
+      sleepSettingsCache = merged;
+      sleepSettingsCacheUserId = userId;
+      sleepSettingsCacheTimestamp = Date.now();
       return merged;
     }
   } catch (err) {
@@ -238,19 +252,9 @@ export async function updateSleepSettings(
   updates: Partial<SleepSettings>,
   userId?: string
 ): Promise<SleepSettings> {
-  console.log('[SleepService] --- updateSleepSettings START ---');
-  console.log('[SleepService] Payload:', updates);
-  console.log('[SleepService] userId:', userId);
-
   let docRef: any = null;
   if (isCloudSyncableUser(userId)) {
     docRef = doc(db, 'users', userId, 'settings', 'sleep');
-    try {
-      const snapBefore = await getDoc(docRef);
-      console.log('[SleepService] DB Record BEFORE update:', snapBefore.exists() ? snapBefore.data() : '(Not found)');
-    } catch (err) {
-      console.error('[SleepService] API Error fetching DB Record BEFORE update:', err);
-    }
   }
 
   const current = readLocalSleepSettings();
@@ -279,25 +283,21 @@ export async function updateSleepSettings(
 
   try {
     saveLocalSleepSettings(updated);
-    console.log('[SleepService] Local state transition saved:', updated);
+    sleepSettingsCache = updated;
+    sleepSettingsCacheUserId = userId || null;
+    sleepSettingsCacheTimestamp = Date.now();
   } catch (err) {
     console.error('[SleepService] Local state transition error during save:', err);
   }
 
-  // 1. Sync to Firestore
-  if (docRef) {
+  // 1. Sync to Firestore (Write only, no redundant read before or after)
+  if (docRef && userId) {
     try {
-      console.log(`[SleepService] Syncing to Firestore API with payload:`, updated);
+      logFirestoreWrite('sleepService:updateSleepSettings', `users/${userId}/settings/sleep`, 'set');
       await setDoc(docRef, { ...updated, updatedAt: serverTimestamp() }, { merge: true });
-      console.log('[SleepService] Successfully merged to Firestore API.');
-      
-      const snapAfter = await getDoc(docRef);
-      console.log('[SleepService] DB Record AFTER update:', snapAfter.exists() ? snapAfter.data() : '(Not found)');
     } catch (err) {
       console.error('[SleepService] API Error syncing sleep settings to Firestore:', err);
     }
-  } else {
-    console.log(`[SleepService] Skipping Firestore API sync because userId is invalid or local: ${userId}`);
   }
 
   // 2. Synchronize with Sleep Habit in habitService
@@ -448,10 +448,18 @@ export function saveLocalSleepRecords(records: SleepRecord[]): void {
   }
 }
 
+let sleepRecordsCache: SleepRecord[] | null = null;
+let sleepRecordsCacheUserId: string | null = null;
+let sleepRecordsCacheTimestamp = 0;
+
 export async function getSleepRecords(userId?: string): Promise<SleepRecord[]> {
   const local = readLocalSleepRecords();
   if (!isCloudSyncableUser(userId)) {
     return local;
+  }
+
+  if (sleepRecordsCache && sleepRecordsCacheUserId === userId && Date.now() - sleepRecordsCacheTimestamp < SLEEP_CACHE_TTL) {
+    return sleepRecordsCache;
   }
 
   try {
@@ -459,10 +467,14 @@ export async function getSleepRecords(userId?: string): Promise<SleepRecord[]> {
       collection(db, 'users', userId, 'sleep_records'),
       orderBy('date', 'desc')
     );
+    logFirestoreRead('sleepService:getSleepRecords', `users/${userId}/sleep_records`);
     const snap = await getDocs(q);
     const remote: SleepRecord[] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as SleepRecord));
     if (remote.length > 0) {
       saveLocalSleepRecords(remote);
+      sleepRecordsCache = remote;
+      sleepRecordsCacheUserId = userId;
+      sleepRecordsCacheTimestamp = Date.now();
       return remote;
     }
   } catch (err) {
@@ -502,11 +514,15 @@ export async function saveSleepRecord(
   }
 
   saveLocalSleepRecords(records);
+  sleepRecordsCache = records;
+  sleepRecordsCacheUserId = userId || null;
+  sleepRecordsCacheTimestamp = Date.now();
 
   // Sync to Firestore
   if (isCloudSyncableUser(userId)) {
     try {
       const docRef = doc(db, 'users', userId, 'sleep_records', id);
+      logFirestoreWrite('sleepService:saveSleepRecord', `users/${userId}/sleep_records/${id}`, 'set');
       await setDoc(docRef, { ...fullRecord, updatedAt: serverTimestamp() }, { merge: true });
     } catch (err) {
       console.warn('Failed to save sleep record to Firestore:', err);

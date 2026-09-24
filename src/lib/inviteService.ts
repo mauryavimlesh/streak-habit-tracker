@@ -13,6 +13,7 @@
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { isCloudSyncableUser } from './authUtils';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
 
 export interface UserInvite {
   code: string;
@@ -75,6 +76,7 @@ export async function getOrInitUserInvite(
   if (isCloudSyncableUser(userId)) {
     try {
       const inviteDocRef = doc(db, 'invites', cleanUsername);
+      logFirestoreWrite('inviteService:getOrInitUserInvite', `invites/${cleanUsername}`, 'set');
       await setDoc(
         inviteDocRef,
         {
@@ -113,6 +115,7 @@ export async function resolveInviteCode(code: string): Promise<{
   try {
     // 1. Check invites collection
     const inviteRef = doc(db, 'invites', cleanCode);
+    logFirestoreRead('inviteService:resolveInviteCode:invites', `invites/${cleanCode}`);
     const snap = await getDoc(inviteRef);
     if (snap.exists()) {
       const data = snap.data();
@@ -127,6 +130,7 @@ export async function resolveInviteCode(code: string): Promise<{
 
     // 2. Check usernames collection as fallback
     const userRef = doc(db, 'usernames', cleanCode);
+    logFirestoreRead('inviteService:resolveInviteCode:usernames', `usernames/${cleanCode}`);
     const userSnap = await getDoc(userRef);
     if (userSnap.exists()) {
       const udata = userSnap.data();
@@ -167,6 +171,7 @@ export async function recordReferralSignup(inviteCode: string, newUserId: string
 
     const referralDocId = `ref_${inviteInfo.inviterUid}_${newUserId}`;
     const referralRef = doc(db, 'referrals', referralDocId);
+    logFirestoreRead('inviteService:recordReferralSignup', `referrals/${referralDocId}`);
     const existingRef = await getDoc(referralRef);
 
     // Prevent duplicate referral rewards
@@ -175,6 +180,7 @@ export async function recordReferralSignup(inviteCode: string, newUserId: string
     }
 
     // Record referral in database
+    logFirestoreWrite('inviteService:recordReferralSignup:referral', `referrals/${referralDocId}`, 'set');
     await setDoc(referralRef, {
       id: referralDocId,
       inviterUid: inviteInfo.inviterUid,
@@ -186,6 +192,7 @@ export async function recordReferralSignup(inviteCode: string, newUserId: string
 
     // Record attribution on user doc
     const userRef = doc(db, 'users', newUserId);
+    logFirestoreWrite('inviteService:recordReferralSignup:userAttr', `users/${newUserId}`, 'set');
     await setDoc(
       userRef,
       {

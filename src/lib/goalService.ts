@@ -16,6 +16,7 @@ import {
 import { trackGoalCreated, trackGoalCompleted, trackGoalUpdated, trackGoalDeleted } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
 import { isCloudSyncableUser } from './authUtils';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
 import { getTodayDateKey, formatDateKey, addDays } from './dateUtils';
 import {
   calculateGoalProgress,
@@ -338,6 +339,7 @@ export async function getUserGoals(userId?: string, force = false): Promise<Goal
 
   try {
     const q = query(collection(db, 'goals'), where('userId', '==', userId));
+    logFirestoreRead('goalService:getUserGoals', `goals (userId: ${userId})`);
     const snapshot = await getDocs(q);
     const rawFirestoreGoals: Goal[] = snapshot.docs.map((docSnap) => {
       const data = docSnap.data();
@@ -1474,7 +1476,6 @@ export async function syncLocalGoalsToCloud(userId: string) {
       const targetDocId = goal.id || 'goal_' + Date.now();
       const targetDocRef = doc(db, 'goals', targetDocId);
       try {
-        const snap = await getDoc(targetDocRef);
         const goalPayload: Record<string, any> = {
           userId,
           title: goal.title || 'Goal',
@@ -1491,19 +1492,11 @@ export async function syncLocalGoalsToCloud(userId: string) {
         if (Array.isArray(goal.milestones)) goalPayload.milestones = goal.milestones;
         if (Array.isArray(goal.linkedHabitIds)) goalPayload.linkedHabitIds = goal.linkedHabitIds;
 
-        if (!snap.exists()) {
-          goalPayload.createdAt = serverTimestamp();
-          await setDoc(targetDocRef, goalPayload);
-        } else {
-          await updateDoc(targetDocRef, goalPayload);
-        }
+        logFirestoreWrite('goalService:syncLocalGoalsToCloud', `goals/${targetDocId}`, 'set');
+        await setDoc(targetDocRef, goalPayload, { merge: true });
       } catch (e) {
         handleFirestoreError(e, OperationType.WRITE, `goals/${targetDocId}`);
       }
     }
   }
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('streak_goals_updated', () => clearGoalsCache());
 }

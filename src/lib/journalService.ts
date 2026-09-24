@@ -16,6 +16,7 @@ import {
 import { trackJournalEntryCreated, trackJournalEntryEdited, trackJournalEntryDeleted } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
 import { isCloudSyncableUser } from './authUtils';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
 
 export type JournalMood = 'great' | 'good' | 'neutral' | 'tired' | 'stressed';
 
@@ -130,6 +131,7 @@ export async function getUserJournal(userId?: string, force = false): Promise<Jo
 
   try {
     const q = query(collection(db, 'journal_logs'), where('userId', '==', userId));
+    logFirestoreRead('journalService:getUserJournal', `journal_logs (userId: ${userId})`);
     const snapshot = await getDocs(q);
     const rawFirestoreEntries: JournalEntry[] = snapshot.docs.map((docSnap) => {
       const data = docSnap.data();
@@ -348,7 +350,6 @@ export const syncLocalJournalToCloud = async (userId: string) => {
       const targetDocId = entry.id || 'journal_' + Date.now();
       const targetDocRef = doc(db, 'journal_logs', targetDocId);
       try {
-        const snap = await getDoc(targetDocRef);
         const journalPayload: Record<string, any> = {
           userId,
           date: entry.date,
@@ -364,12 +365,8 @@ export const syncLocalJournalToCloud = async (userId: string) => {
         if (Array.isArray(entry.linkedHabitIds)) journalPayload.linkedHabitIds = entry.linkedHabitIds;
         if (Array.isArray(entry.linkedGoalIds)) journalPayload.linkedGoalIds = entry.linkedGoalIds;
 
-        if (!snap.exists()) {
-          journalPayload.createdAt = serverTimestamp();
-          await setDoc(targetDocRef, journalPayload);
-        } else {
-          await updateDoc(targetDocRef, journalPayload);
-        }
+        logFirestoreWrite('journalService:syncLocalJournalToCloud', `journal_logs/${targetDocId}`, 'set');
+        await setDoc(targetDocRef, journalPayload, { merge: true });
         syncCount++;
       } catch (e) {
         handleFirestoreError(e, OperationType.WRITE, `journal_logs/${targetDocId}`);
@@ -427,8 +424,4 @@ export function subscribeToJournal(
       callback(readLocalJournal());
     }
   );
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('streak_journal_updated', () => clearJournalCache());
 }

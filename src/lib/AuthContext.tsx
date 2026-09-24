@@ -10,6 +10,8 @@ import { syncLocalJournalToCloud } from './journalService';
 import { syncLocalGoalsToCloud } from './goalService';
 import { syncLocalRemindersToCloud } from './reminderService';
 import { trackLogin, trackLogout, trackSignUp, identifyUser } from './analyticsService';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
+import { setXPCache } from './xpService';
 import {
   migrateGuestDataToFirestore,
   hasGuestDataToMigrate,
@@ -58,6 +60,13 @@ export const STREAK_GUEST_DATA_KEY = 'streak_guest_data';
 export const LOCAL_STORAGE_PROFILE_KEY = 'streak_user_profile';
 export const LOCAL_STORAGE_ONBOARDING_KEY = 'streak_onboarding_completed';
 export const STREAK_PROFILE_UPDATED_EVENT = 'streak_profile_updated';
+
+// In-memory profile cache to prevent redundant users/{uid} reads across navigation
+let inMemoryProfileCache: UserProfile | null = null;
+let inMemoryProfileUid: string | null = null;
+let inMemoryProfileTimestamp = 0;
+const PROFILE_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+let hasSyncedInitialOfflineData = false;
 
 export interface GuestData {
   id: string;
@@ -398,7 +407,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         fsData.hasCompletedOnboarding = Boolean(isCompleted);
       }
 
+      logFirestoreWrite('AuthContext:saveUserProfile', `users/${uid}`, 'set');
       await setDoc(userRef, fsData, { merge: true });
+
+      // Keep in-memory cache fresh
+      if (inMemoryProfileCache && inMemoryProfileUid === uid) {
+        inMemoryProfileCache = {
+          ...inMemoryProfileCache,
+          ...data,
+        };
+        inMemoryProfileTimestamp = Date.now();
+      }
     } catch (err) {
       console.error('Failed to sync profile to Firestore:', err);
     }
@@ -438,7 +457,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Asynchronous profile fetch and background cloud sync
         (async () => {
           try {
-            // Migrate guest data to Firestore if present
+            // Check in-memory profile cache before querying Firestore
+            if (
+              inMemoryProfileCache &&
+              inMemoryProfileUid === currentUser.uid &&
+              Date.now() - inMemoryProfileTimestamp < PROFILE_CACHE_TTL
+            ) {
+              setProfile(inMemoryProfileCache);
+              return;
+            }
+
+            // Migrate guest data to Firestore if present (one time)
             if (hasGuestDataToMigrate()) {
               try {
                 const migrationOutcome = await migrateGuestDataToFirestore(
@@ -454,6 +483,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
 
             const userRef = doc(db, 'users', currentUser.uid);
+            logFirestoreRead('AuthContext:onAuthStateChanged', `users/${currentUser.uid}`);
             const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500));
             const userSnap: any = await Promise.race([getDoc(userRef), timeoutPromise]);
 
@@ -475,6 +505,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 } catch (e) {}
               }
 
+              if (typeof (fsData as any).lifetimeXP === 'number') {
+                setXPCache(currentUser.uid, (fsData as any).lifetimeXP);
+              }
+
               const merged: UserProfile = {
                 ...localProfile,
                 ...fsData,
@@ -491,6 +525,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 appearancePreference: fsData.appearancePreference || localProfile?.appearancePreference,
               };
 
+              inMemoryProfileCache = merged;
+              inMemoryProfileUid = currentUser.uid;
+              inMemoryProfileTimestamp = Date.now();
+
               setProfile(merged);
               try {
                 localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(merged));
@@ -499,7 +537,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 } else {
                   localStorage.removeItem(LOCAL_STORAGE_ONBOARDING_KEY);
                 }
-                window.dispatchEvent(new CustomEvent(STREAK_PROFILE_UPDATED_EVENT, { detail: merged }));
               } catch {}
 
               if (isCompleted && (!fsData.onboardingCompleted || !fsData.hasCompletedOnboarding)) {
@@ -535,6 +572,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               if (localProfile?.mainGoal) {
                 newProfile.mainGoal = localProfile.mainGoal;
               }
+              logFirestoreWrite('AuthContext:newUserDoc', `users/${currentUser.uid}`, 'set');
               await setDoc(userRef, newProfile);
               const fullProfile: UserProfile = {
                 ...newProfile,
@@ -543,27 +581,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 hasCompletedOnboarding: isCompleted,
                 onboardingCompleted: isCompleted,
               };
+
+              inMemoryProfileCache = fullProfile;
+              inMemoryProfileUid = currentUser.uid;
+              inMemoryProfileTimestamp = Date.now();
+
               setProfile(fullProfile);
               try {
                 localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(fullProfile));
                 if (isCompleted) {
                   localStorage.setItem(LOCAL_STORAGE_ONBOARDING_KEY, 'true');
                 }
-                window.dispatchEvent(new CustomEvent(STREAK_PROFILE_UPDATED_EVENT, { detail: fullProfile }));
               } catch {}
               trackSignUp('user_created');
             }
 
-            // Sync offline entities
-            Promise.allSettled([
-              syncLocalToCloud(currentUser.uid),
-              syncLocalTasksToCloud(currentUser.uid),
-              syncLocalJournalToCloud(currentUser.uid),
-              syncLocalGoalsToCloud(currentUser.uid),
-              syncLocalRemindersToCloud(currentUser.uid),
-            ]).then(() => {
-              trackLogin('auth_state');
-            }).catch(() => {});
+            // Sync offline entities (only once per session)
+            if (!hasSyncedInitialOfflineData) {
+              hasSyncedInitialOfflineData = true;
+              Promise.allSettled([
+                syncLocalToCloud(currentUser.uid),
+                syncLocalTasksToCloud(currentUser.uid),
+                syncLocalJournalToCloud(currentUser.uid),
+                syncLocalGoalsToCloud(currentUser.uid),
+                syncLocalRemindersToCloud(currentUser.uid),
+              ]).then(() => {
+                trackLogin('auth_state');
+              }).catch(() => {});
+            }
           } catch (error) {
             console.warn("Background auth profile sync notice:", error);
             if (localProfile) {

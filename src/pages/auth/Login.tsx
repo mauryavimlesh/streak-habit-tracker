@@ -124,7 +124,7 @@ export default function Login() {
         available: result.available,
         message: result.available ? 'Username is available!' : result.error || 'Username already taken.',
       });
-    }, 350);
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [username, mode, signupStep, user]);

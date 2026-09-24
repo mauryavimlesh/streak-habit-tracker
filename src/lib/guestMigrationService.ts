@@ -508,12 +508,6 @@ export async function migrateGuestDataToFirestore(
     if (operationCount > 0) {
       // Commit the atomic batch to Firestore
       await batch.commit();
-
-      // Explicit verification check: confirm the write reached Firestore
-      const confirmationSnap = await getDoc(userRef);
-      if (!confirmationSnap.exists()) {
-        throw new Error('Database write could not be confirmed after batch commit.');
-      }
     }
 
     // 10. ONLY AFTER SUCCESSFUL CONFIRMATION: CLEAR LOCAL GUEST STORAGE

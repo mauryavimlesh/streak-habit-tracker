@@ -15,6 +15,15 @@
 import { doc, getDoc, setDoc, deleteDoc, runTransaction, serverTimestamp, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from './firebase';
 import { isCloudSyncableUser } from './authUtils';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
+
+// In-memory cache for availability checks to prevent duplicate reads while typing
+const availabilityCache = new Map<string, { available: boolean; error?: string; timestamp: number }>();
+const AVAILABILITY_TTL = 45 * 1000; // 45 seconds
+
+// In-memory cache for public profiles
+const publicProfileCache = new Map<string, { profile: PublicUserProfile; timestamp: number }>();
+const PUBLIC_PROFILE_TTL = 3 * 60 * 1000; // 3 minutes
 
 export const RESERVED_USERNAMES = new Set([
   'admin',
@@ -102,7 +111,7 @@ export function validateUsernameSyntax(input: string): UsernameValidationResult 
 }
 
 /**
- * Check whether a username is available in Firestore
+ * Check whether a username is available in Firestore (with in-memory TTL caching)
  */
 export async function checkUsernameAvailability(username: string, currentUid?: string): Promise<{ available: boolean; error?: string }> {
   const validation = validateUsernameSyntax(username);
@@ -110,21 +119,33 @@ export async function checkUsernameAvailability(username: string, currentUid?: s
     return { available: false, error: validation.error };
   }
 
+  // Check in-memory cache first
+  const cacheKey = `${validation.normalized}_${currentUid || 'anon'}`;
+  const cached = availabilityCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < AVAILABILITY_TTL) {
+    return { available: cached.available, error: cached.error };
+  }
+
   try {
     const docRef = doc(db, 'usernames', validation.normalized);
+    logFirestoreRead('usernameService:checkAvailability', `usernames/${validation.normalized}`);
     const snap = await getDoc(docRef);
 
     if (!snap.exists()) {
+      availabilityCache.set(cacheKey, { available: true, timestamp: Date.now() });
       return { available: true };
     }
 
     const data = snap.data();
     // If the current user already owns this username, it's available to them
     if (currentUid && data?.uid === currentUid) {
+      availabilityCache.set(cacheKey, { available: true, timestamp: Date.now() });
       return { available: true };
     }
 
-    return { available: false, error: 'That username is already taken.' };
+    const res = { available: false, error: 'That username is already taken.' };
+    availabilityCache.set(cacheKey, { ...res, timestamp: Date.now() });
+    return res;
   } catch (err: any) {
     console.warn('Error checking username availability:', err);
     // In guest mode or network failure, allow syntax pass
@@ -162,6 +183,7 @@ export async function claimUsername(
     const newUsernameRef = doc(db, 'usernames', normalized);
     const userDocRef = doc(db, 'users', userId);
 
+    logFirestoreWrite('usernameService:claimUsername', `usernames/${normalized}`, 'set');
     await runTransaction(db, async (transaction) => {
       const usernameDoc = await transaction.get(newUsernameRef);
 
@@ -199,6 +221,9 @@ export async function claimUsername(
       );
     });
 
+    // Invalidate local availability cache
+    availabilityCache.clear();
+
     return {
       success: true,
       username: cleanOriginal,
@@ -229,9 +254,10 @@ export async function searchUsersByUsername(queryStr: string, currentUid?: strin
       usernamesColl,
       where('normalized', '>=', normQuery),
       where('normalized', '<=', normQuery + '\uf8ff'),
-      limit(10)
+      limit(6)
     );
 
+    logFirestoreRead('usernameService:searchUsers', `usernames (prefix: ${normQuery})`);
     const snapshot = await getDocs(q);
     const results: PublicUserProfile[] = [];
 
@@ -239,12 +265,20 @@ export async function searchUsersByUsername(queryStr: string, currentUid?: strin
       const data = d.data();
       if (currentUid && data.uid === currentUid) continue;
 
+      // Check public profile cache first
+      const cached = publicProfileCache.get(data.uid);
+      if (cached && Date.now() - cached.timestamp < PUBLIC_PROFILE_TTL) {
+        results.push(cached.profile);
+        continue;
+      }
+
       // Fetch public profile data from user doc
       try {
+        logFirestoreRead('usernameService:searchUserProfile', `users/${data.uid}`);
         const uSnap = await getDoc(doc(db, 'users', data.uid));
         const uData = uSnap.data() || {};
 
-        results.push({
+        const pub: PublicUserProfile = {
           uid: data.uid,
           username: data.username || d.id,
           normalizedUsername: data.normalized || d.id,
@@ -255,7 +289,9 @@ export async function searchUsersByUsername(queryStr: string, currentUid?: strin
           level: uData.level || 1,
           momentum: uData.momentum || 0,
           updatedAt: uData.updatedAt?.toDate ? uData.updatedAt.toDate().toISOString() : undefined,
-        });
+        };
+        publicProfileCache.set(data.uid, { profile: pub, timestamp: Date.now() });
+        results.push(pub);
       } catch {
         results.push({
           uid: data.uid,
@@ -280,17 +316,25 @@ export async function getPublicProfileByUsername(username: string): Promise<Publ
   const normalized = normalizeUsername(username);
   if (!normalized) return null;
 
+  // Check cache
+  const cached = publicProfileCache.get(normalized);
+  if (cached && Date.now() - cached.timestamp < PUBLIC_PROFILE_TTL) {
+    return cached.profile;
+  }
+
   try {
     const uRef = doc(db, 'usernames', normalized);
+    logFirestoreRead('usernameService:getPublicProfile', `usernames/${normalized}`);
     const uSnap = await getDoc(uRef);
     if (!uSnap.exists()) return null;
 
     const data = uSnap.data();
     const userDocRef = doc(db, 'users', data.uid);
+    logFirestoreRead('usernameService:getPublicProfileUser', `users/${data.uid}`);
     const userSnap = await getDoc(userDocRef);
     const userData = userSnap.data() || {};
 
-    return {
+    const pubProfile: PublicUserProfile = {
       uid: data.uid,
       username: data.username || normalized,
       normalizedUsername: normalized,
@@ -301,6 +345,10 @@ export async function getPublicProfileByUsername(username: string): Promise<Publ
       level: userData.level || 1,
       momentum: userData.momentum || 0,
     };
+
+    publicProfileCache.set(normalized, { profile: pubProfile, timestamp: Date.now() });
+    publicProfileCache.set(data.uid, { profile: pubProfile, timestamp: Date.now() });
+    return pubProfile;
   } catch (err) {
     console.warn('Error fetching public profile by username:', err);
     return null;

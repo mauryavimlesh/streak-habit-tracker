@@ -18,6 +18,11 @@ import { trackReminderCreated, trackReminderTriggered } from './analyticsService
 import { handleFirestoreError, OperationType } from './firestoreErrors';
 import { isCloudSyncableUser } from './authUtils';
 import { VibrationPatternType } from './alarmAudio';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
+
+let remindersMemoryCache: ReminderItem[] | null = null;
+let remindersCacheTimestamp = 0;
+const REMINDERS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export type ReminderRepeat = 'once' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'custom' | 'monthly';
 export type ReminderCategory = 'habit' | 'task' | 'general' | 'morning' | 'night';
@@ -729,10 +734,14 @@ export function generateStableReminderId(): string {
   return `rem_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-export async function getUserReminders(userId: string): Promise<ReminderItem[]> {
+export async function getUserReminders(userId: string, force = false): Promise<ReminderItem[]> {
   const local = readLocalReminders();
   if (!isCloudSyncableUser(userId)) {
     return deduplicateReminders(local);
+  }
+
+  if (!force && remindersMemoryCache && Date.now() - remindersCacheTimestamp < REMINDERS_CACHE_TTL) {
+    return remindersMemoryCache;
   }
 
   try {
@@ -740,6 +749,7 @@ export async function getUserReminders(userId: string): Promise<ReminderItem[]> 
       collection(db, 'reminders'),
       where('userId', '==', userId)
     );
+    logFirestoreRead('reminderService:getUserReminders', `reminders (userId: ${userId})`);
     const snapshot = await getDocs(q);
     const rawFirestoreReminders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ReminderItem));
 
@@ -753,12 +763,16 @@ export async function getUserReminders(userId: string): Promise<ReminderItem[]> 
       const clean = deduplicateReminders(rawFirestoreReminders);
       saveLocalReminders(clean);
       localStorage.setItem(REMINDERS_INITIALIZED_KEY, 'true');
+      remindersMemoryCache = clean;
+      remindersCacheTimestamp = Date.now();
       return clean;
     } else {
       if (local.length > 0) {
         await syncLocalRemindersToCloud(userId);
         return deduplicateReminders(local);
       }
+      remindersMemoryCache = [];
+      remindersCacheTimestamp = Date.now();
       return [];
     }
   } catch (err) {

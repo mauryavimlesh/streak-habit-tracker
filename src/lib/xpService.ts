@@ -14,6 +14,17 @@ import { doc, getDoc, setDoc, serverTimestamp, collection, addDoc } from 'fireba
 import { db } from './firebase';
 import { isCloudSyncableUser } from './authUtils';
 import { getTodayDateKey } from './dateUtils';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
+
+let xpCacheTimestamp = 0;
+let xpCachedUserId: string | null = null;
+const XP_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+export function setXPCache(userId: string, xp: number) {
+  xpCachedUserId = userId;
+  xpCacheTimestamp = Date.now();
+  saveStoredLifetimeXP(xp);
+}
 
 export type XPSourceType =
   | 'habit'
@@ -278,6 +289,7 @@ export async function awardXP(params: AwardXPParams): Promise<AwardXPResult> {
     try {
       // Save event
       const eventRef = doc(db, 'xp_events', eventId);
+      logFirestoreWrite('xpService:awardXP:event', `xp_events/${eventId}`, 'set');
       await setDoc(eventRef, {
         ...newEvent,
         createdAt: serverTimestamp(),
@@ -285,6 +297,7 @@ export async function awardXP(params: AwardXPParams): Promise<AwardXPResult> {
 
       // Update user lifetime XP
       const userRef = doc(db, 'users', params.userId);
+      logFirestoreWrite('xpService:awardXP:user', `users/${params.userId}`, 'set');
       await setDoc(
         userRef,
         {
@@ -309,15 +322,20 @@ export async function awardXP(params: AwardXPParams): Promise<AwardXPResult> {
 }
 
 /**
- * Sync lifetime XP from Firestore on initial login
+ * Sync lifetime XP from Firestore on initial login (cached with TTL)
  */
-export async function syncUserXPFromCloud(userId: string): Promise<number> {
+export async function syncUserXPFromCloud(userId: string, force = false): Promise<number> {
   if (!isCloudSyncableUser(userId)) {
+    return getStoredLifetimeXP();
+  }
+
+  if (!force && xpCachedUserId === userId && Date.now() - xpCacheTimestamp < XP_CACHE_TTL) {
     return getStoredLifetimeXP();
   }
 
   try {
     const userRef = doc(db, 'users', userId);
+    logFirestoreRead('xpService:syncUserXP', `users/${userId}`);
     const snap = await getDoc(userRef);
     if (snap.exists()) {
       const data = snap.data();
@@ -326,10 +344,14 @@ export async function syncUserXPFromCloud(userId: string): Promise<number> {
       // Use highest to prevent regression
       const resolvedXP = Math.max(cloudXP, localXP);
       saveStoredLifetimeXP(resolvedXP);
+      xpCachedUserId = userId;
+      xpCacheTimestamp = Date.now();
       return resolvedXP;
     }
   } catch (err) {
     console.warn('Failed to sync XP from cloud:', err);
   }
+  xpCachedUserId = userId;
+  xpCacheTimestamp = Date.now();
   return getStoredLifetimeXP();
 }

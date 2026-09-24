@@ -2,6 +2,7 @@ import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, query, where, o
 import { db } from './firebase';
 import { isCloudSyncableUser } from './authUtils';
 import { getTodayDateKey, addDays } from './dateUtils';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
 
 export interface Activity {
   id?: string;
@@ -92,6 +93,7 @@ export async function getUserActivities(userId: string, force = false): Promise<
   }
   try {
     const q = query(collection(db, 'activities'), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+    logFirestoreRead('activityService:getUserActivities', `activities (userId: ${userId})`);
     const snapshot = await getDocs(q);
     const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Activity));
     saveLocalActivities(activities);
@@ -104,9 +106,11 @@ export async function getUserActivities(userId: string, force = false): Promise<
 }
 
 export async function deleteActivity(id: string, userId?: string) {
-  activitiesMemoryCache = null;
   const local = getLocalActivities().filter((a) => a.id !== id);
   saveLocalActivities(local);
+  if (activitiesMemoryCache) {
+    activitiesMemoryCache = activitiesMemoryCache.filter((a) => a.id !== id);
+  }
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('streak_activities_updated'));
@@ -114,6 +118,7 @@ export async function deleteActivity(id: string, userId?: string) {
 
   if (isCloudSyncableUser(userId) && !id.startsWith('act_')) {
     try {
+      logFirestoreWrite('activityService:deleteActivity', `activities/${id}`, 'delete');
       await deleteDoc(doc(db, 'activities', id));
     } catch (e) {
       console.warn('Error deleting activity', e);
@@ -198,14 +203,4 @@ export function calculateStudyStatistics(activities: Activity[]): StudyStatistic
     studyStreakDays,
     subjectBreakdown,
   };
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('streak_activities_updated', () => {
-    // Invalidate activity cache
-    // Because activitiesMemoryCache is not exported, we need a function or just do it if we exported it
-  });
-}
-if (typeof window !== 'undefined') {
-  window.addEventListener('streak_activities_updated', () => clearActivitiesCache());
 }

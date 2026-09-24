@@ -28,6 +28,12 @@ import { isCloudSyncableUser } from './authUtils';
 import { Habit } from './habitService';
 import { addDays, getTodayDateKey } from './dateUtils';
 import { PublicUserProfile, searchUsersByUsername } from './usernameService';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
+
+let friendsCache: FriendRelation[] | null = null;
+let friendsCacheUserId: string | null = null;
+let friendsCacheTimestamp = 0;
+const FRIENDS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export type FriendshipStatus =
   | 'none'
@@ -284,8 +290,13 @@ export async function syncFriendsFromCloud(userUid: string): Promise<FriendRelat
     return getLocalFriends();
   }
 
+  if (friendsCache && friendsCacheUserId === userUid && Date.now() - friendsCacheTimestamp < FRIENDS_CACHE_TTL) {
+    return friendsCache;
+  }
+
   try {
     const q = query(collection(db, 'friends'), where('userId', '==', userUid));
+    logFirestoreRead('socialService:syncFriendsFromCloud', `friends (userId: ${userUid})`);
     const snap = await getDocs(q);
     const fetched: FriendRelation[] = [];
 
@@ -305,13 +316,20 @@ export async function syncFriendsFromCloud(userUid: string): Promise<FriendRelat
 
     if (fetched.length > 0) {
       saveLocalFriends(fetched);
+      friendsCache = fetched;
+      friendsCacheUserId = userUid;
+      friendsCacheTimestamp = Date.now();
       return fetched;
     }
   } catch (err) {
     console.warn('Failed syncing friends from Firestore:', err);
   }
 
-  return getLocalFriends();
+  const local = getLocalFriends();
+  friendsCache = local;
+  friendsCacheUserId = userUid;
+  friendsCacheTimestamp = Date.now();
+  return local;
 }
 
 /**

@@ -12,6 +12,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { isCloudSyncableUser } from './authUtils';
 import { awardXP } from './xpService';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
 
 export interface AchievementDefinition {
   id: string;
@@ -199,6 +200,7 @@ export async function checkAndUnlockAchievement(
   if (isCloudSyncableUser(userId)) {
     try {
       const docRef = doc(db, 'user_achievements', `${userId}_${achievementId}`);
+      logFirestoreWrite('achievementService:unlockAchievement', `user_achievements/${userId}_${achievementId}`, 'set');
       await setDoc(
         docRef,
         {

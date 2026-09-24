@@ -10,9 +10,15 @@ import {
 import { getTodayDateKey } from './dateUtils';
 import { db } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
 
 const DEFAULT_FREEZE_CAPACITY = 2;
 const LOCAL_FREEZE_KEY_PREFIX = 'streak_freeze_config_';
+
+let freezeConfigCache: StreakFreezeConfig | null = null;
+let freezeConfigCacheUserId: string | null = null;
+let freezeConfigCacheTimestamp = 0;
+const FREEZE_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 /**
  * Retrieves the user's StreakFreezeConfig from local storage or cloud fallback.
@@ -59,8 +65,13 @@ export async function syncUserFreezeConfigFromCloud(userId: string): Promise<Str
     return getStoredFreezeConfig();
   }
 
+  if (freezeConfigCache && freezeConfigCacheUserId === userId && Date.now() - freezeConfigCacheTimestamp < FREEZE_CACHE_TTL) {
+    return freezeConfigCache;
+  }
+
   try {
     const freezeDocRef = doc(db, 'users', userId, 'freeze_config', 'default');
+    logFirestoreRead('freezeService:syncUserFreezeConfig', `users/${userId}/freeze_config/default`);
     const snap = await getDoc(freezeDocRef);
     if (snap.exists()) {
       const data = snap.data();
@@ -71,6 +82,9 @@ export async function syncUserFreezeConfigFromCloud(userId: string): Promise<Str
         autoConsume: data.autoConsume ?? true,
         maxFreezesPerPeriod: data.maxFreezesPerPeriod ?? DEFAULT_FREEZE_CAPACITY,
       };
+      freezeConfigCache = config;
+      freezeConfigCacheUserId = userId;
+      freezeConfigCacheTimestamp = Date.now();
       saveStoredFreezeConfig(config, userId, false);
       return config;
     }
@@ -79,6 +93,9 @@ export async function syncUserFreezeConfigFromCloud(userId: string): Promise<Str
   }
 
   const local = getStoredFreezeConfig(userId);
+  freezeConfigCache = local;
+  freezeConfigCacheUserId = userId;
+  freezeConfigCacheTimestamp = Date.now();
   await saveStoredFreezeConfig(local, userId, true);
   return local;
 }
@@ -94,6 +111,9 @@ export function saveStoredFreezeConfig(
   const key = `${LOCAL_FREEZE_KEY_PREFIX}${userId || 'guest'}`;
   try {
     localStorage.setItem(key, JSON.stringify(config));
+    freezeConfigCache = config;
+    freezeConfigCacheUserId = userId || null;
+    freezeConfigCacheTimestamp = Date.now();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('streak_freeze_updated', {
@@ -107,6 +127,7 @@ export function saveStoredFreezeConfig(
 
   if (syncToCloud && userId && userId !== 'guest') {
     const freezeDocRef = doc(db, 'users', userId, 'freeze_config', 'default');
+    logFirestoreWrite('freezeService:saveFreezeConfig', `users/${userId}/freeze_config/default`, 'set');
     setDoc(freezeDocRef, {
       totalAvailable: config.totalAvailable,
       usedFreezes: config.usedFreezes || [],

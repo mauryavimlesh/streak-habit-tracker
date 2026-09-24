@@ -17,6 +17,7 @@ import { trackTaskCreated, trackTaskCompleted } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
 import { getTodayDateKey, diffDays } from './dateUtils';
 import { isCloudSyncableUser } from './authUtils';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
 
 export interface TaskItem {
   id: string;
@@ -818,7 +819,6 @@ export const syncLocalTasksToCloud = async (userId: string) => {
         : task.id || 'task_' + Date.now();
       const targetDocRef = doc(db, 'tasks', targetDocId);
       try {
-        const snap = await getDoc(targetDocRef);
         const taskPayload: Record<string, any> = {
           userId,
           title: task.title,
@@ -834,12 +834,8 @@ export const syncLocalTasksToCloud = async (userId: string) => {
         if (task.priority) taskPayload.priority = task.priority;
         if (task.type) taskPayload.type = task.type;
 
-        if (!snap.exists()) {
-          taskPayload.createdAt = serverTimestamp();
-          await setDoc(targetDocRef, taskPayload);
-        } else {
-          await updateDoc(targetDocRef, taskPayload);
-        }
+        logFirestoreWrite('taskService:syncLocalTasksToCloud', `tasks/${targetDocId}`, 'set');
+        await setDoc(targetDocRef, taskPayload, { merge: true });
         syncCount++;
       } catch (e) {
         handleFirestoreError(e, OperationType.WRITE, `tasks/${targetDocId}`);

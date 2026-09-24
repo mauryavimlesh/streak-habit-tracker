@@ -23,6 +23,7 @@ import {
 } from './analyticsService';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
 import { isCloudSyncableUser } from './authUtils';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
 
 export type HabitFrequency = 'daily' | 'selected_days' | 'weekly' | 'custom';
 export type TargetType = 'binary' | 'count' | 'duration' | 'quantity';
@@ -262,6 +263,7 @@ export const getUserHabits = async (userId: string, force = false): Promise<Habi
       where('userId', '==', userId),
       orderBy('createdAt', 'desc')
     );
+    logFirestoreRead('habitService:getUserHabits', `habits (userId: ${userId})`);
     const snapshot = await getDocs(q);
     const rawFirestoreHabits = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Habit));
 
@@ -737,7 +739,7 @@ export const getHabitLogs = async (userId: string, startDate?: string, endDate?:
       where('userId', '==', userId)
     );
     
-    // In-memory date filtering avoids missing composite index runtime errors in Firestore
+    logFirestoreRead('habitService:getHabitLogs', `habit_logs (userId: ${userId})`);
     const snapshot = await getDocs(q);
     let logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as HabitLog));
     
@@ -865,7 +867,6 @@ export const syncLocalToCloud = async (userId: string) => {
       }
       const targetDocRef = doc(db, 'habits', targetDocId);
       try {
-        const snap = await getDoc(targetDocRef);
         const habitPayload: Record<string, any> = {
           userId,
           name: habit.name,
@@ -885,12 +886,8 @@ export const syncLocalToCloud = async (userId: string) => {
         if (habit.sleepBedtime) habitPayload.sleepBedtime = habit.sleepBedtime;
         if (habit.sleepWakeTime) habitPayload.sleepWakeTime = habit.sleepWakeTime;
 
-        if (!snap.exists()) {
-          habitPayload.createdAt = serverTimestamp();
-          await setDoc(targetDocRef, habitPayload);
-        } else {
-          await updateDoc(targetDocRef, habitPayload);
-        }
+        logFirestoreWrite('habitService:syncLocalToCloud:habit', `habits/${targetDocId}`, 'set');
+        await setDoc(targetDocRef, habitPayload, { merge: true });
         syncedHabits++;
       } catch (e) {
         handleFirestoreError(e, OperationType.WRITE, `habits/${targetDocId}`);
@@ -907,7 +904,6 @@ export const syncLocalToCloud = async (userId: string) => {
       const targetDocId = log.id || 'log_' + Date.now();
       const targetDocRef = doc(db, 'habit_logs', targetDocId);
       try {
-        const snap = await getDoc(targetDocRef);
         const mappedHabitId = log.habitId.startsWith('default-') ? `${userId}_${log.habitId}` : log.habitId;
         const logPayload: Record<string, any> = {
           userId,
@@ -920,12 +916,8 @@ export const syncLocalToCloud = async (userId: string) => {
         if (log.note) logPayload.note = log.note;
         if (log.reflection) logPayload.reflection = log.reflection;
 
-        if (!snap.exists()) {
-          logPayload.createdAt = serverTimestamp();
-          await setDoc(targetDocRef, logPayload);
-        } else {
-          await updateDoc(targetDocRef, logPayload);
-        }
+        logFirestoreWrite('habitService:syncLocalToCloud:log', `habit_logs/${targetDocId}`, 'set');
+        await setDoc(targetDocRef, logPayload, { merge: true });
         syncedLogs++;
       } catch (e) {
         handleFirestoreError(e, OperationType.WRITE, `habit_logs/${targetDocId}`);
@@ -1033,10 +1025,6 @@ export const subscribeToHabitLogs = (
   );
 };
 
-if (typeof window !== 'undefined') {
-  window.addEventListener('streak_habits_updated', () => clearHabitCaches());
-}
-
 export async function toggleHabitSharedStatus(habitId: string, isShared: boolean, userId?: string): Promise<void> {
   const habits = readLocalHabits();
   const habit = habits.find((h) => h.id === habitId);
@@ -1044,7 +1032,12 @@ export async function toggleHabitSharedStatus(habitId: string, isShared: boolean
     habit.isShared = isShared;
     habit.visibility = isShared ? 'shared' : 'private';
     saveLocalHabits(habits);
-    clearHabitCaches();
+    if (habitsMemoryCache) {
+      const idx = habitsMemoryCache.findIndex((h) => h.id === habitId);
+      if (idx !== -1) {
+        habitsMemoryCache[idx] = { ...habitsMemoryCache[idx], isShared, visibility: isShared ? 'shared' : 'private' };
+      }
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('streak_habits_updated'));
     }

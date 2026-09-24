@@ -111,7 +111,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         available: result.available,
         error: result.error,
       });
-    }, 350);
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [username, isOpen, profile, user]);

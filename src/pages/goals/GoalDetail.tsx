@@ -5,6 +5,7 @@ import { useAuth } from '../../lib/AuthContext';
 import { db } from '../../lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { isCloudSyncableUser } from '../../lib/authUtils';
+import { logFirestoreRead } from '../../lib/firestoreLogger';
 import {
   Goal,
   GoalActivity,
@@ -244,6 +245,7 @@ export default function GoalDetail() {
     let unsub = () => {};
     if (isCloud) {
       try {
+        logFirestoreRead('GoalDetail:onSnapshot', `goals/${goalId}`);
         unsub = onSnapshot(
           doc(db, 'goals', goalId),
           (snap) => {

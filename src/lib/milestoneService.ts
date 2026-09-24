@@ -7,6 +7,11 @@ import { getTodayDateKey } from './dateUtils';
 import { db } from './firebase';
 import { collection, doc, setDoc, getDocs, query, where } from 'firebase/firestore';
 import { isCloudSyncableUser } from './authUtils';
+import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
+
+let milestonesCacheUserId: string | null = null;
+let milestonesCacheTimestamp = 0;
+const MILESTONES_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 export interface MilestoneItem {
   id: string;
@@ -77,6 +82,7 @@ export function saveStoredUnlockedMilestone(
   if (record.userId && isCloudSyncableUser(record.userId)) {
     try {
       const docRef = doc(db, 'milestones', `${record.userId}_${milestoneId}`);
+      logFirestoreWrite('milestoneService:saveMilestone', `milestones/${record.userId}_${milestoneId}`, 'set');
       setDoc(docRef, current[milestoneId], { merge: true }).catch((err) => {
         console.warn('Could not sync milestone to cloud:', err);
       });
@@ -86,10 +92,16 @@ export function saveStoredUnlockedMilestone(
   }
 }
 
-export async function syncUserMilestonesFromCloud(userId: string) {
+export async function syncUserMilestonesFromCloud(userId: string): Promise<void> {
   if (!isCloudSyncableUser(userId)) return;
+
+  if (milestonesCacheUserId === userId && Date.now() - milestonesCacheTimestamp < MILESTONES_CACHE_TTL) {
+    return;
+  }
+
   try {
     const q = query(collection(db, 'milestones'), where('userId', '==', userId));
+    logFirestoreRead('milestoneService:syncUserMilestones', `milestones (userId: ${userId})`);
     const snapshot = await getDocs(q);
     const stored = getStoredUnlockedMilestoneMap();
     let updated = false;
@@ -105,6 +117,8 @@ export async function syncUserMilestonesFromCloud(userId: string) {
     if (updated) {
       localStorage.setItem(UNLOCKED_MILESTONES_KEY, JSON.stringify(stored));
     }
+    milestonesCacheUserId = userId;
+    milestonesCacheTimestamp = Date.now();
   } catch (err) {
     console.warn('Failed to sync milestones from cloud:', err);
   }
