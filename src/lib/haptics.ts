@@ -3,7 +3,7 @@
  * Provides Apple-inspired subtle vibration feedback patterns via navigator.vibrate()
  */
 
-export type HapticPreset = 'tap' | 'step' | 'selection' | 'completion' | 'warning' | 'error' | 'light';
+export type HapticPreset = 'tap' | 'step' | 'selection' | 'completion' | 'success' | 'warning' | 'error' | 'light';
 
 export function triggerHaptic(pattern: number | number[] | HapticPreset = 25): boolean {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') {
@@ -24,6 +24,7 @@ export function triggerHaptic(pattern: number | number[] | HapticPreset = 25): b
         case 'selection':
           return navigator.vibrate(25);
         case 'completion':
+        case 'success':
           return navigator.vibrate([40, 60, 40]);
         case 'warning':
           return navigator.vibrate([30, 50, 30]);

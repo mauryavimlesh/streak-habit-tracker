@@ -12,11 +12,14 @@ import {
   User as UserIcon,
   ShieldCheck,
   Sparkles,
+  Award,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../lib/AuthContext';
 import { readFileAsDataUrl } from '../../lib/imageUtils';
 import { triggerHaptic } from '../../lib/haptics';
+import { checkUsernameAvailability, claimUsername, validateUsernameSyntax } from '../../lib/usernameService';
+import { ACHIEVEMENTS_REGISTRY, getLocalUnlockedAchievements, UserAchievement } from '../../lib/achievementService';
 import UserAvatar from './UserAvatar';
 import ImageCropperModal from './ImageCropperModal';
 
@@ -34,9 +37,22 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const { user, profile, updateProfile, removeProfilePhoto, isGuest } = useAuth();
   const navigate = useNavigate();
 
+  const [modalTab, setModalTab] = useState<'profile' | 'achievements'>('profile');
+  const [unlockedAchievements, setUnlockedAchievements] = useState<UserAchievement[]>(() =>
+    getLocalUnlockedAchievements()
+  );
+
   // Profile fields state
-  const initialName = profile?.displayName || profile?.userName || profile?.name || 'Guest Explorer';
-  const [name, setName] = useState(initialName);
+  const initialDisplayName = profile?.displayName || profile?.name || 'Vimlesh';
+  const initialUsername = (profile?.userName || profile?.name || 'vimlesh').replace(/\s+/g, '_').toLowerCase();
+
+  const [displayName, setDisplayName] = useState(initialDisplayName);
+  const [username, setUsername] = useState(initialUsername);
+  const [usernameCheck, setUsernameCheck] = useState<{
+    checking: boolean;
+    available: boolean | null;
+    error?: string;
+  }>({ checking: false, available: true });
   const [avatarPreview, setAvatarPreview] = useState<string | null>(profile?.avatarUrl || null);
   
   // UI states
@@ -53,13 +69,52 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setName(profile?.displayName || profile?.userName || profile?.name || 'Guest Explorer');
+      const dName = profile?.displayName || profile?.name || 'Vimlesh';
+      const uName = (profile?.userName || profile?.name || 'vimlesh').replace(/\s+/g, '_').toLowerCase();
+      setDisplayName(dName);
+      setUsername(uName);
+      setUsernameCheck({ checking: false, available: true });
       setAvatarPreview(profile?.avatarUrl || null);
       setShowPhotoOptions(false);
       setShowRemoveConfirm(false);
       setStatusMessage(null);
     }
   }, [isOpen, profile]);
+
+  // Debounced username availability validation
+  useEffect(() => {
+    if (!isOpen) return;
+    const clean = username.trim().toLowerCase();
+    if (!clean) {
+      setUsernameCheck({ checking: false, available: false, error: 'Username cannot be empty.' });
+      return;
+    }
+
+    const syntax = validateUsernameSyntax(clean);
+    if (!syntax.isValid) {
+      setUsernameCheck({ checking: false, available: false, error: syntax.error });
+      return;
+    }
+
+    // If unchanged from current, treat as available
+    const currentOwned = (profile?.userName || '').trim().toLowerCase();
+    if (clean === currentOwned) {
+      setUsernameCheck({ checking: false, available: true });
+      return;
+    }
+
+    setUsernameCheck({ checking: true, available: null });
+    const timer = setTimeout(async () => {
+      const result = await checkUsernameAvailability(clean, user?.uid);
+      setUsernameCheck({
+        checking: false,
+        available: result.available,
+        error: result.error,
+      });
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [username, isOpen, profile, user]);
 
   // Handle Photo selection from File Input
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,11 +174,25 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     }
   };
 
-  // Save all profile changes (name + photo)
+  // Save all profile changes (display name + username + photo)
   const handleSaveAll = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setStatusMessage({ type: 'error', text: 'Name cannot be empty' });
+    const trimmedDisplay = displayName.trim();
+    if (!trimmedDisplay) {
+      setStatusMessage({ type: 'error', text: 'Display name cannot be empty.' });
+      triggerHaptic('warning');
+      return;
+    }
+
+    const cleanUsername = username.trim().toLowerCase();
+    const syntax = validateUsernameSyntax(cleanUsername);
+    if (!syntax.isValid) {
+      setStatusMessage({ type: 'error', text: syntax.error || 'Invalid username.' });
+      triggerHaptic('warning');
+      return;
+    }
+
+    if (usernameCheck.available === false) {
+      setStatusMessage({ type: 'error', text: usernameCheck.error || 'Username is not available.' });
       triggerHaptic('warning');
       return;
     }
@@ -131,24 +200,96 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
     setIsSaving(true);
     triggerHaptic('completion');
     try {
+      // 1. Claim username if changed
+      const currentUsername = (profile?.userName || '').trim().toLowerCase();
+      if (cleanUsername !== currentUsername) {
+        const claimResult = await claimUsername(user?.uid || 'local', cleanUsername, currentUsername);
+        if (!claimResult.success) {
+          setStatusMessage({ type: 'error', text: claimResult.error || 'Failed to claim username.' });
+          setIsSaving(false);
+          return;
+        }
+      }
+
+      // 2. Update user profile
       await updateProfile({
-        name: trimmed,
-        userName: trimmed,
-        displayName: trimmed,
+        name: trimmedDisplay,
+        displayName: trimmedDisplay,
+        userName: cleanUsername,
         avatarUrl: avatarPreview || '',
       });
-      const msg = 'Profile updated successfully!';
+
+      const msg = 'Profile & username updated successfully!';
       if (onSuccessToast) onSuccessToast(msg);
       onClose();
     } catch (err) {
       console.error('Failed saving profile:', err);
-      setStatusMessage({ type: 'error', text: 'Failed to save changes.' });
+      setStatusMessage({ type: 'error', text: 'Failed to save profile changes.' });
     } finally {
       setIsSaving(false);
     }
   };
 
   if (!isOpen) return null;
+
+  if (isGuest) {
+    return (
+      <AnimatePresence>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            className="w-full max-w-sm bg-[#131622] border border-[#232a3d] rounded-t-[32px] sm:rounded-[32px] p-6 shadow-2xl relative text-center space-y-4"
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="w-14 h-14 rounded-2xl bg-accent-primary/15 border border-accent-primary/30 flex items-center justify-center mx-auto text-accent-primary">
+              <Sparkles className="w-7 h-7" />
+            </div>
+
+            <div>
+              <span className="inline-block px-2.5 py-0.5 rounded-full bg-accent-primary/10 border border-accent-primary/20 text-[10px] font-bold text-accent-primary uppercase tracking-wider mb-2">
+                Guest Session
+              </span>
+              <h3 className="text-lg font-bold text-white tracking-tight">
+                Create your STREAKLOOP profile
+              </h3>
+              <p className="text-xs text-[#8c94a8] leading-relaxed mt-1.5">
+                Your profile is currently a Guest Session. Create an account to save your name, username, photo and progress permanently.
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => {
+                  onClose();
+                  navigate('/login?tab=signup');
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-accent-primary hover:bg-[#9eff38] active:scale-95 text-black font-bold text-xs tracking-tight transition-all cursor-pointer shadow-lg shadow-accent-primary/20"
+              >
+                Sign Up / Create Account
+              </button>
+              <button
+                onClick={() => {
+                  onClose();
+                  navigate('/login');
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium text-xs tracking-tight transition-all cursor-pointer border border-white/10"
+              >
+                Log In
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      </AnimatePresence>
+    );
+  }
 
   return (
     <>
@@ -208,8 +349,93 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
               </div>
             )}
 
+            {/* Segmented Tab: Profile Identity vs Achievements */}
+            <div className="mx-6 mt-3 grid grid-cols-2 gap-1 p-1 bg-white/[0.04] border border-white/5 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('tap');
+                  setModalTab('profile');
+                }}
+                className={`py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  modalTab === 'profile'
+                    ? 'bg-accent-primary text-black font-bold shadow'
+                    : 'text-[#8c94a8] hover:text-white'
+                }`}
+              >
+                <UserIcon className="w-3.5 h-3.5" />
+                <span>Identity & Handle</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('tap');
+                  setModalTab('achievements');
+                }}
+                className={`py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  modalTab === 'achievements'
+                    ? 'bg-accent-primary text-black font-bold shadow'
+                    : 'text-[#8c94a8] hover:text-white'
+                }`}
+              >
+                <Award className="w-3.5 h-3.5" />
+                <span>Achievements ({unlockedAchievements.length})</span>
+              </button>
+            </div>
+
             {/* Scrollable Body */}
-            <div className="p-6 overflow-y-auto space-y-6">
+            <div className="p-6 overflow-y-auto space-y-5">
+              {modalTab === 'achievements' ? (
+                /* ACHIEVEMENTS TAB VIEW (Moved from Social to Profile) */
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Your Milestone Badges</h4>
+                      <p className="text-xs text-[#8c94a8]">Permanent proof of consistency</p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                      +{unlockedAchievements.reduce((sum, a) => sum + (a.xpReward || 0), 0)} XP Earned
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {ACHIEVEMENTS_REGISTRY.map((def) => {
+                      const isUnlocked = unlockedAchievements.some((a) => a.achievementId === def.id);
+                      return (
+                        <div
+                          key={def.id}
+                          className={`p-3 rounded-2xl border transition-all text-left flex flex-col justify-between ${
+                            isUnlocked
+                              ? 'bg-white/[0.04] border-purple-500/30 shadow-sm'
+                              : 'bg-white/[0.01] border-white/5 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div
+                              className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold ${
+                                isUnlocked
+                                  ? 'bg-purple-500/20 border border-purple-500/30 text-purple-400'
+                                  : 'bg-white/5 text-white/40'
+                              }`}
+                            >
+                              <Award className="w-4 h-4" />
+                            </div>
+                            <span className="text-[10px] font-bold text-cyan-400">+{def.xpReward} XP</span>
+                          </div>
+                          <div>
+                            <h5 className="text-xs font-bold text-white truncate">{def.title}</h5>
+                            <p className="text-[10px] text-[#8c94a8] leading-tight line-clamp-2 mt-0.5">
+                              {def.description}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                /* PROFILE IDENTITY TAB VIEW */
+                <>
               {/* Status Banner */}
               {statusMessage && (
                 <div
@@ -277,25 +503,79 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 </p>
               </div>
 
-              {/* Name Input */}
+              {/* 1. Display Name Input */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-[#7d8495] uppercase tracking-wider flex items-center gap-1.5">
                   <UserIcon className="w-3.5 h-3.5 text-accent-primary" />
-                  <span>Your Name / Username</span>
+                  <span>Display Name</span>
                 </label>
                 <div className="relative">
                   <input
                     type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
                     maxLength={40}
-                    placeholder="e.g. Vimlesh"
+                    placeholder="e.g. Vimlesh Patel"
                     className="w-full px-4 py-3 bg-background border border-[#232834] focus:border-accent-primary rounded-2xl text-white text-sm focus:outline-none transition-colors"
                   />
                   <span className="absolute right-3.5 top-3.5 text-[11px] text-[#7d8495]">
-                    {name.length}/40
+                    {displayName.length}/40
                   </span>
                 </div>
+                <p className="text-[10px] text-[#7d8495]">
+                  Friendly name shown on your dashboard and greetings.
+                </p>
+              </div>
+
+              {/* 2. Unique Username Input */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-[#7d8495] uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Unique Username (@handle)</span>
+                  </label>
+                  {usernameCheck.checking ? (
+                    <span className="text-[10px] text-[#8c94a8] flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 border border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                      Checking...
+                    </span>
+                  ) : usernameCheck.available === true ? (
+                    <span className="text-[10px] text-accent-primary font-semibold flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Available
+                    </span>
+                  ) : usernameCheck.error ? (
+                    <span className="text-[10px] text-rose-400 font-semibold truncate max-w-[170px]">
+                      {usernameCheck.error}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="relative">
+                  <span className="absolute left-4 top-3.5 text-sm font-bold text-[#8c94a8]">@</span>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => {
+                      // Normalize input: remove spaces, lowercase, alphanumeric and underscores only
+                      const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                      setUsername(val);
+                    }}
+                    maxLength={20}
+                    placeholder="username"
+                    className={`w-full pl-8 pr-12 py-3 bg-background border rounded-2xl text-white text-sm focus:outline-none transition-colors font-mono ${
+                      usernameCheck.available === true
+                        ? 'border-accent-primary/50 focus:border-accent-primary'
+                        : usernameCheck.error
+                        ? 'border-rose-500/50 focus:border-rose-500'
+                        : 'border-[#232834] focus:border-accent-primary'
+                    }`}
+                  />
+                  <span className="absolute right-3.5 top-3.5 text-[11px] text-[#7d8495]">
+                    {username.length}/20
+                  </span>
+                </div>
+                <p className="text-[10px] text-[#7d8495]">
+                  Globally unique handle for friend invites and progress comparisons.
+                </p>
               </div>
 
               {/* Account / Sync Status Card */}
@@ -343,37 +623,51 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   )}
                 </div>
               </div>
-            </div>
+            </>
+          )}
+        </div>
 
-            {/* Footer Actions */}
-            <div className="p-5 border-t border-white/5 bg-[#101217] flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSaving}
-                className="flex-1 py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 text-sm font-medium text-[#7d8495] hover:text-white transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveAll}
-                disabled={isSaving}
-                className="flex-1 py-3 px-4 rounded-2xl bg-accent-primary hover:bg-[#9eff38] active:scale-95 text-black font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(140,238,40,0.25)]"
-              >
-                {isSaving ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>Save Changes</span>
-                  </>
-                )}
-              </button>
-            </div>
+      {/* Footer Actions */}
+      {modalTab === 'profile' ? (
+        <div className="p-4 border-t border-white/5 bg-[#101217] flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="flex-1 py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveAll}
+            disabled={isSaving}
+            className="flex-1 py-3 px-4 rounded-2xl bg-accent-primary hover:bg-[#9eff38] active:scale-95 text-black font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(140,238,40,0.25)]"
+          >
+            {isSaving ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                <span>Saving...</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Save Changes</span>
+              </>
+            )}
+          </button>
+        </div>
+      ) : (
+        <div className="p-4 border-t border-white/5 bg-[#101217]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs transition-colors cursor-pointer"
+          >
+            Done
+          </button>
+        </div>
+      )}
           </motion.div>
         </div>
       </AnimatePresence>

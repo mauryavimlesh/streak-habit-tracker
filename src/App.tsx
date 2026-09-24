@@ -35,6 +35,8 @@ const HelpSupport = lazy(() => import('./pages/support/HelpSupport'));
 const Feedback = lazy(() => import('./pages/support/Feedback'));
 const Activity = lazy(() => import('./pages/activity/Activity'));
 const ActivityHistory = lazy(() => import('./pages/activity/ActivityHistory'));
+const Social = lazy(() => import('./pages/Social'));
+const InviteLanding = lazy(() => import('./pages/InviteLanding'));
 
 // Public SEO Pages & Guides
 const LandingPage = lazy(() => import('./pages/public/LandingPage'));
@@ -226,6 +228,15 @@ function AnimatedAppRoutes() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/social"
+              element={
+                <ProtectedRoute>
+                  <Social />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/invite/:code" element={<InviteLanding />} />
             <Route
               path="/sync"
               element={

@@ -84,22 +84,19 @@ const LOCAL_STORAGE_PROFILE_KEY = 'streak_user_profile';
 const LOCAL_STORAGE_ONBOARDING_KEY = 'streak_onboarding_completed';
 
 const GUEST_ADJECTIVES = [
-  'Focus', 'Swift', 'Calm', 'Mindful', 'Rising', 'Brave', 
-  'Steady', 'Atomic', 'Zen', 'Bright', 'Nimble', 'Noble',
-  'Radiant', 'True', 'Serene', 'Vibrant'
+  'Mindful', 'Focused', 'Quiet', 'Curious', 'Daily', 
+  'Swift', 'Steady', 'Calm', 'Brave', 'Rising', 'Serene', 'Atomic'
 ];
 
-const GUEST_ARCHETYPES = [
-  'Explorer', 'Pathfinder', 'Voyager', 'Builder', 'Striver', 
-  'Runner', 'Falcon', 'Phoenix', 'Warrior', 'Monk', 
-  'Nomad', 'Seeker', 'Spark', 'Champion', 'Pioneer', 'Ranger'
+const GUEST_NOUNS = [
+  'Spark', 'Nova', 'Runner', 'Mind', 'Flame', 'Voyager', 
+  'Builder', 'Striver', 'Falcon', 'Phoenix', 'Seeker'
 ];
 
 export const generateRandomGuestName = (): string => {
   const adj = GUEST_ADJECTIVES[Math.floor(Math.random() * GUEST_ADJECTIVES.length)];
-  const arch = GUEST_ARCHETYPES[Math.floor(Math.random() * GUEST_ARCHETYPES.length)];
-  const num = Math.floor(10 + Math.random() * 89);
-  return `Guest ${adj} ${arch} ${num}`;
+  const noun = GUEST_NOUNS[Math.floor(Math.random() * GUEST_NOUNS.length)];
+  return `Guest ${adj} ${noun}`;
 };
 
 export const getStoredGuestData = (): GuestData | null => {
@@ -128,7 +125,7 @@ export const createDefaultGuestData = (customName?: string): GuestData => {
     isGuest: true,
     displayName,
     name: displayName,
-    userName: displayName,
+    userName: '', // Guests do not have permanent usernames
     avatarUrl: '',
     selectedGoals: ['fitness', 'discipline'],
     onboardingCompleted: true,
@@ -339,7 +336,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                   console.log('Guest session data successfully migrated to Firestore:', migrationOutcome);
                 }
               } catch (migErr) {
-                console.error('Migration notice:', migErr);
+                console.warn('Migration notice:', migErr);
               }
             }
 
@@ -491,17 +488,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const isCompleted = data.onboardingCompleted ?? data.hasCompletedOnboarding ?? profile?.onboardingCompleted ?? profile?.hasCompletedOnboarding ?? true;
     const nameVal = data.userName || data.name || data.displayName || profile?.userName || profile?.name || profile?.displayName || '';
 
-    // If in guest mode, persist strictly within the streak_guest_data namespace
+    // If in guest mode, lock identity (name, username, photo) - persist only preferences
     if (isGuest || !user || user.isAnonymous) {
+      const currentGuest = getStoredGuestData() || createDefaultGuestData();
       const updatedGuest = saveGuestData({
-        ...data,
-        displayName: nameVal || profile?.displayName || generateRandomGuestName(),
-        name: nameVal || profile?.name || generateRandomGuestName(),
-        userName: nameVal || profile?.userName || generateRandomGuestName(),
-        avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : (profile?.avatarUrl || ''),
-        hasCompletedOnboarding: Boolean(isCompleted),
+        ...currentGuest,
+        selectedGoals: data.selectedGoals ?? currentGuest.selectedGoals ?? [],
+        routinePreference: data.routinePreference ?? currentGuest.routinePreference,
+        appearancePreference: data.appearancePreference ?? currentGuest.appearancePreference,
         onboardingCompleted: Boolean(isCompleted),
-        selectedGoals: data.selectedGoals ?? profile?.selectedGoals ?? [],
+        hasCompletedOnboarding: Boolean(isCompleted),
       } as Partial<GuestData>);
 
       setProfile(updatedGuest);

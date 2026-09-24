@@ -63,6 +63,8 @@ export interface Habit {
   reminderTime?: string;
   sleepBedtime?: string;
   sleepWakeTime?: string;
+  isShared?: boolean; // Shared with accountability partners
+  visibility?: 'private' | 'shared';
   archived?: boolean;
   createdAt?: any;
   updatedAt?: any;
@@ -1033,4 +1035,31 @@ export const subscribeToHabitLogs = (
 
 if (typeof window !== 'undefined') {
   window.addEventListener('streak_habits_updated', () => clearHabitCaches());
+}
+
+export async function toggleHabitSharedStatus(habitId: string, isShared: boolean, userId?: string): Promise<void> {
+  const habits = readLocalHabits();
+  const habit = habits.find((h) => h.id === habitId);
+  if (habit) {
+    habit.isShared = isShared;
+    habit.visibility = isShared ? 'shared' : 'private';
+    saveLocalHabits(habits);
+    clearHabitCaches();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('streak_habits_updated'));
+    }
+  }
+
+  if (userId && isCloudSyncableUser(userId)) {
+    try {
+      const docRef = doc(db, 'habits', habitId);
+      await updateDoc(docRef, {
+        isShared,
+        visibility: isShared ? 'shared' : 'private',
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn('Failed cloud sync habit share status:', e);
+    }
+  }
 }

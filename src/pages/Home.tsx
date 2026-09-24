@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../lib/AuthContext';
-import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Clock, CheckCircle2, Calendar as CalendarIcon, RefreshCw, Snowflake } from 'lucide-react';
+import { Plus, Dumbbell, Droplets, Moon, Lightbulb, Check, Flame, Activity, Clock, CheckCircle2, Calendar as CalendarIcon, RefreshCw, Snowflake, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { getUserHabits, getHabitLogs, logHabit, seedDefaultHabits, Habit, HabitLog, deleteHabit, readLocalHabits, readLocalLogs, deduplicateHabits } from '../lib/habitService';
 import { TaskItem, subscribeToTasks, toggleTaskComplete, deleteTask, readLocalTasks, deduplicateTasks } from '../lib/taskService';
@@ -31,6 +31,11 @@ import { MomentumCard } from '../components/home/MomentumCard';
 import { TodayPlan } from '../components/home/TodayPlan';
 import { DailyReflectionModal } from '../components/ui/DailyReflectionModal';
 import { readLocalJournal, getUserJournal, JournalEntry } from '../lib/journalService';
+import HomeMetricsBar from '../components/home/HomeMetricsBar';
+import EditProfileModal from '../components/profile/EditProfileModal';
+import { getStoredLifetimeXP, syncUserXPFromCloud, calculateLevel } from '../lib/xpService';
+import { triggerHaptic } from '../lib/haptics';
+import { onHabitCompleted, onTaskCompleted, onGoalMilestone } from '../lib/eventDispatcher';
 
 // Reference authentic default habits matching the design reference
 const DEFAULT_HABITS: Habit[] = [
@@ -87,10 +92,15 @@ export default function Home() {
   // useTimer removed to prevent global rerenders
 
   // Prefer user's real or guest name
-  const userName = profile?.displayName?.split(' ')[0] || profile?.userName?.split(' ')[0] || profile?.name?.split(' ')[0] || user?.displayName?.split(' ')[0] || 'Guest';
+  const rawDisplayName = profile?.displayName || profile?.name || (isGuest ? 'Guest Mindful Spark' : 'User');
+  const userName = rawDisplayName.startsWith('Guest ') 
+    ? rawDisplayName.replace('Guest ', '') 
+    : rawDisplayName.split(' ')[0];
+  const userHandle = profile?.userName || '';
   const userInitial = userName.charAt(0).toUpperCase();
 
   const [todayStr, setTodayStr] = useState<string>(() => getTodayDateKey());
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const [habits, setHabits] = useState<Habit[]>(() => {
     const local = deduplicateHabits(readLocalHabits());
@@ -136,6 +146,20 @@ export default function Home() {
     window.addEventListener('streak_freeze_updated', handleFreezeUpdate);
     return () => window.removeEventListener('streak_freeze_updated', handleFreezeUpdate);
   }, [user, todayStr]);
+
+  // Lifetime XP progression state (strictly separate from streaks)
+  const [lifetimeXP, setLifetimeXP] = useState<number>(() => getStoredLifetimeXP());
+
+  useEffect(() => {
+    if (user?.uid) {
+      syncUserXPFromCloud(user.uid).then(setLifetimeXP);
+    }
+    const handleXPUpdate = (e: any) => {
+      setLifetimeXP(e.detail?.lifetimeXP ?? getStoredLifetimeXP());
+    };
+    window.addEventListener('streak_xp_updated', handleXPUpdate);
+    return () => window.removeEventListener('streak_xp_updated', handleXPUpdate);
+  }, [user]);
 
   // Local progress values for instant responsive Apple OS feedback on first render frame
   const [localProgress, setLocalProgress] = useState<Record<string, number>>(() => {
@@ -512,6 +536,16 @@ export default function Home() {
     // If NOT done, clicking "Complete" sets progress to the full target so the configured target has actually been reached!
     const nextVal = isCurrentlyDone ? 0 : target;
     await handleProgressUpdate(habit, { exact: nextVal });
+
+    if (nextVal >= minimum) {
+      onHabitCompleted({
+        userId: user?.uid || 'local',
+        habitId: habit.id!,
+        habitName: habit.name,
+        category: habit.category,
+        isShared: (habit as any).isShared || (habit as any).visibility === 'shared',
+      });
+    }
   };
 
   // Direct toggle task completion on the dashboard with tactile OS feedback
@@ -544,6 +578,14 @@ export default function Home() {
 
     try {
       await toggleTaskComplete(taskId, user?.uid);
+      if (willBeCompleted) {
+        onTaskCompleted({
+          userId: user?.uid || 'local',
+          taskId,
+          taskTitle: currentTask?.title || 'Task',
+          priority: currentTask?.priority,
+        });
+      }
     } catch (err) {
       console.error('Failed to toggle task:', err);
     }
@@ -574,6 +616,14 @@ export default function Home() {
       await logDailyGoalProgressQuick(goalId, todayStr, delta, user?.uid || 'local');
       const updatedGoals = readLocalGoals();
       setGoals(updatedGoals);
+      if (delta > 0) {
+        onGoalMilestone({
+          userId: user?.uid || 'local',
+          goalId,
+          goalTitle: updatedGoals.find((g) => g.id === goalId)?.title || 'Goal Progress',
+          isComplete: false,
+        });
+      }
     } catch (err) {
       console.error('Failed to increment goal:', err);
     }
@@ -665,27 +715,105 @@ export default function Home() {
                 {formattedDate}
               </p>
               {isGuest && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-primary/10 border border-accent-primary/20 text-[10px] font-semibold text-accent-primary">
+                <button
+                  onClick={() => {
+                    triggerHaptic('tap');
+                    setIsProfileModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-primary/10 border border-accent-primary/20 text-[10px] font-semibold text-accent-primary hover:bg-accent-primary/20 transition-colors cursor-pointer"
+                >
                   <span className="w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
                   Guest Session
-                </span>
+                </button>
               )}
             </div>
-            <h1 className="text-[28px] leading-[1.15] font-bold text-white tracking-tight">
+            <h1
+              onClick={() => {
+                triggerHaptic('tap');
+                if (isGuest) {
+                  setIsProfileModalOpen(true);
+                }
+              }}
+              className={`text-[26px] leading-[1.15] font-bold text-white tracking-tight ${
+                isGuest ? 'cursor-pointer hover:text-accent-primary transition-colors' : ''
+              }`}
+            >
               {getGreeting()},<br />{userName}
             </h1>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[11px]">
+              {isGuest ? (
+                <button
+                  onClick={() => {
+                    triggerHaptic('tap');
+                    setIsProfileModalOpen(true);
+                  }}
+                  className="text-accent-primary font-semibold hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <span>Guest Account</span>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-accent-primary/15 border border-accent-primary/30">
+                    Claim Username
+                  </span>
+                </button>
+              ) : (
+                <span
+                  onClick={() => {
+                    triggerHaptic('tap');
+                    setIsProfileModalOpen(true);
+                  }}
+                  className="text-cyan-400 font-semibold font-mono cursor-pointer hover:underline"
+                >
+                  @{userHandle || 'username'}
+                </span>
+              )}
+              <span className="text-[#555f75]">·</span>
+              <span className="inline-flex items-center gap-1 font-semibold text-amber-400">
+                <Flame className="w-3 h-3 fill-amber-400 text-amber-400" />
+                {globalStreak} Day Streak
+              </span>
+              <span className="text-[#555f75]">·</span>
+              <span className="inline-flex items-center gap-1 font-semibold text-cyan-300">
+                <Zap className="w-3 h-3 text-cyan-400" />
+                {lifetimeXP.toLocaleString()} XP
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Right Avatar Button */}
-        <UserAvatar
-          avatarUrl={profile?.avatarUrl}
-          name={userName}
-          size="md"
-          onClick={() => navigate('/more')}
-          className="cursor-pointer active:scale-95 transition-transform shrink-0"
-        />
+        {/* Right Avatar Button with Level Badge */}
+        <div 
+          className="relative group cursor-pointer shrink-0"
+          onClick={() => {
+            triggerHaptic('tap');
+            if (isGuest) {
+              setIsProfileModalOpen(true);
+            } else {
+              navigate('/more');
+            }
+          }}
+        >
+          <UserAvatar
+            avatarUrl={profile?.avatarUrl}
+            name={userName}
+            size="md"
+            className="cursor-pointer active:scale-95 transition-transform ring-2 ring-accent-primary/30 group-hover:ring-accent-primary transition-all"
+          />
+          <div className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-[#181c26] border border-accent-primary/40 text-[9px] font-bold text-accent-primary shadow-sm leading-none">
+            Lv.{calculateLevel(lifetimeXP).level}
+          </div>
+        </div>
       </header>
+
+      {/* Prioritized 4-Metric Hierarchy Bar (STREAK, XP, LEVEL, MOMENTUM) */}
+      <HomeMetricsBar
+        streakDays={globalStreak}
+        lifetimeXP={lifetimeXP}
+        momentum={momentumResult}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
+        habits={habits}
+        logs={logs}
+        isGuest={isGuest}
+        onOpenAuthGate={() => setIsProfileModalOpen(true)}
+      />
 
       {/* Real Today's Momentum Card (Deterministic Single Source of Truth) */}
       <MomentumCard
@@ -1389,6 +1517,12 @@ export default function Home() {
           }}
         />
       )}
+
+      {/* Edit Profile / Guest Session Gate Modal */}
+      <EditProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
     </div>
   );
 }
