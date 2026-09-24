@@ -3,6 +3,7 @@ import { Outlet, NavLink, useLocation } from 'react-router';
 import { Home, Calendar as CalendarIcon, LayoutGrid } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { RouteSkeleton } from '../RouteSkeleton';
+import { useProgressiveLoad } from '../progressive/DeferredRender';
 
 // Global throttle tracker to debounce rapid multi-taps during route switches
 let lastNavTimestamp = 0;
@@ -84,12 +85,24 @@ const NavItem = memo(function NavItem({ to, Icon, label, end }: NavItemProps) {
 });
 
 const BottomNav = memo(function BottomNav() {
+  const isReady = useProgressiveLoad(30);
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 pointer-events-auto bottom-nav" data-pwa-bottom-nav>
       <div className="bg-surface/90 backdrop-blur-2xl border-t border-border min-h-[70px] pb-[env(safe-area-inset-bottom,0px)] pt-1 px-2 sm:px-4 flex items-center justify-between overflow-x-auto no-scrollbar bottom-nav-inner">
-        <NavItem to="/" end Icon={Home} label="Home" />
-        <NavItem to="/calendar" Icon={CalendarIcon} label="Calendar" />
-        <NavItem to="/more" Icon={LayoutGrid} label="More" />
+        {isReady ? (
+          <>
+            <NavItem to="/" end Icon={Home} label="Home" />
+            <NavItem to="/calendar" Icon={CalendarIcon} label="Calendar" />
+            <NavItem to="/more" Icon={LayoutGrid} label="More" />
+          </>
+        ) : (
+          <div className="w-full h-10 flex items-center justify-around opacity-25 animate-pulse">
+            <div className="w-12 h-7 bg-white/10 rounded-xl" />
+            <div className="w-12 h-7 bg-white/10 rounded-xl" />
+            <div className="w-12 h-7 bg-white/10 rounded-xl" />
+          </div>
+        )}
       </div>
     </nav>
   );

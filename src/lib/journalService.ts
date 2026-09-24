@@ -343,7 +343,7 @@ export const syncLocalJournalToCloud = async (userId: string) => {
     }
   }
   if (syncCount > 0) {
-    saveLocalJournal([]); // clear local after migration
+    saveLocalJournal(localJournal);
   }
 };
 

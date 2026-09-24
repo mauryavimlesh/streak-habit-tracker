@@ -18,13 +18,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     // Hold splash screen briefly before initiating smooth fade-out
     const fadeTimer = setTimeout(() => {
       setIsFadingOut(true);
-    }, 600);
+    }, 400);
 
     // Unmount and notify completion after fade-out transition concludes
     const removeTimer = setTimeout(() => {
       setIsRendered(false);
       if (onComplete) onComplete();
-    }, 880);
+    }, 650);
 
     return () => {
       clearTimeout(fadeTimer);
@@ -37,8 +37,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
   return (
     <div
       id="streak-app-splash"
-      className={`fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#000000] select-none touch-none ${
-        isFadingOut ? 'streak-splash-fadeout' : ''
+      className={`fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#000000] select-none ${
+        isFadingOut ? 'streak-splash-fadeout pointer-events-none' : 'touch-none'
       }`}
       aria-hidden="true"
     >

@@ -348,8 +348,7 @@ export function calculateDailyRecordStreak(
   options?: StreakCalculationOptions
 ): StreakStats {
   const todayStr = options?.targetDateStr || getTodayDateKey(options?.timezone);
-  const allowIncompleteContinuity = options?.allowIncompleteContinuity ?? true;
-  const breakOnUnprotectedAbsence = options?.breakOnIncompletePastDays ?? false;
+  const allowIncompleteContinuity = options?.allowIncompleteContinuity ?? false;
   const habit = options?.habit;
 
   // Streak freeze resource setup
@@ -477,11 +476,14 @@ export function calculateDailyRecordStreak(
         if (realizedDates.has(cursor)) {
           // Fully realized goal increments streak count
           currentStreak++;
+        } else if (cursor === todayStr) {
+          // Incomplete day today preserves continuity, does not increment
         } else if (isProtectedByFreeze(cursor)) {
           // Protected day off / freeze preserves continuity without incrementing
         } else if (allowIncompleteContinuity) {
           // Incomplete day does NOT break continuity; does NOT increment count
-        } else if (breakOnUnprotectedAbsence) {
+        } else {
+          // Unprotected absence breaks streak
           break;
         }
       }
@@ -490,22 +492,22 @@ export function calculateDailyRecordStreak(
 
     // Calculate Best Streak across full historical record
     let run = 0;
-    const allChronologicalDates = Array.from(
-      new Set([...Array.from(dateMap.keys()), ...sortedRealizedDates])
-    ).sort((a, b) => a.localeCompare(b));
-
-    allChronologicalDates.forEach((d) => {
-      if (isDayScheduled(d)) {
-        if (realizedDates.has(d)) {
+    let histCursor = oldestDate;
+    while (histCursor <= todayStr) {
+      if (isDayScheduled(histCursor)) {
+        if (realizedDates.has(histCursor)) {
           run++;
           if (run > bestStreak) bestStreak = run;
-        } else if (isProtectedByFreeze(d, false) || allowIncompleteContinuity) {
+        } else if (histCursor === todayStr) {
+          // Today in progress: does not reset run
+        } else if (isProtectedByFreeze(histCursor, false) || allowIncompleteContinuity) {
           // Incomplete or frozen: preserves continuity, does not reset run
         } else {
           run = 0;
         }
       }
-    });
+      histCursor = addDays(histCursor, 1);
+    }
 
     if (currentStreak > bestStreak) {
       bestStreak = currentStreak;

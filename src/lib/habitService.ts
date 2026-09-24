@@ -895,7 +895,7 @@ export const syncLocalToCloud = async (userId: string) => {
       }
     }
   }
-  if (syncedHabits > 0) saveLocalHabits([]);
+  if (syncedHabits > 0) saveLocalHabits(localHabits);
   
   const localLogs = readLocalLogs();
   let syncedLogs = 0;
@@ -930,7 +930,7 @@ export const syncLocalToCloud = async (userId: string) => {
       }
     }
   }
-  if (syncedLogs > 0) saveLocalLogs([]);
+  if (syncedLogs > 0) saveLocalLogs(localLogs);
 };
 
 export const subscribeToHabits = (

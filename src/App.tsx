@@ -11,11 +11,11 @@ import { Analytics as VercelAnalytics } from '@vercel/analytics/react';
 import { SEO } from './components/seo/SEO';
 import { RouteSkeleton } from './components/RouteSkeleton';
 
-// Layouts
+// Layouts & Primary Route
 import MainLayout from './components/layout/MainLayout';
+import Home from './pages/Home';
 
 // App Pages (Lazy Loaded for responsive Suspense chunking)
-const Home = lazy(() => import('./pages/Home'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const More = lazy(() => import('./pages/More'));
 const Login = lazy(() => import('./pages/auth/Login'));

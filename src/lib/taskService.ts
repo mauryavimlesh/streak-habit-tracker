@@ -847,8 +847,7 @@ export const syncLocalTasksToCloud = async (userId: string) => {
     }
   }
   if (syncCount > 0) {
-    // Clear out local cache and let real-time subscription hydrate
-    saveLocalTasks([]);
+    saveLocalTasks(localTasks);
   }
 };
 

@@ -295,8 +295,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     let isSigningIn = false;
+    // Safety fallback timer to prevent infinite loading state on slow networks
+    const fallbackTimer = setTimeout(() => {
+      setLoading(false);
+    }, 1200);
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      clearTimeout(fallbackTimer);
       identifyUser(currentUser?.uid || null);
+
       if (!currentUser && !isSigningIn) {
         // Unauthenticated visitor (could be Guest or new user)
         setUser(null);
@@ -305,179 +312,164 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setLoading(false);
         return;
       }
+
       isSigningIn = false;
       setUser(currentUser);
       const localProfile = getStoredLocalProfile();
+      if (localProfile) {
+        setProfile(localProfile);
+      }
+
+      // Immediately unblock initial render if we have user or local profile
+      setLoading(false);
 
       if (currentUser) {
-        try {
-          // If local browser storage contains unmigrated guest data ('streak_guest_data'),
-          // migrate all habits, logs, tasks, goals, and profile to Firestore.
-          // CRITICAL: Local guest data is cleared ONLY after successful confirmed write by Firestore.
-          if (!currentUser.isAnonymous && hasGuestDataToMigrate()) {
-            try {
-              const migrationOutcome = await migrateGuestDataToFirestore(
-                currentUser.uid,
-                currentUser.email || undefined
-              );
-              if (migrationOutcome.success) {
-                console.log('Guest session data successfully migrated to Firestore:', migrationOutcome);
-              } else {
-                console.warn(
-                  'Guest migration could not complete; preserving local guest data safely:',
-                  migrationOutcome.error
+        // Asynchronous profile fetch and background cloud sync
+        (async () => {
+          try {
+            // If local browser storage contains unmigrated guest data ('streak_guest_data'),
+            // migrate to Firestore without blocking primary interaction
+            if (!currentUser.isAnonymous && hasGuestDataToMigrate()) {
+              try {
+                const migrationOutcome = await migrateGuestDataToFirestore(
+                  currentUser.uid,
+                  currentUser.email || undefined
                 );
+                if (migrationOutcome.success) {
+                  console.log('Guest session data successfully migrated to Firestore:', migrationOutcome);
+                }
+              } catch (migErr) {
+                console.error('Migration notice:', migErr);
               }
-            } catch (migErr) {
-              console.error('Migration failed; local guest storage preserved intact:', migErr);
             }
-          }
 
-          const userRef = doc(db, 'users', currentUser.uid);
-          const userSnap = await getDoc(userRef);
-          
-          if (userSnap.exists()) {
-            const fsData = userSnap.data() as UserProfile;
-            // A user has completed onboarding if Firestore OR local session has marked it complete
-            const isCompleted = Boolean(
-              fsData.onboardingCompleted === true ||
-              fsData.hasCompletedOnboarding === true ||
-              localProfile?.onboardingCompleted === true ||
-              localProfile?.hasCompletedOnboarding === true
-            );
+            const userRef = doc(db, 'users', currentUser.uid);
+            // Resilient fetch with a 2-second timeout to avoid network hanging
+            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+            const userSnap: any = await Promise.race([getDoc(userRef), timeoutPromise]);
 
-            const resolvedName = fsData.name || fsData.userName || localProfile?.name || localProfile?.userName || currentUser.displayName || '';
-            if (fsData.appearancePreference) {
+            if (userSnap && userSnap.exists && userSnap.exists()) {
+              const fsData = userSnap.data() as UserProfile;
+              const isCompleted = Boolean(
+                fsData.onboardingCompleted === true ||
+                fsData.hasCompletedOnboarding === true ||
+                localProfile?.onboardingCompleted === true ||
+                localProfile?.hasCompletedOnboarding === true
+              );
+
+              const resolvedName = fsData.name || fsData.userName || localProfile?.name || localProfile?.userName || currentUser.displayName || '';
+              if (fsData.appearancePreference) {
+                try {
+                  const parsedTheme = JSON.parse(fsData.appearancePreference);
+                  saveAppearanceSettings(parsedTheme);
+                  applyAppearanceSettings(parsedTheme);
+                } catch (e) {}
+              }
+
+              const merged: UserProfile = {
+                ...localProfile,
+                ...fsData,
+                isGuest: false,
+                name: resolvedName,
+                userName: resolvedName,
+                displayName: resolvedName,
+                avatarUrl: fsData.avatarUrl !== undefined ? fsData.avatarUrl : (localProfile?.avatarUrl || ''),
+                hasCompletedOnboarding: isCompleted,
+                onboardingCompleted: isCompleted,
+                selectedGoals: fsData.selectedGoals || localProfile?.selectedGoals || [],
+                mainGoal: fsData.mainGoal || localProfile?.mainGoal,
+                routinePreference: fsData.routinePreference || localProfile?.routinePreference,
+                appearancePreference: fsData.appearancePreference || localProfile?.appearancePreference,
+              };
+
+              setProfile(merged);
               try {
-                const parsedTheme = JSON.parse(fsData.appearancePreference);
-                saveAppearanceSettings(parsedTheme);
-                applyAppearanceSettings(parsedTheme);
-              } catch (e) {}
-            }
-            // Clear isGuest flag
-            if (localProfile?.isGuest) {
-              delete localProfile.isGuest;
-            }
-            const merged: UserProfile = {
-              ...localProfile,
-              ...fsData,
-              isGuest: false,
-              name: resolvedName,
-              userName: resolvedName,
-              displayName: resolvedName,
-              avatarUrl: fsData.avatarUrl !== undefined ? fsData.avatarUrl : (localProfile?.avatarUrl || ''),
-              hasCompletedOnboarding: isCompleted,
-              onboardingCompleted: isCompleted,
-              selectedGoals: fsData.selectedGoals || localProfile?.selectedGoals || [],
-              mainGoal: fsData.mainGoal || localProfile?.mainGoal,
-              routinePreference: fsData.routinePreference || localProfile?.routinePreference,
-              appearancePreference: fsData.appearancePreference || localProfile?.appearancePreference,
-            };
+                localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(merged));
+                if (isCompleted) {
+                  localStorage.setItem(LOCAL_STORAGE_ONBOARDING_KEY, 'true');
+                } else {
+                  localStorage.removeItem(LOCAL_STORAGE_ONBOARDING_KEY);
+                }
+              } catch {}
 
-            setProfile(merged);
-            try {
-              localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(merged));
-              if (isCompleted) {
-                localStorage.setItem(LOCAL_STORAGE_ONBOARDING_KEY, 'true');
-              } else {
-                localStorage.removeItem(LOCAL_STORAGE_ONBOARDING_KEY);
+              // If local session had onboarding completed not yet in Firestore, update doc
+              if (isCompleted && (!fsData.onboardingCompleted || !fsData.hasCompletedOnboarding)) {
+                await saveUserProfileToFirestore({
+                  name: merged.name,
+                  userName: merged.userName,
+                  avatarUrl: merged.avatarUrl,
+                  selectedGoals: merged.selectedGoals,
+                  onboardingCompleted: true,
+                  hasCompletedOnboarding: true,
+                }, currentUser.uid);
               }
-            } catch {
-              // Ignore local storage error
-            }
-
-            // Sync local habits, tasks, journal, goals, and reminders to the cloud
-            await syncLocalToCloud(currentUser.uid);
-            await syncLocalTasksToCloud(currentUser.uid);
-            await syncLocalJournalToCloud(currentUser.uid);
-            await syncLocalGoalsToCloud(currentUser.uid);
-            await syncLocalRemindersToCloud(currentUser.uid);
-            trackLogin('auth_state');
-            
-            // Clear local guest identity if migrating
-            if (localProfile?.isGuest) {
+            } else if (userSnap && (!userSnap.exists || !userSnap.exists())) {
+              // New user document creation
+              const isCompleted = Boolean(
+                localProfile?.onboardingCompleted === true ||
+                localProfile?.hasCompletedOnboarding === true
+              );
+              const initialName = (localProfile?.isGuest ? currentUser.displayName : localProfile?.name) || currentUser.displayName || 'Vimlesh';
+              const newProfile: any = {
+                email: currentUser.email || '',
+                name: initialName,
+                userName: initialName,
+                avatarUrl: localProfile?.avatarUrl || '',
+                hasCompletedOnboarding: isCompleted,
+                onboardingCompleted: isCompleted,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              };
+              if (localProfile?.selectedGoals && localProfile.selectedGoals.length > 0) {
+                newProfile.selectedGoals = localProfile.selectedGoals;
+              }
+              if (localProfile?.mainGoal) {
+                newProfile.mainGoal = localProfile.mainGoal;
+              }
+              await setDoc(userRef, newProfile);
+              const fullProfile: UserProfile = {
+                ...newProfile,
+                displayName: initialName,
+                hasCompletedOnboarding: isCompleted,
+                onboardingCompleted: isCompleted,
+              };
+              setProfile(fullProfile);
               try {
-                localStorage.removeItem('streak_tasks');
-                localStorage.removeItem('streak_habits');
-                localStorage.removeItem('streak_habit_logs');
-                localStorage.removeItem('streak_journal');
-              } catch (e) {
-                // Ignore
-              }
-            }
-            // If local session had onboarding completed or new goals not yet saved in Firestore, backfill Firestore
-            if (isCompleted && (!fsData.onboardingCompleted || !fsData.hasCompletedOnboarding)) {
-              await saveUserProfileToFirestore({
-                name: merged.name,
-                userName: merged.userName,
-                avatarUrl: merged.avatarUrl,
-                selectedGoals: merged.selectedGoals,
-                onboardingCompleted: true,
-                hasCompletedOnboarding: true,
-              }, currentUser.uid);
-            }
-          } else {
-            // New user document creation in Firestore
-            const isCompleted = Boolean(
-              localProfile?.onboardingCompleted === true ||
-              localProfile?.hasCompletedOnboarding === true
-            );
-            const initialName = (localProfile?.isGuest ? currentUser.displayName : localProfile?.name) || currentUser.displayName || 'Vimlesh';
-            const newProfile: any = {
-              email: currentUser.email || '',
-              name: initialName,
-              userName: initialName,
-              avatarUrl: localProfile?.avatarUrl || '',
-              hasCompletedOnboarding: isCompleted,
-              onboardingCompleted: isCompleted,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            };
-            if (localProfile?.selectedGoals && localProfile.selectedGoals.length > 0) {
-              newProfile.selectedGoals = localProfile.selectedGoals;
-            }
-            if (localProfile?.mainGoal) {
-              newProfile.mainGoal = localProfile.mainGoal;
-            }
-            await setDoc(userRef, newProfile);
-            const fullProfile: UserProfile = {
-              ...newProfile,
-              displayName: initialName,
-              hasCompletedOnboarding: isCompleted,
-              onboardingCompleted: isCompleted,
-            };
-            setProfile(fullProfile);
-            try {
-              localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(fullProfile));
-              if (isCompleted) {
-                localStorage.setItem(LOCAL_STORAGE_ONBOARDING_KEY, 'true');
-              }
-            } catch {
-              // Ignore
+                localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(fullProfile));
+                if (isCompleted) {
+                  localStorage.setItem(LOCAL_STORAGE_ONBOARDING_KEY, 'true');
+                }
+              } catch {}
+              trackSignUp('user_created');
             }
 
-            // Sync any local / guest entities to the newly created Firestore user account
-            await syncLocalToCloud(currentUser.uid);
-            await syncLocalTasksToCloud(currentUser.uid);
-            await syncLocalJournalToCloud(currentUser.uid);
-            await syncLocalGoalsToCloud(currentUser.uid);
-            await syncLocalRemindersToCloud(currentUser.uid);
-            trackSignUp('user_created');
+            // Perform non-blocking cloud data sync in parallel
+            Promise.allSettled([
+              syncLocalToCloud(currentUser.uid),
+              syncLocalTasksToCloud(currentUser.uid),
+              syncLocalJournalToCloud(currentUser.uid),
+              syncLocalGoalsToCloud(currentUser.uid),
+              syncLocalRemindersToCloud(currentUser.uid),
+            ]).then(() => {
+              trackLogin('auth_state');
+            }).catch(() => {});
+          } catch (error) {
+            console.warn("Background auth profile sync notice:", error);
+            if (localProfile) {
+              setProfile(localProfile);
+            }
           }
-        } catch (error) {
-          console.error("Failed to fetch or create user profile:", error);
-          if (localProfile) {
-            setProfile(localProfile);
-          }
-        }
+        })();
       } else {
         // Offline / Unauthenticated: retain local profile
         setProfile(localProfile);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(fallbackTimer);
+      unsubscribe();
+    };
   }, []);
 
   const logout = async () => {

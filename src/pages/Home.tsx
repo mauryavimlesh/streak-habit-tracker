@@ -25,6 +25,7 @@ import { getTodayDateKey, addDays } from '../lib/dateUtils';
 import { ActiveTimerWidget } from "../components/home/ActiveTimerWidget";
 import { StreakLogo } from '../components/ui/StreakLogo';
 import { evaluateHabitProgress, calculateGlobalHabitStreak, StreakStatus } from '../lib/habitEngine';
+import { DeferredRender } from '../components/progressive/DeferredRender';
 
 // Reference authentic default habits matching the design reference
 const DEFAULT_HABITS: Habit[] = [
@@ -99,10 +100,7 @@ export default function Home() {
   const [allTasks, setAllTasks] = useState<TaskItem[]>(() => deduplicateTasks(readLocalTasks()));
   const [activities, setActivities] = useState<FocusActivity[]>(() => getLocalActivities());
   const [goals, setGoals] = useState<Goal[]>(() => readLocalGoals());
-  const [isLoading, setIsLoading] = useState<boolean>(() => {
-    const local = readLocalHabits();
-    return local.length === 0;
-  });
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // New state variables for Habit Notes and Sync Toast
   const [habitNotes, setHabitNotes] = useState<Record<string, string>>({});
@@ -232,19 +230,29 @@ export default function Home() {
       setIsLoading(false);
       return;
     }
-    // Only show loading placeholder if there is zero cached data
+    // Only show loading placeholder if there is zero cached data AND zero default habits
     if (habits.length === 0) {
       setIsLoading(true);
     }
     try {
       const todayString = getTodayDateKey();
 
-      const [fetchedHabits, fetchedLogs] = await Promise.all([
+      const habitsFetchPromise = Promise.all([
         getUserHabits(user.uid),
         getHabitLogs(user.uid),
       ]);
+      const timeoutPromise = new Promise<[Habit[], HabitLog[]]>((resolve) =>
+        setTimeout(() => resolve([[], []]), 3000)
+      );
 
-      setLogs(fetchedLogs);
+      const [fetchedHabits, fetchedLogs] = await Promise.race([
+        habitsFetchPromise,
+        timeoutPromise,
+      ]);
+
+      if (fetchedLogs.length > 0) {
+        setLogs(fetchedLogs);
+      }
       if (fetchedHabits.length > 0) {
         setHabits(fetchedHabits);
         const progressMap: Record<string, number> = {};
@@ -263,14 +271,13 @@ export default function Home() {
         });
         setLocalProgress((prev) => ({ ...prev, ...progressMap }));
         setHabitNotes((prev) => ({ ...prev, ...noteMap }));
-      } else {
+      } else if (habits.length === 0) {
         const isInit = localStorage.getItem(`streak_habits_initialized_${user.uid}`);
         if (!isInit) {
           const seeded = await seedDefaultHabits(user.uid);
           if (seeded.length > 0) setHabits(seeded);
         }
       }
-      setLogs(fetchedLogs);
     } catch (err) {
       console.error('Error syncing habits:', err);
       // Keep cached local habits intact so UI does not flash or disappear
@@ -1190,12 +1197,21 @@ export default function Home() {
         )}
       </div>
       
-      {/* Habit Consistency Heatmap Component (Last 30 Days Recharts Visualization) */}
-      <HabitConsistencyHeatmap
-        habits={displayedHabits}
-        logs={logs}
-        localProgress={localProgress}
-      />
+      {/* Habit Consistency Heatmap Component (Progressively Loaded to minimize initial layout blocking) */}
+      <DeferredRender
+        delay={50}
+        fallback={
+          <div className="rounded-[22px] glass-effect p-4 h-32 flex items-center justify-center border border-white/5 opacity-30 animate-pulse">
+            <span className="text-xs text-[#7d8495] font-medium">Loading consistency trends...</span>
+          </div>
+        }
+      >
+        <HabitConsistencyHeatmap
+          habits={displayedHabits}
+          logs={logs}
+          localProgress={localProgress}
+        />
+      </DeferredRender>
 
       {/* Today's Tasks Section with tactile vibration feedback */}
       {todayTasks.length > 0 && (
@@ -1306,11 +1322,13 @@ export default function Home() {
         </div>
       )}
 
-      {/* Daily Reflection */}
+      {/* Daily Reflection (Progressively Loaded) */}
       {user && (
-        <div className="pt-2">
-          <DailyReflection userId={user.uid} date={todayStr} />
-        </div>
+        <DeferredRender delay={75}>
+          <div className="pt-2">
+            <DailyReflection userId={user.uid} date={todayStr} />
+          </div>
+        </DeferredRender>
       )}
 
       {syncToastMessage && (
@@ -1328,55 +1346,63 @@ export default function Home() {
         </div>
       )}
 
-      <DeleteConfirmModal
-        isOpen={Boolean(deletingHabit)}
-        onClose={() => setDeletingHabit(null)}
-        onConfirm={handleConfirmDeleteHabit}
-        title={deletingHabit?.name || 'Habit'}
-        itemType="habit"
-        isDeleting={isDeleting}
-      />
+      {deletingHabit && (
+        <DeleteConfirmModal
+          isOpen={true}
+          onClose={() => setDeletingHabit(null)}
+          onConfirm={handleConfirmDeleteHabit}
+          title={deletingHabit.name || 'Habit'}
+          itemType="habit"
+          isDeleting={isDeleting}
+        />
+      )}
       
-      <DeleteConfirmModal
-        isOpen={Boolean(deletingTask)}
-        onClose={() => setDeletingTask(null)}
-        onConfirm={handleConfirmDeleteTask}
-        title={deletingTask?.title || 'Task'}
-        itemType="task"
-        isDeleting={isDeleting}
-      />
+      {deletingTask && (
+        <DeleteConfirmModal
+          isOpen={true}
+          onClose={() => setDeletingTask(null)}
+          onConfirm={handleConfirmDeleteTask}
+          title={deletingTask.title || 'Task'}
+          itemType="task"
+          isDeleting={isDeleting}
+        />
+      )}
 
-      <ShareModal
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
-        fileName={`streak-${globalStreak}-days`}
-      >
-        {(format) => (
-          <StreakShareCard
-            streak={globalStreak}
-            userName={userName}
-            totalHabits={totalCount}
-            completedHabits={completedHabitsCount}
-            format={format}
-            studyHours={shareStudyHours}
-            studyMinutes={shareStudyMinutes}
-            completedTasks={completedTasksCountShare}
-            totalTasks={totalTasksCountShare}
-            activeGoals={activeGoalsShare}
-            completedGoals={completedGoalsShare}
-          />
-        )}
-      </ShareModal>
+      {isShareModalOpen && (
+        <ShareModal
+          isOpen={true}
+          onClose={() => setIsShareModalOpen(false)}
+          fileName={`streak-${globalStreak}-days`}
+        >
+          {(format) => (
+            <StreakShareCard
+              streak={globalStreak}
+              userName={userName}
+              totalHabits={totalCount}
+              completedHabits={completedHabitsCount}
+              format={format}
+              studyHours={shareStudyHours}
+              studyMinutes={shareStudyMinutes}
+              completedTasks={completedTasksCountShare}
+              totalTasks={totalTasksCountShare}
+              activeGoals={activeGoalsShare}
+              completedGoals={completedGoalsShare}
+            />
+          )}
+        </ShareModal>
+      )}
 
-      <StreakFreezeModal
-        isOpen={isFreezeModalOpen}
-        onClose={() => setIsFreezeModalOpen(false)}
-        userId={user?.uid}
-        onFreezeChange={(updated) => {
-          setFreezeConfig(updated);
-          setFreezeStatus(getFreezeStatus(updated, todayStr));
-        }}
-      />
+      {isFreezeModalOpen && (
+        <StreakFreezeModal
+          isOpen={true}
+          onClose={() => setIsFreezeModalOpen(false)}
+          userId={user?.uid}
+          onFreezeChange={(updated) => {
+            setFreezeConfig(updated);
+            setFreezeStatus(getFreezeStatus(updated, todayStr));
+          }}
+        />
+      )}
 
       {editingSleepHabit && (
         <SleepModal
