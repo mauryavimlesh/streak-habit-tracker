@@ -519,7 +519,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 ...fsData,
                 isGuest: false,
                 name: resolvedName,
-                userName: fsData.userName || fsData.name || resolvedName,
+                userName: fsData.userName || '',
                 displayName: resolvedName,
                 avatarUrl: fsData.avatarUrl !== undefined ? fsData.avatarUrl : (localProfile?.avatarUrl || ''),
                 hasCompletedOnboarding: isCompleted,

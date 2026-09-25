@@ -162,6 +162,29 @@ export async function sendFriendRequest(
   const receiverUid = targetUser.uid;
   const requestId = `freq_${senderUid}_${receiverUid}`;
 
+  // Check in Firestore if authenticated to prevent duplicates/spam
+  if (isCloudSyncableUser(senderUid)) {
+    try {
+      // 1. Check if they are already friends in Firestore
+      const friendRef = doc(db, 'friends', `fr_${senderUid}_${receiverUid}`);
+      logFirestoreRead('socialService:sendFriendRequest:checkFriendship', `friends/fr_${senderUid}_${receiverUid}`);
+      const friendSnap = await getDoc(friendRef);
+      if (friendSnap.exists() && friendSnap.data()?.status === 'accepted') {
+        return { success: false, error: 'You are already friends with this user.' };
+      }
+
+      // 2. Check if a pending request exists in Firestore
+      const reqRef = doc(db, 'friend_requests', requestId);
+      logFirestoreRead('socialService:sendFriendRequest:checkRequest', `friend_requests/${requestId}`);
+      const reqSnap = await getDoc(reqRef);
+      if (reqSnap.exists() && reqSnap.data()?.status === 'pending') {
+        return { success: false, error: 'Friend request already sent.' };
+      }
+    } catch (err) {
+      console.warn('Could not verify friend request uniqueness in Firestore:', err);
+    }
+  }
+
   // Check local requests
   const localRequests = getLocalFriendRequests();
   const alreadySent = localRequests.some(
@@ -171,18 +194,19 @@ export async function sendFriendRequest(
     return { success: false, error: 'Friend request already sent.' };
   }
 
-  const newRequest: FriendRequest = {
+  const newRequest: FriendRequest & { receiverDisplayName?: string } = {
     id: requestId,
     senderUid,
     senderUsername,
     senderDisplayName: senderDisplayName || senderUsername,
     receiverUid,
     receiverUsername: targetUser.username,
+    receiverDisplayName: targetUser.displayName || targetUser.username,
     status: 'pending',
     createdAt: new Date().toISOString(),
   };
 
-  localRequests.unshift(newRequest);
+  localRequests.unshift(newRequest as FriendRequest);
   saveLocalFriendRequests(localRequests);
 
   // Firestore sync if authenticated
@@ -197,7 +221,7 @@ export async function sendFriendRequest(
     }
   }
 
-  return { success: true, request: newRequest };
+  return { success: true, request: newRequest as FriendRequest };
 }
 
 /**
@@ -248,6 +272,7 @@ export async function acceptFriendRequest(
         userId: userUid,
         friendUid: req.senderUid,
         friendUsername: req.senderUsername,
+        friendDisplayName: req.senderDisplayName || req.senderUsername,
         status: 'accepted',
         createdAt: serverTimestamp(),
       });
@@ -256,6 +281,7 @@ export async function acceptFriendRequest(
         userId: req.senderUid,
         friendUid: userUid,
         friendUsername: username,
+        friendDisplayName: (req as any).receiverDisplayName || username,
         status: 'accepted',
         createdAt: serverTimestamp(),
       });
