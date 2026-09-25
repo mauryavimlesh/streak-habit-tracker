@@ -15,9 +15,11 @@ import {
   Flame,
   X,
   User as UserIcon,
-  Info
+  Info,
+  AtSign
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { claimUsername, checkUsernameAvailability, validateUsernameSyntax } from '../../lib/usernameService';
 
 interface GoalOption {
   id: string;
@@ -54,7 +56,7 @@ const GOAL_OPTIONS: GoalOption[] = [
 ];
 
 export default function Onboarding() {
-  const { profile, userProfile, updateProfile, onboardingCompleted } = useAuth();
+  const { user, profile, userProfile, updateProfile, onboardingCompleted } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isReplay = searchParams.get('replay') === 'true';
@@ -64,9 +66,14 @@ export default function Onboarding() {
   const [direction, setDirection] = useState(1); // 1 = forward, -1 = back
   
   // Form state
-  const initialName = userProfile?.userName || userProfile?.name || profile?.userName || profile?.name || '';
+  const initialName = userProfile?.displayName || userProfile?.name || profile?.displayName || profile?.name || '';
   const [name, setName] = useState(initialName === 'Vimlesh' && !isReplay ? '' : initialName);
   const [nameHint, setNameHint] = useState<string | null>(null);
+  
+  const [username, setUsername] = useState(userProfile?.userName || profile?.userName || '');
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'error' | 'taken'>('idle');
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+
   const [isShaking, setIsShaking] = useState(false);
   const [selectedGoals, setSelectedGoals] = useState<string[]>(
     profile?.selectedGoals && profile.selectedGoals.length > 0 
@@ -84,6 +91,51 @@ export default function Onboarding() {
     }
   }, [onboardingCompleted, profile?.onboardingCompleted, profile?.hasCompletedOnboarding, isReplay, navigate]);
 
+  // Live username check with 500ms debounce
+  useEffect(() => {
+    if (!user) {
+      setUsernameStatus('idle');
+      setUsernameError(null);
+      return;
+    }
+
+    if (!username.trim()) {
+      setUsernameStatus('idle');
+      setUsernameError(null);
+      return;
+    }
+
+    const cleaned = username.replace(/^@/, '').trim();
+    if (cleaned.length < 3) {
+      setUsernameStatus('error');
+      setUsernameError('Username must be at least 3 characters long.');
+      return;
+    }
+
+    const syntax = validateUsernameSyntax(cleaned);
+    if (!syntax.isValid) {
+      setUsernameStatus('error');
+      setUsernameError(syntax.error || 'Invalid username format.');
+      return;
+    }
+
+    setUsernameStatus('checking');
+    setUsernameError(null);
+
+    const timer = setTimeout(async () => {
+      const res = await checkUsernameAvailability(cleaned, user.uid);
+      if (res.available) {
+        setUsernameStatus('available');
+        setUsernameError(null);
+      } else {
+        setUsernameStatus('taken');
+        setUsernameError(res.error || 'Username already taken.');
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [username, user]);
+
   const goToStep = (newStep: number) => {
     setDirection(newStep > step ? 1 : -1);
     setStep(newStep);
@@ -93,8 +145,7 @@ export default function Onboarding() {
   const handleNameContinue = () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      // Graceful validation: provide gentle hint without frustrating blockers
-      setNameHint("Enter your name, or simply tap 'Skip' below to continue.");
+      setNameHint("Please enter your display name to continue.");
       setIsShaking(true);
       setTimeout(() => setIsShaking(false), 500);
       return;
@@ -107,13 +158,33 @@ export default function Onboarding() {
       return;
     }
 
+    if (user) {
+      const cleanedUsername = username.replace(/^@/, '').trim();
+      if (!cleanedUsername) {
+        setUsernameError("Please choose a unique username.");
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 500);
+        return;
+      }
+
+      if (usernameStatus !== 'available') {
+        setUsernameError(usernameError || 'Please choose an available username.');
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 500);
+        return;
+      }
+    }
+
     setNameHint(null);
+    setUsernameError(null);
     goToStep(2);
   };
 
   const handleNameSkip = () => {
     setName('');
+    setUsername('');
     setNameHint(null);
+    setUsernameError(null);
     goToStep(2);
   };
 
@@ -134,21 +205,60 @@ export default function Onboarding() {
   // Final Submission
   const handleFinalComplete = async () => {
     setIsSubmitting(true);
-    const finalName = name.trim() || userProfile?.name || userProfile?.userName || 'Friend';
+    const finalName = name.trim() || userProfile?.name || 'Friend';
     
-    await updateProfile({
-      name: finalName,
-      userName: finalName,
-      selectedGoals: selectedGoals.length > 0 ? selectedGoals : ['fitness'],
-      hasCompletedOnboarding: true,
-      onboardingCompleted: true,
-    });
+    try {
+      if (user) {
+        const cleanedUsername = username.replace(/^@/, '').trim();
+        const claimResult = await claimUsername(user.uid, cleanedUsername);
+        if (!claimResult.success) {
+          setUsernameError(claimResult.error || 'Failed to claim username. It might have just been taken.');
+          setIsSubmitting(false);
+          goToStep(1); // Go back to Step 1 to let them fix it
+          return;
+        }
 
-    // Short tactile delay for smooth feedback
-    setTimeout(() => {
+        await updateProfile({
+          name: finalName,
+          userName: claimResult.username,
+          selectedGoals: selectedGoals.length > 0 ? selectedGoals : ['fitness'],
+          hasCompletedOnboarding: true,
+          onboardingCompleted: true,
+        });
+
+        // Check for and process pending invite code
+        try {
+          const pendingInvite = localStorage.getItem('streak_pending_invite_code');
+          if (pendingInvite) {
+            const { recordReferralSignup } = await import('../../lib/inviteService');
+            const processed = await recordReferralSignup(pendingInvite, user.uid);
+            if (processed) {
+              console.log('Successfully recorded referral signup attribution!');
+              localStorage.removeItem('streak_pending_invite_code');
+            }
+          }
+        } catch (refErr) {
+          console.warn('Notice: Failed to attribute referral signup:', refErr);
+        }
+      } else {
+        // Guest Mode
+        await updateProfile({
+          name: finalName,
+          selectedGoals: selectedGoals.length > 0 ? selectedGoals : ['fitness'],
+          hasCompletedOnboarding: true,
+          onboardingCompleted: true,
+        });
+      }
+
+      // Short tactile delay for smooth feedback
+      setTimeout(() => {
+        setIsSubmitting(false);
+        navigate('/', { replace: true });
+      }, 150);
+    } catch (err: any) {
+      console.error("Onboarding completion failed:", err);
       setIsSubmitting(false);
-      navigate('/', { replace: true });
-    }, 150);
+    }
   };
 
   // 300ms fade and slide animation variants
@@ -319,7 +429,7 @@ export default function Onboarding() {
                     className="text-[12px] font-bold text-[#7d8495] tracking-wider uppercase mb-2.5 flex items-center gap-1.5"
                   >
                     <UserIcon className="w-3.5 h-3.5 text-accent-primary" />
-                    YOUR NAME
+                    YOUR DISPLAY NAME
                   </label>
 
                   <motion.div
@@ -372,12 +482,95 @@ export default function Onboarding() {
                       </motion.div>
                     )}
                   </AnimatePresence>
-
-                  {/* Subtle info footnote */}
-                  <p className="text-[12.5px] text-[#555d70] mt-3.5 leading-normal">
-                    Tip: You can always update this or your avatar in Settings later.
-                  </p>
                 </div>
+
+                {/* Unique Username Input Box (Only for Authenticated Users) */}
+                {user && (
+                  <div className="mt-6">
+                    <label 
+                      htmlFor="username-input" 
+                      className="text-[12px] font-bold text-[#7d8495] tracking-wider uppercase mb-2.5 flex items-center gap-1.5"
+                    >
+                      <AtSign className="w-3.5 h-3.5 text-accent-primary" />
+                      CHOOSE YOUR UNIQUE USERNAME
+                    </label>
+
+                    <div
+                      className={cn(
+                        "glass-effect relative rounded-[22px] transition-all duration-200 flex items-center",
+                        username.trim().length > 0 
+                          ? usernameStatus === 'available'
+                            ? "border-accent-primary/80 shadow-[0_0_24px_rgba(140,238,40,0.18)]"
+                            : usernameStatus === 'taken' || usernameStatus === 'error'
+                              ? "border-red-500/50 shadow-[0_0_24px_rgba(239,68,68,0.15)]"
+                              : "border-white/20"
+                          : "border-white/10"
+                      )}
+                    >
+                      <span className="pl-5 text-[17px] text-white/50 font-medium select-none">@</span>
+                      <input
+                        id="username-input"
+                        type="text"
+                        value={username}
+                        maxLength={20}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\s+/g, '').replace(/@/g, ''); // strip spaces and @
+                          setUsername(val);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleNameContinue();
+                        }}
+                        placeholder="username"
+                        className="w-full h-[62px] bg-transparent pl-1.5 pr-12 text-[17px] text-white font-medium outline-none placeholder:text-[#4a5163] transition-colors"
+                      />
+
+                      {username.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setUsername('')}
+                          aria-label="Clear username input"
+                          className="absolute right-4 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white transition-colors cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Live Username Feedback badge/text */}
+                    <AnimatePresence>
+                      {username.trim() && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          className="mt-2.5 pl-2"
+                        >
+                          {usernameStatus === 'checking' && (
+                            <span className="text-[13px] text-white/60 flex items-center gap-2">
+                              <span className="w-3 h-3 border border-white/60 border-t-transparent rounded-full animate-spin" />
+                              Checking availability...
+                            </span>
+                          )}
+                          {usernameStatus === 'available' && (
+                            <span className="text-[13px] text-accent-primary font-medium">
+                              ✓ Username available
+                            </span>
+                          )}
+                          {(usernameStatus === 'taken' || usernameStatus === 'error') && (
+                            <span className="text-[13px] text-red-400 font-medium">
+                              ✗ {usernameError || 'Username already taken.'}
+                            </span>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {/* Footnote */}
+                <p className="text-[12.5px] text-[#555d70] mt-5 leading-normal">
+                  Tip: Display name is public and search-friendly. Username is your permanent unique account identity identifier.
+                </p>
               </div>
             </motion.div>
           )}
@@ -523,13 +716,15 @@ export default function Onboarding() {
               Continue <ArrowRight className="w-4 h-4 stroke-[2.5]" />
             </button>
 
-            <button
-              id="btn-name-skip"
-              onClick={handleNameSkip}
-              className="w-full text-center text-[13.5px] font-medium text-[#7d8495] hover:text-white transition-colors cursor-pointer pt-3 pb-1 block"
-            >
-              Skip for now
-            </button>
+            {!user && (
+              <button
+                id="btn-name-skip"
+                onClick={handleNameSkip}
+                className="w-full text-center text-[13.5px] font-medium text-[#7d8495] hover:text-white transition-colors cursor-pointer pt-3 pb-1 block"
+              >
+                Skip for now
+              </button>
+            )}
           </div>
         )}
 
@@ -553,14 +748,16 @@ export default function Onboarding() {
               )}
             </button>
 
-            <button
-              id="btn-goals-skip"
-              onClick={handleFinalComplete}
-              disabled={isSubmitting}
-              className="w-full text-center text-[13.5px] font-medium text-[#7d8495] hover:text-white transition-colors cursor-pointer pt-3 pb-1 block"
-            >
-              Skip for now
-            </button>
+            {!user && (
+              <button
+                id="btn-goals-skip"
+                onClick={handleFinalComplete}
+                disabled={isSubmitting}
+                className="w-full text-center text-[13.5px] font-medium text-[#7d8495] hover:text-white transition-colors cursor-pointer pt-3 pb-1 block"
+              >
+                Skip for now
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -257,6 +257,66 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "username", "normalized"]
+    },
+    "Friend": {
+      "title": "Friend",
+      "description": "Reciprocal friendship connections",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "friendUid": { "type": "string" },
+        "friendUsername": { "type": "string" },
+        "status": { "type": "string", "enum": ["accepted", "blocked", "removed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "friendUid", "friendUsername", "status", "createdAt"]
+    },
+    "FriendRequest": {
+      "title": "FriendRequest",
+      "description": "Friend request invitations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderUsername": { "type": "string" },
+        "senderDisplayName": { "type": "string" },
+        "receiverUid": { "type": "string" },
+        "receiverUsername": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "senderUid", "senderUsername", "receiverUid", "receiverUsername", "status", "createdAt"]
+    },
+    "Referral": {
+      "title": "Referral",
+      "description": "Captures invitee/inviter relationship and activation state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "inviterUid": { "type": "string" },
+        "inviterUsername": { "type": "string" },
+        "newUserId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "rewardAccountCreatedGranted": { "type": "boolean" },
+        "rewardFirstHabitGranted": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["registered", "activated"] },
+        "activatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "inviterUid", "newUserId", "createdAt", "rewardAccountCreatedGranted", "rewardFirstHabitGranted", "status"]
+    },
+    "Invite": {
+      "title": "Invite",
+      "description": "User referral codes and tracking",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "inviterUid": { "type": "string" },
+        "inviterUsername": { "type": "string" },
+        "inviterDisplayName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string" }
+      },
+      "required": ["code", "inviterUid", "inviterUsername", "createdAt"]
     }
   },
   "firestore": {
@@ -299,6 +359,22 @@
     "reminders/{reminderId}": {
       "schema": { "$ref": "#/entities/Reminder" },
       "description": "User notifications and reminders"
+    },
+    "friends/{friendshipId}": {
+      "schema": { "$ref": "#/entities/Friend" },
+      "description": "Reciprocal user connections"
+    },
+    "friend_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/FriendRequest" },
+      "description": "Pending and past friend requests"
+    },
+    "referrals/{referralId}": {
+      "schema": { "$ref": "#/entities/Referral" },
+      "description": "Attributed referrals and XP tracking"
+    },
+    "invites/{inviteCode}": {
+      "schema": { "$ref": "#/entities/Invite" },
+      "description": "Unique invite links registry"
     }
   }
 }

@@ -579,6 +579,12 @@ export const logHabit = async (logData: Omit<HabitLog, 'id' | 'createdAt' | 'upd
 
   if (isNowCompleted) {
     trackHabitCompleted(habit?.category);
+    // Asynchronously check and reward referral first habit completion activation
+    if (isCloudSyncableUser(logData.userId)) {
+      import('./inviteService').then(({ checkAndRewardFirstHabitActivation }) => {
+        checkAndRewardFirstHabitActivation(logData.userId);
+      }).catch(err => console.warn('Could not trigger referral activation reward:', err));
+    }
   } else if (existingIdx !== -1 && localLogs[existingIdx].status === 'completed') {
     trackHabitUncompleted(habit?.category);
   }

@@ -354,3 +354,108 @@ export async function getPublicProfileByUsername(username: string): Promise<Publ
     return null;
   }
 }
+
+/**
+ * Search users by display name (case-insensitive prefix search)
+ */
+export async function searchUsersByName(queryStr: string): Promise<PublicUserProfile[]> {
+  const trimmed = queryStr.trim();
+  if (!trimmed || trimmed.length < 2) return [];
+
+  try {
+    const usersColl = collection(db, 'users');
+    const resultsMap = new Map<string, PublicUserProfile>();
+
+    // Capitalize first letter of each word to match common display names
+    const termCapitalized = trimmed.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    
+    const queries = [
+      query(
+        usersColl,
+        where('displayName', '>=', termCapitalized),
+        where('displayName', '<=', termCapitalized + '\uf8ff'),
+        limit(10)
+      )
+    ];
+
+    if (termCapitalized !== trimmed) {
+      queries.push(
+        query(
+          usersColl,
+          where('displayName', '>=', trimmed),
+          where('displayName', '<=', trimmed + '\uf8ff'),
+          limit(10)
+        )
+      );
+    }
+
+    logFirestoreRead('usernameService:searchUsersByName', `users (prefix searches)`);
+    for (const q of queries) {
+      const snap = await getDocs(q);
+      for (const d of snap.docs) {
+        const uData = d.data();
+        if (!uData.userName) continue; // must have a username
+
+        const pub: PublicUserProfile = {
+          uid: d.id,
+          username: uData.userName,
+          normalizedUsername: (uData.userName || '').toLowerCase(),
+          displayName: uData.displayName || uData.name || uData.userName,
+          avatarUrl: uData.avatarUrl || '',
+          streak: uData.streak || 0,
+          lifetimeXP: uData.lifetimeXP || 0,
+          level: uData.level || 1,
+          momentum: uData.momentum || 0,
+        };
+        resultsMap.set(d.id, pub);
+      }
+    }
+
+    return Array.from(resultsMap.values());
+  } catch (err) {
+    console.warn('Search users by name failed:', err);
+    return [];
+  }
+}
+
+/**
+ * Unified search helper that queries by username and display name with deduplication
+ */
+export async function searchPeople(queryStr: string, currentUid?: string): Promise<PublicUserProfile[]> {
+  const trimmed = queryStr.trim();
+  if (!trimmed || trimmed.length < 2) return [];
+
+  const resultsMap = new Map<string, PublicUserProfile>();
+  const isUsernameQuery = trimmed.startsWith('@') || !trimmed.includes(' ');
+  const cleanUsernameQuery = trimmed.replace(/^@/, '').trim();
+
+  // 1. If it looks like a username, do an exact lookup first (highly efficient O(1))
+  if (isUsernameQuery && cleanUsernameQuery.length >= 3) {
+    const exactProfile = await getPublicProfileByUsername(cleanUsernameQuery);
+    if (exactProfile) {
+      if (!currentUid || exactProfile.uid !== currentUid) {
+        resultsMap.set(exactProfile.uid, exactProfile);
+      }
+    }
+  }
+
+  // 2. Also search by username prefix
+  if (isUsernameQuery) {
+    const prefixResults = await searchUsersByUsername(cleanUsernameQuery, currentUid);
+    for (const p of prefixResults) {
+      if (!currentUid || p.uid !== currentUid) {
+        resultsMap.set(p.uid, p);
+      }
+    }
+  }
+
+  // 3. Search by name prefix
+  const nameResults = await searchUsersByName(trimmed);
+  for (const n of nameResults) {
+    if (!currentUid || n.uid !== currentUid) {
+      resultsMap.set(n.uid, n);
+    }
+  }
+
+  return Array.from(resultsMap.values());
+}

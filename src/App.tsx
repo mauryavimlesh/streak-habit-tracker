@@ -5,7 +5,7 @@
 
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import { Analytics as VercelAnalytics } from '@vercel/analytics/react';
 import { SEO } from './components/seo/SEO';

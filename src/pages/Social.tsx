@@ -49,7 +49,7 @@ import {
   getOrInitUserInvite,
   UserInvite,
 } from '../lib/inviteService';
-import { searchUsersByUsername, PublicUserProfile } from '../lib/usernameService';
+import { searchPeople, PublicUserProfile } from '../lib/usernameService';
 import { readLocalHabits, readLocalLogs, Habit } from '../lib/habitService';
 import {
   getLocalSocialActivities,
@@ -112,18 +112,29 @@ export default function Social() {
     }
   }, [user?.uid, isGuest, username, profile?.displayName, profile?.name]);
 
+  const [searchError, setSearchError] = useState<string | null>(null);
+
   // Debounced user search
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
       setSearchResults([]);
+      setSearchError(null);
       return;
     }
+    setSearchError(null);
+    setIsSearching(true);
+
     const timer = setTimeout(async () => {
-      setIsSearching(true);
-      const results = await searchUsersByUsername(searchQuery, user?.uid);
-      setSearchResults(results);
-      setIsSearching(false);
-    }, 300);
+      try {
+        const results = await searchPeople(searchQuery, user?.uid);
+        setSearchResults(results);
+      } catch (err) {
+        console.error('Search failed:', err);
+        setSearchError("Couldn't complete search. Try again.");
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500); // 500ms debounce
     return () => clearTimeout(timer);
   }, [searchQuery, user?.uid]);
 
@@ -360,151 +371,286 @@ export default function Social() {
 
       {/* 3. FRIENDS TAB */}
       {activeTab === 'friends' && (
-        <div className="space-y-3">
-          {/* Pending Friend Requests Banner */}
+        <div className="space-y-4">
+          
+          {/* SEARCH PEOPLE BLOCK */}
+          <div className="p-4 rounded-[24px] bg-surface-card border border-[#1f232c] space-y-3 text-left">
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+              Search People
+            </h3>
+            
+            <div className="relative">
+              <Search className="w-4 h-4 text-[#7d8495] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search by name or @username..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-10 h-11 rounded-xl bg-background border border-[#222838] text-xs text-white placeholder:text-[#656d82] focus:outline-none focus:border-accent-primary transition-colors font-mono"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSearchResults([]);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7d8495] hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Live Search Status & Results */}
+            <div className="space-y-2">
+              {searchQuery.trim().length === 0 && (
+                <p className="text-[11px] text-[#7d8495] italic">Search by username or name</p>
+              )}
+              
+              {isSearching && (
+                <div className="flex items-center gap-2 text-[11px] text-white/60">
+                  <span className="w-3.5 h-3.5 border-2 border-white/60 border-t-transparent rounded-full animate-spin" />
+                  <span>Searching...</span>
+                </div>
+              )}
+
+              {searchError && (
+                <p className="text-[11px] text-red-400 font-medium">✗ {searchError}</p>
+              )}
+
+              {!isSearching && searchQuery.trim().length >= 2 && searchResults.length === 0 && (
+                <p className="text-[11px] text-[#7d8495] font-medium">No users found</p>
+              )}
+
+              {!isSearching && searchResults.length > 0 && (
+                <div className="p-1 rounded-xl bg-[#0e111a] border border-[#242c40] divide-y divide-white/5 max-h-56 overflow-y-auto">
+                  {searchResults.map((u) => {
+                    const isAlreadyFriend = friends.some(f => f.friendUid === u.uid);
+                    const isRequestPending = requests.some(r => r.receiverUid === u.uid && r.status === 'pending');
+                    
+                    return (
+                      <div
+                        key={u.uid}
+                        className="flex items-center justify-between p-2.5 hover:bg-white/[0.02] transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          {u.avatarUrl ? (
+                            <img
+                              src={u.avatarUrl}
+                              alt={u.displayName}
+                              className="w-8 h-8 rounded-full object-cover border border-accent-primary/25"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-accent-primary/15 border border-accent-primary/20 flex items-center justify-center text-accent-primary font-bold text-xs select-none">
+                              {u.username.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <h5 className="text-xs font-bold text-white">{u.displayName || u.username}</h5>
+                              <span className="text-[10px] font-mono text-cyan-400">@{u.username}</span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#7d8495]">
+                              <span className="text-amber-400 font-semibold">🔥 {u.streak || 0}d streak</span>
+                              <span>·</span>
+                              <span>{u.lifetimeXP || 0} XP</span>
+                            </div>
+                          </div>
+                        </div>
+                        {isAlreadyFriend ? (
+                          <span className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/5 text-[#7d8495] text-[10px] font-bold">
+                            Friends
+                          </span>
+                        ) : isRequestPending ? (
+                          <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-400 text-[10px] font-bold">
+                            Pending
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleSendRequest(u.username)}
+                            className="px-3 py-1.5 rounded-lg bg-accent-primary hover:bg-[#9eff38] text-black font-bold text-[10px] tracking-tight active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+                          >
+                            <UserPlus className="w-3 h-3 stroke-[2.5]" />
+                            <span>Add</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* PENDING FRIEND REQUESTS SECTION */}
           {requests.filter((r) => r.status === 'pending').length > 0 && (
-            <div className="p-3.5 rounded-2xl bg-surface-card border border-amber-500/30 space-y-2">
-              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
-                Pending Requests ({requests.filter((r) => r.status === 'pending').length})
-              </span>
-              {requests
-                .filter((r) => r.status === 'pending')
-                .map((req) => (
-                  <div
-                    key={req.id}
-                    className="flex items-center justify-between p-2 rounded-xl bg-white/[0.03] border border-white/5"
-                  >
-                    <div>
-                      <p className="text-xs font-semibold text-white">@{req.senderUsername}</p>
-                      <span className="text-[10px] text-[#8c94a8]">Wants to connect accountability</span>
+            <div className="p-4 rounded-[24px] bg-surface-card border border-[#1f232c] space-y-3 text-left">
+              <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                Friend Requests ({requests.filter((r) => r.status === 'pending').length})
+              </h3>
+              <div className="space-y-2">
+                {requests
+                  .filter((r) => r.status === 'pending')
+                  .map((req) => (
+                    <div
+                      key={req.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.02] border border-white/5"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-white">@{req.senderUsername}</p>
+                        <span className="text-[10px] text-[#8c94a8]">
+                          {req.senderDisplayName || req.senderUsername} wants to connect with you.
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleAcceptRequest(req.id)}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-400 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Accept</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeclineRequest(req.id)}
+                          className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/35 text-rose-400 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Decline</span>
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleAcceptRequest(req.id)}
-                        className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors cursor-pointer"
-                        title="Accept"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeclineRequest(req.id)}
-                        className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 transition-colors cursor-pointer"
-                        title="Decline"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+              </div>
             </div>
           )}
 
-          {/* Friends List or Empty State */}
-          {friends.length === 0 ? (
-            /* Requirement 18: Inspiring Empty State */
-            <div className="p-8 rounded-[28px] bg-surface-card border border-[#1f232c] text-center space-y-4">
-              <div className="w-14 h-14 rounded-2xl bg-accent-primary/10 border border-accent-primary/20 flex items-center justify-center mx-auto text-accent-primary">
-                <Users className="w-7 h-7" />
-              </div>
-
-              <div>
-                <h3 className="text-base font-bold text-white tracking-tight">
-                  Build your accountability circle
-                </h3>
-                <p className="text-xs text-[#8c94a8] leading-relaxed max-w-xs mx-auto mt-1">
-                  Invite a friend and start building consistency together.
+          {/* FRIENDS / CONNECTED USERS LIST */}
+          <div className="p-4 rounded-[24px] bg-surface-card border border-[#1f232c] space-y-3 text-left">
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+              Connected Friends
+            </h3>
+            
+            {friends.length === 0 ? (
+              <div className="text-center py-6 space-y-1">
+                <p className="text-xs font-semibold text-white">No friends connected yet</p>
+                <p className="text-[11px] text-[#7d8495] max-w-xs mx-auto">
+                  Find people by their username or name above, or share your invite link!
                 </p>
               </div>
+            ) : (
+              <div className="space-y-2">
+                {friends.map((f) => {
+                  const isMenuOpen = actionMenuFriendId === f.id;
+                  return (
+                    <div
+                      key={f.id}
+                      className="p-3 rounded-xl bg-white/[0.02] border border-white/5 hover:border-accent-primary/40 transition-all flex items-center justify-between group relative cursor-pointer"
+                      onClick={() => handleOpenFriendProfile(f)}
+                    >
+                      <div className="flex items-center gap-3 truncate flex-1">
+                        {f.friendAvatarUrl ? (
+                          <img
+                            src={f.friendAvatarUrl}
+                            alt={f.friendDisplayName || f.friendUsername}
+                            className="w-9 h-9 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-accent-primary/15 border border-accent-primary/20 flex items-center justify-center text-accent-primary font-bold text-xs select-none">
+                            {f.friendUsername.charAt(0).toUpperCase()}
+                          </div>
+                        )}
 
+                        <div className="text-left truncate">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <h4 className="text-xs font-bold text-white group-hover:text-accent-primary transition-colors truncate">
+                              {f.friendDisplayName || f.friendUsername}
+                            </h4>
+                            <span className="text-[10px] font-mono text-cyan-400">
+                              @{f.friendUsername}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 mt-0.5 text-[10px]">
+                            <span className="inline-flex items-center gap-1 text-amber-400 font-semibold">
+                              <Flame className="w-3 h-3 fill-amber-400" />
+                              14 day streak
+                            </span>
+                            <span className="text-[#555f75]">·</span>
+                            <span className="text-[#8c94a8]">840 XP</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="relative shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            triggerHaptic('tap');
+                            setActionMenuFriendId(isMenuOpen ? null : f.id);
+                          }}
+                          className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-[#7d8495] hover:text-white transition-colors cursor-pointer"
+                        >
+                          <MoreVertical className="w-3.5 h-3.5" />
+                        </button>
+
+                        {isMenuOpen && (
+                          <div className="absolute right-0 top-8 z-30 w-40 rounded-xl bg-[#141824] border border-[#273044] p-1 shadow-xl space-y-1 animate-in fade-in zoom-in-95 duration-100">
+                            <button
+                              onClick={() => {
+                                showToast(`Muted notifications for @${f.friendUsername}`);
+                                setActionMenuFriendId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-white/85 hover:bg-white/5 hover:text-white transition-colors text-left cursor-pointer"
+                            >
+                              <BellOff className="w-3.5 h-3.5 text-[#7d8495]" />
+                              <span>Mute alert</span>
+                            </button>
+                            <button
+                              onClick={() => handleRemoveFriend(f.friendUid)}
+                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors text-left cursor-pointer"
+                            >
+                              <UserMinus className="w-3 h-3" />
+                              <span>Remove friend</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* INTEGRATED SHARE & INVITE COMPONENT */}
+          <div className="p-4 rounded-[24px] bg-surface-card border border-[#1f232c] space-y-3 text-left">
+            <div>
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                Invite Someone to STREAK
+              </h3>
+              <p className="text-[11px] text-[#7d8495] mt-0.5">
+                Consistency is easier together. Send your referral link!
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={handleOpenInviteSheet}
-                className="py-3 px-6 rounded-2xl bg-accent-primary hover:bg-[#9eff38] active:scale-95 text-black font-bold text-xs tracking-tight transition-all cursor-pointer shadow-lg shadow-accent-primary/20 inline-flex items-center gap-2"
+                onClick={handleCopyInviteLink}
+                className="py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/5 text-xs text-white font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98]"
               >
-                <UserPlus className="w-4 h-4 stroke-[2.5]" />
-                <span>Invite Friend</span>
+                <Copy className="w-3.5 h-3.5" />
+                <span>{copiedLink ? 'Copied Link!' : 'Copy Link'}</span>
+              </button>
+              <button
+                onClick={handleShareInvite}
+                className="py-2.5 rounded-xl bg-accent-primary hover:bg-[#9eff38] text-black font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-[0.98] shadow-md shadow-accent-primary/10"
+              >
+                <Share2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Share Invite</span>
               </button>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {friends.map((f) => {
-                const isMenuOpen = actionMenuFriendId === f.id;
-                return (
-                  <div
-                    key={f.id}
-                    className="p-3.5 rounded-2xl bg-surface-card border border-[#1f232c] hover:border-accent-primary/40 transition-all flex items-center justify-between group relative"
-                  >
-                    {/* Friend Card Body: Click opens Friend Profile Sheet */}
-                    <div
-                      onClick={() => handleOpenFriendProfile(f)}
-                      className="flex items-center gap-3.5 flex-1 cursor-pointer"
-                    >
-                      <div className="w-10 h-10 rounded-full bg-accent-primary/15 border border-accent-primary/25 flex items-center justify-center text-accent-primary font-bold text-sm shrink-0">
-                        {f.friendUsername.charAt(0).toUpperCase()}
-                      </div>
+          </div>
 
-                      <div className="text-left truncate">
-                        <div className="flex items-center gap-1.5">
-                          <h4 className="text-xs font-bold text-white group-hover:text-accent-primary transition-colors truncate">
-                            {f.friendDisplayName || f.friendUsername}
-                          </h4>
-                          <span className="text-[11px] font-mono text-cyan-400">
-                            @{f.friendUsername}
-                          </span>
-                        </div>
-
-                        {/* Current streak • XP */}
-                        <div className="flex items-center gap-2 mt-0.5 text-[11px]">
-                          <span className="inline-flex items-center gap-1 text-amber-400 font-semibold">
-                            <Flame className="w-3 h-3 fill-amber-400" />
-                            14 day streak
-                          </span>
-                          <span className="text-[#555f75]">·</span>
-                          <span className="text-[#8c94a8]">840 XP</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Secondary Actions Menu "•••" */}
-                    <div className="relative shrink-0 ml-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          triggerHaptic('tap');
-                          setActionMenuFriendId(isMenuOpen ? null : f.id);
-                        }}
-                        className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-[#7d8495] hover:text-white transition-colors cursor-pointer"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-
-                      {/* Dropdown Menu */}
-                      {isMenuOpen && (
-                        <div className="absolute right-0 top-9 z-30 w-44 rounded-2xl bg-[#141824] border border-[#273044] p-1.5 shadow-2xl space-y-1 animate-in fade-in zoom-in-95 duration-150">
-                          <button
-                            onClick={() => {
-                              showToast(`Muted notifications for @${f.friendUsername}`);
-                              setActionMenuFriendId(null);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-white/80 hover:bg-white/5 hover:text-white transition-colors text-left cursor-pointer"
-                          >
-                            <BellOff className="w-3.5 h-3.5 text-[#7d8495]" />
-                            <span>Mute notifications</span>
-                          </button>
-                          <button
-                            onClick={() => handleRemoveFriend(f.friendUid)}
-                            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-red-400 hover:bg-red-500/10 transition-colors text-left cursor-pointer"
-                          >
-                            <UserMinus className="w-3.5 h-3.5" />
-                            <span>Remove friend</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
       )}
 

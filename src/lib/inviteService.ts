@@ -10,7 +10,7 @@
  * 6. Rewards: Inviter +50 XP, New user +25 XP (once per unique signup).
  */
 
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 import { isCloudSyncableUser } from './authUtils';
 import { logFirestoreRead, logFirestoreWrite } from './firestoreLogger';
@@ -158,86 +158,92 @@ export async function resolveInviteCode(code: string): Promise<{
  * Claim referral when a new user signs up via invite link.
  * Prevents self-referral, prevents duplicate referral rewards, and awards XP.
  */
+/**
+ * Claim referral when a new user signs up via invite link.
+ * Prevents self-referral, prevents duplicate referral rewards, and awards XP.
+ */
 export async function recordReferralSignup(inviteCode: string, newUserId: string): Promise<boolean> {
   const cleanCode = (inviteCode || '').trim().toLowerCase();
   if (!cleanCode || !newUserId) return false;
 
   try {
-    const inviteInfo = await resolveInviteCode(cleanCode);
-    if (!inviteInfo.valid || !inviteInfo.inviterUid) return false;
+    const response = await fetch('/api/referral/claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        inviteCode: cleanCode,
+        newUserId,
+      }),
+    });
 
-    // Prevent self-referral
-    if (inviteInfo.inviterUid === newUserId) return false;
-
-    const referralDocId = `ref_${inviteInfo.inviterUid}_${newUserId}`;
-    const referralRef = doc(db, 'referrals', referralDocId);
-    logFirestoreRead('inviteService:recordReferralSignup', `referrals/${referralDocId}`);
-    const existingRef = await getDoc(referralRef);
-
-    // Prevent duplicate referral rewards
-    if (existingRef.exists()) {
+    if (!response.ok) {
+      const errData = await response.json();
+      console.warn('Backend referral claim rejected:', errData.error || response.statusText);
       return false;
     }
 
-    // Record referral in database
-    logFirestoreWrite('inviteService:recordReferralSignup:referral', `referrals/${referralDocId}`, 'set');
-    await setDoc(referralRef, {
-      id: referralDocId,
-      inviterUid: inviteInfo.inviterUid,
-      inviterUsername: inviteInfo.inviterUsername,
-      newUserId,
-      createdAt: serverTimestamp(),
-      rewardClaimed: true,
-    });
+    const resData = await response.json();
+    return Boolean(resData.success);
+  } catch (err) {
+    console.error('Failed to securely process referral claim via server:', err);
+    return false;
+  }
+}
 
-    // Record attribution on user doc
-    const userRef = doc(db, 'users', newUserId);
-    logFirestoreWrite('inviteService:recordReferralSignup:userAttr', `users/${newUserId}`, 'set');
-    await setDoc(
-      userRef,
-      {
-        referredByInviteCode: cleanCode,
-        referredByUsername: inviteInfo.inviterUsername,
-        referredAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+/**
+ * Triggers the activation reward for first habit completion.
+ * Checks if the user was referred, and if they haven't activated yet.
+ * If eligible, awards the remaining +25 XP to the inviter and updates the referral status.
+ */
+export async function checkAndRewardFirstHabitActivation(userId: string): Promise<boolean> {
+  if (!isCloudSyncableUser(userId)) return false;
 
-    // Award inviter +50 XP
+  try {
+    // 1. Look up any referral record where this user is the invitee (newUserId == userId)
+    const referralsColl = collection(db, 'referrals');
+    const q = query(referralsColl, where('newUserId', '==', userId));
+    logFirestoreRead('inviteService:checkAndRewardFirstHabitActivation', `referrals (newUserId == ${userId})`);
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+      return false; // Not referred
+    }
+
+    const referralDoc = snap.docs[0];
+    const referralData = referralDoc.data();
+
+    // 2. Check if reward for first habit is already granted
+    if (referralData.rewardFirstHabitGranted === true) {
+      return false; // Already granted
+    }
+
+    // 3. Grant the remaining +25 XP to the inviter
+    const inviterUid = referralData.inviterUid;
+    const inviterUsername = referralData.inviterUsername;
+
     const { awardXP } = await import('./xpService');
     await awardXP({
-      userId: inviteInfo.inviterUid,
+      userId: inviterUid,
       sourceType: 'achievement',
-      sourceId: `ref_inviter_${newUserId}`,
-      baseXP: 50,
-      description: `Friend joined via your invite link (@${inviteInfo.inviterUsername})`,
-    });
-
-    // Award new user +25 XP
-    await awardXP({
-      userId: newUserId,
-      sourceType: 'achievement',
-      sourceId: `ref_welcome_${newUserId}`,
+      sourceId: `ref_activation_${userId}`,
       baseXP: 25,
-      description: `Welcome bonus for joining via invite`,
+      description: `Referral activation: Your referred friend completed their first habit!`,
     });
 
-    // Automatically connect friendship
-    try {
-      const { sendFriendRequest, acceptFriendRequest } = await import('./socialService');
-      const reqRes = await sendFriendRequest(
-        inviteInfo.inviterUid,
-        inviteInfo.inviterUsername || 'friend',
-        newUserId
-      );
-      if (reqRes.request?.id) {
-        await acceptFriendRequest(reqRes.request.id, newUserId, 'new_user');
-      }
-    } catch {}
+    // 4. Update the referral status in Firestore to fully activated
+    const referralRef = doc(db, 'referrals', referralDoc.id);
+    logFirestoreWrite('inviteService:checkAndRewardFirstHabitActivation:update', `referrals/${referralDoc.id}`, 'update');
+    await updateDoc(referralRef, {
+      rewardFirstHabitGranted: true,
+      status: 'activated',
+      activatedAt: serverTimestamp(),
+    });
 
     return true;
   } catch (err) {
-    console.error('Failed recording referral signup:', err);
+    console.error('Failed checking first habit activation reward:', err);
     return false;
   }
 }

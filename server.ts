@@ -297,6 +297,151 @@ ${context ? `\nUSER & REAL ACTIVITY CONTEXT:\n${typeof context === 'string' ? co
   }
 });
 
+// Secure Server-Side Referral Claim & Validation API
+app.post('/api/referral/claim', async (req, res) => {
+  try {
+    const { inviteCode, newUserId } = req.body;
+
+    if (!inviteCode || !newUserId) {
+      return res.status(400).json({ error: 'Invite code and new user ID are required.' });
+    }
+
+    const cleanCode = inviteCode.trim().toLowerCase();
+    
+    // Dynamic import to be absolutely safe with Vite/Node compile targets
+    const { getAdminDb } = await import('./api/firebase-admin');
+    const { FieldValue } = await import('firebase-admin/firestore');
+    
+    const dbAdmin = getAdminDb();
+
+    // 1. Look up the invite by code in `invites` collection
+    const inviteRef = dbAdmin.collection('invites').doc(cleanCode);
+    const inviteSnap = await inviteRef.get();
+
+    if (!inviteSnap.exists) {
+      return res.status(404).json({ error: 'Invalid invitation link.' });
+    }
+
+    const inviteData = inviteSnap.data() || {};
+    const inviterUid = inviteData.inviterUid;
+    const inviterUsername = inviteData.inviterUsername || 'friend';
+
+    if (!inviterUid) {
+      return res.status(404).json({ error: 'Invalid inviter associated with invitation link.' });
+    }
+
+    // 2. Prevent self-referral
+    if (inviterUid === newUserId) {
+      return res.status(400).json({ error: 'You cannot refer yourself.' });
+    }
+
+    // 3. Prevent double-claiming of rewards
+    const referralsColl = dbAdmin.collection('referrals');
+    const existingReferrals = await referralsColl.where('newUserId', '==', newUserId).get();
+
+    if (!existingReferrals.empty) {
+      return res.status(400).json({ error: 'This user account has already claimed an invitation/referral reward.' });
+    }
+
+    const referralDocId = `ref_${inviterUid}_${newUserId}`;
+    const referralRef = referralsColl.doc(referralDocId);
+
+    // 4. Secure atomic database operation using a transaction
+    await dbAdmin.runTransaction(async (transaction) => {
+      const now = new Date();
+      
+      // Create the referral record
+      transaction.set(referralRef, {
+        id: referralDocId,
+        inviterUid,
+        inviterUsername,
+        newUserId,
+        createdAt: now,
+        rewardAccountCreatedGranted: true,
+        rewardFirstHabitGranted: false,
+        status: 'registered',
+      });
+
+      // Record referral attribution on the referred user's doc
+      const userRef = dbAdmin.collection('users').doc(newUserId);
+      transaction.set(userRef, {
+        referredByInviteCode: cleanCode,
+        referredByUsername: inviterUsername,
+        referredAt: now,
+      }, { merge: true });
+
+      // Record XP Event for inviter (+25 XP)
+      const inviterEventId = `ref_signup_${newUserId}`;
+      const inviterEventRef = dbAdmin.collection('xp_events').doc(inviterEventId);
+      transaction.set(inviterEventRef, {
+        id: inviterEventId,
+        userId: inviterUid,
+        sourceType: 'achievement',
+        sourceId: inviterEventId,
+        baseXP: 25,
+        description: `Friend signed up via your invite link (@${inviterUsername})`,
+        createdAt: now,
+      });
+
+      // Update inviter lifetime XP and current XP
+      const inviterDocRef = dbAdmin.collection('users').doc(inviterUid);
+      transaction.set(inviterDocRef, {
+        lifetimeXP: FieldValue.increment(25),
+        xp: FieldValue.increment(25),
+        updatedAt: now,
+      }, { merge: true });
+
+      // Record XP Event for invitee (+25 XP)
+      const inviteeEventId = `ref_welcome_${newUserId}`;
+      const inviteeEventRef = dbAdmin.collection('xp_events').doc(inviteeEventId);
+      transaction.set(inviteeEventRef, {
+        id: inviteeEventId,
+        userId: newUserId,
+        sourceType: 'achievement',
+        sourceId: inviteeEventId,
+        baseXP: 25,
+        description: `Welcome bonus for joining via invite`,
+        createdAt: now,
+      });
+
+      // Update invitee lifetime XP and current XP
+      transaction.set(userRef, {
+        lifetimeXP: FieldValue.increment(25),
+        xp: FieldValue.increment(25),
+        updatedAt: now,
+      }, { merge: true });
+    });
+
+    // 5. Connect friends in Firestore
+    try {
+      const friendRelA = dbAdmin.collection('friends').doc(`fr_${newUserId}_${inviterUid}`);
+      await friendRelA.set({
+        userId: newUserId,
+        friendUid: inviterUid,
+        friendUsername: inviterUsername,
+        status: 'accepted',
+        createdAt: new Date(),
+      });
+
+      const friendRelB = dbAdmin.collection('friends').doc(`fr_${inviterUid}_${newUserId}`);
+      await friendRelB.set({
+        userId: inviterUid,
+        friendUid: newUserId,
+        friendUsername: 'new_user',
+        status: 'accepted',
+        createdAt: new Date(),
+      });
+    } catch (friendErr) {
+      console.warn('[Referral Claim] Friendship auto-connection warning:', friendErr);
+    }
+
+    return res.json({ success: true, message: 'Referral claimed and XP rewards securely credited.' });
+  } catch (err: any) {
+    console.error('[Referral Claim] Server-side claim failure:', err);
+    return res.status(500).json({ error: err.message || 'Internal server error processing referral claim.' });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');

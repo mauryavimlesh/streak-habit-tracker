@@ -218,6 +218,47 @@ service cloud.firestore {
         && (!('snoozeCount' in data) || data.snoozeCount is number);
     }
 
+    function isValidFriend(data) {
+      return data.keys().hasAll(['userId', 'friendUid', 'friendUsername', 'status'])
+        && data.userId is string && data.userId.size() <= 128
+        && data.friendUid is string && data.friendUid.size() <= 128
+        && data.friendUsername is string && data.friendUsername.size() <= 50
+        && data.status is string && data.status.matches('^(accepted|blocked|removed)$')
+        && (!('createdAt' in data) || isValidTimestamp(data.createdAt));
+    }
+
+    function isValidFriendRequest(data) {
+      return data.keys().hasAll(['id', 'senderUid', 'senderUsername', 'receiverUid', 'receiverUsername', 'status'])
+        && data.id is string && data.id.size() <= 256
+        && data.senderUid is string && data.senderUid.size() <= 128
+        && data.senderUsername is string && data.senderUsername.size() <= 50
+        && data.receiverUid is string && data.receiverUid.size() <= 128
+        && data.receiverUsername is string && data.receiverUsername.size() <= 50
+        && data.status is string && data.status.matches('^(pending|accepted|rejected|cancelled)$')
+        && (!('createdAt' in data) || isValidTimestamp(data.createdAt));
+    }
+
+    function isValidReferral(data) {
+      return data.keys().hasAll(['id', 'inviterUid', 'newUserId', 'rewardAccountCreatedGranted', 'rewardFirstHabitGranted', 'status'])
+        && data.id is string && data.id.size() <= 256
+        && data.inviterUid is string && data.inviterUid.size() <= 128
+        && data.newUserId is string && data.newUserId.size() <= 128
+        && data.rewardAccountCreatedGranted is bool
+        && data.rewardFirstHabitGranted is bool
+        && data.status is string && data.status.matches('^(registered|activated)$')
+        && (!('createdAt' in data) || isValidTimestamp(data.createdAt))
+        && (!('activatedAt' in data) || isValidTimestamp(data.activatedAt));
+    }
+
+    function isValidInvite(data) {
+      return data.keys().hasAll(['code', 'inviterUid', 'inviterUsername'])
+        && data.code is string && data.code.size() <= 100
+        && data.inviterUid is string && data.inviterUid.size() <= 128
+        && data.inviterUsername is string && data.inviterUsername.size() <= 50
+        && (!('inviterDisplayName' in data) || (data.inviterDisplayName is string && data.inviterDisplayName.size() <= 100))
+        && (!('createdAt' in data) || isValidTimestamp(data.createdAt));
+    }
+
     // 4. Collection Rules
     
     // Users
@@ -395,6 +436,66 @@ service cloud.firestore {
       allow create: if incoming().subject is string && incoming().subject.size() > 0 && incoming().subject.size() <= 300
         && incoming().message is string && incoming().message.size() > 0 && incoming().message.size() <= 50000
         && (!('userId' in incoming()) || incoming().userId == null || (request.auth != null && incoming().userId == request.auth.uid));
+      allow update, delete: if false;
+    }
+
+    // Friends
+    match /friends/{friendshipId} {
+      allow get: if request.auth != null && (resource == null || isOwner(resource.data.userId) || isOwner(resource.data.friendUid));
+      allow list: if request.auth != null && isOwner(resource.data.userId);
+      allow create: if request.auth != null 
+        && isOwner(incoming().userId)
+        && isValidFriend(incoming());
+      allow update: if request.auth != null
+        && isOwner(existing().userId)
+        && isOwner(incoming().userId)
+        && isValidFriend(incoming());
+      allow delete: if request.auth != null
+        && (isOwner(existing().userId) || isOwner(existing().friendUid));
+    }
+
+    // Friend Requests
+    match /friend_requests/{requestId} {
+      allow get: if request.auth != null && (resource == null || isOwner(resource.data.senderUid) || isOwner(resource.data.receiverUid));
+      allow list: if request.auth != null && (resource.data.senderUid == request.auth.uid || resource.data.receiverUid == request.auth.uid);
+      allow create: if request.auth != null
+        && isOwner(incoming().senderUid)
+        && isValidFriendRequest(incoming());
+      allow update: if request.auth != null
+        && isValidFriendRequest(incoming())
+        && (
+          // Case 1: Receiver accepts or rejects
+          (isOwner(existing().receiverUid) && incoming().status.matches('^(accepted|rejected)$') && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+          ||
+          // Case 2: Sender cancels request
+          (isOwner(existing().senderUid) && incoming().status == 'cancelled' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+      allow delete: if request.auth != null && isOwner(existing().senderUid);
+    }
+
+    // Referrals
+    match /referrals/{referralId} {
+      allow get: if request.auth != null && (resource == null || isOwner(resource.data.inviterUid) || isOwner(resource.data.newUserId));
+      allow list: if request.auth != null && (resource.data.inviterUid == request.auth.uid || resource.data.newUserId == request.auth.uid);
+      allow create: if request.auth != null
+        && isOwner(incoming().newUserId)
+        && isValidReferral(incoming());
+      allow update: if request.auth != null
+        && isValidReferral(incoming())
+        && (
+          // Case: Referred user completes their first habit, triggering the activation update
+          (isOwner(existing().newUserId) && incoming().diff(existing()).affectedKeys().hasOnly(['rewardFirstHabitGranted', 'status', 'activatedAt']))
+        );
+      allow delete: if false;
+    }
+
+    // Invites
+    match /invites/{inviteCode} {
+      allow get: if true; // Publicly resolvable by code to show who invited them!
+      allow list: if request.auth != null;
+      allow create: if request.auth != null
+        && isOwner(incoming().inviterUid)
+        && isValidInvite(incoming());
       allow update, delete: if false;
     }
   }

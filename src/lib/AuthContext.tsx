@@ -324,8 +324,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     if (isAuthenticated && user) {
       const resolvedDisplayName = profile?.displayName || profile?.name || user.displayName || 'Vimlesh';
-      const rawUser = profile?.userName || profile?.name || resolvedDisplayName;
-      const resolvedUsername = rawUser.replace(/\s+/g, '_').toLowerCase();
+      const resolvedUsername = profile?.userName || '';
       const isCompleted = Boolean(profile?.onboardingCompleted ?? profile?.hasCompletedOnboarding ?? true);
 
       return {
@@ -382,12 +381,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const fsData: Record<string, any> = {
         updatedAt: serverTimestamp(),
       };
-      if (data.name !== undefined) fsData.name = data.name;
-      else if (data.userName !== undefined) fsData.name = data.userName;
-      else if (data.displayName !== undefined) fsData.name = data.displayName;
+      if (data.name !== undefined) {
+        fsData.name = data.name;
+        fsData.displayName = data.name;
+      } else if (data.displayName !== undefined) {
+        fsData.name = data.displayName;
+        fsData.displayName = data.displayName;
+      }
 
-      if (data.userName !== undefined) fsData.userName = data.userName;
-      else if (data.name !== undefined) fsData.userName = data.name;
+      if (data.userName !== undefined) {
+        fsData.userName = data.userName;
+        fsData.userNameNormalized = data.userName.trim().toLowerCase();
+      }
       
       if (data.email !== undefined) fsData.email = data.email;
       else if (!fsData.email && auth.currentUser?.email) fsData.email = auth.currentUser.email;
@@ -550,50 +555,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 }, currentUser.uid);
               }
             } else if (userSnap && (!userSnap.exists || !userSnap.exists())) {
-              // New user document creation
-              const isCompleted = Boolean(
-                localProfile?.onboardingCompleted === true ||
-                localProfile?.hasCompletedOnboarding === true
-              );
+              // New user is detected, but no Firestore document exists yet.
+              // We do NOT create the profile document automatically in the background.
+              // We will ask them to onboarding first, where they select their unique username and profile name!
+              const isCompleted = false;
               const initialName = (localProfile?.isGuest ? currentUser.displayName : localProfile?.name) || currentUser.displayName || 'Vimlesh';
-              const newProfile: any = {
+              const newProfile: UserProfile = {
                 email: currentUser.email || '',
                 name: initialName,
-                userName: initialName.replace(/\s+/g, '_').toLowerCase(),
-                avatarUrl: localProfile?.avatarUrl || '',
-                hasCompletedOnboarding: isCompleted,
-                onboardingCompleted: isCompleted,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-              };
-              if (localProfile?.selectedGoals && localProfile.selectedGoals.length > 0) {
-                newProfile.selectedGoals = localProfile.selectedGoals;
-              }
-              if (localProfile?.mainGoal) {
-                newProfile.mainGoal = localProfile.mainGoal;
-              }
-              logFirestoreWrite('AuthContext:newUserDoc', `users/${currentUser.uid}`, 'set');
-              await setDoc(userRef, newProfile);
-              const fullProfile: UserProfile = {
-                ...newProfile,
-                displayName: initialName,
-                isGuest: false,
-                hasCompletedOnboarding: isCompleted,
-                onboardingCompleted: isCompleted,
+                userName: '', // No username yet!
+                avatarUrl: localProfile?.avatarUrl || currentUser.photoURL || '',
+                hasCompletedOnboarding: false,
+                onboardingCompleted: false,
+                selectedGoals: localProfile?.selectedGoals || [],
+                mainGoal: localProfile?.mainGoal || '',
               };
 
-              inMemoryProfileCache = fullProfile;
-              inMemoryProfileUid = currentUser.uid;
-              inMemoryProfileTimestamp = Date.now();
-
-              setProfile(fullProfile);
-              try {
-                localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(fullProfile));
-                if (isCompleted) {
-                  localStorage.setItem(LOCAL_STORAGE_ONBOARDING_KEY, 'true');
-                }
-              } catch {}
-              trackSignUp('user_created');
+              setProfile(newProfile);
+              setLoading(false);
+              // Do NOT track sign up or write to Firestore yet; let them complete onboarding.
             }
 
             // Sync offline entities (only once per session)
@@ -681,14 +661,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     let updatedResult: UserProfile | null = null;
     setProfile((prev) => {
-      const nameVal = data.userName || data.name || data.displayName || prev?.userName || prev?.name || prev?.displayName || currentUser.displayName || 'Vimlesh';
+      const resolvedName = data.name ?? data.displayName ?? prev?.name ?? prev?.displayName ?? currentUser.displayName ?? 'Vimlesh';
+      const resolvedUsername = data.userName !== undefined ? data.userName : (prev?.userName ?? '');
       const updated: UserProfile = {
         ...prev,
         ...data,
         isGuest: false,
-        name: nameVal,
-        userName: nameVal,
-        displayName: nameVal,
+        name: resolvedName,
+        displayName: resolvedName,
+        userName: resolvedUsername,
         avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : (prev?.avatarUrl || ''),
         hasCompletedOnboarding: Boolean(isCompleted),
         onboardingCompleted: Boolean(isCompleted),
